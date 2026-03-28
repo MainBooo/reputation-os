@@ -7,12 +7,25 @@ import {
   mentionStatusLabel,
   mentionTypeLabel
 } from '@/lib/ui/mentions'
+import { updateMentionStatus } from '@/lib/api/mentions'
+import { useRouter } from 'next/navigation'
 
 type MentionCardProps = {
   mention: any
 }
 
 export default function MentionCard({ mention }: MentionCardProps) {
+  const router = useRouter()
+
+  async function handleStatus(status: 'REVIEWED' | 'ARCHIVED') {
+    try {
+      await updateMentionStatus(mention.id, status)
+      router.refresh()
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
   return (
     <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-5 shadow-[0_0_24px_rgba(34,211,238,0.06)] backdrop-blur-xl">
       <div className="flex flex-wrap items-start justify-between gap-3">

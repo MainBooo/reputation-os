@@ -34,6 +34,11 @@ export class CompaniesController {
     return this.companiesService.update(user.id, id, dto)
   }
 
+  @Delete(':id')
+  remove(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.companiesService.remove(user.id, id)
+  }
+
   @Post(':id/aliases')
   createAlias(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: CreateCompanyAliasDto) {
     return this.companiesService.createAlias(user.id, id, dto)

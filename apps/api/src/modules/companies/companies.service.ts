@@ -102,6 +102,28 @@ export class CompaniesService {
     })
   }
 
+  async remove(userId: string, id: string) {
+    const company = await this.prisma.company.findUnique({ where: { id } })
+
+    if (!company) {
+      throw new NotFoundException('Company not found')
+    }
+
+    await this.assertWorkspaceAccess(userId, company.workspaceId)
+
+    await this.prisma.companyAlias.deleteMany({ where: { companyId: id } })
+    await this.prisma.companySourceTarget.deleteMany({ where: { companyId: id } })
+    await this.prisma.mention.deleteMany({ where: { companyId: id } })
+    await this.prisma.ratingSnapshot.deleteMany({ where: { companyId: id } })
+    await this.prisma.vkSearchProfile.deleteMany({ where: { companyId: id } })
+    await this.prisma.vkTrackedCommunity.deleteMany({ where: { companyId: id } })
+    await this.prisma.vkTrackedPost.deleteMany({ where: { companyId: id } })
+
+    return this.prisma.company.delete({
+      where: { id }
+    })
+  }
+
   async createAlias(userId: string, companyId: string, dto: CreateCompanyAliasDto) {
     const company = await this.prisma.company.findUnique({ where: { id: companyId } })
 

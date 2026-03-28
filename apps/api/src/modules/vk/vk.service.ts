@@ -236,6 +236,8 @@ export class VkService {
   }
 
   async runBrandSearch(userId: string, companyId: string) {
+    try {
+      console.log('[VK] runBrandSearch:start', { companyId, hasQueue: !!this.vkBrandQueue })
     await this.assertCompanyAccess(userId, companyId)
 
     const company = await this.prisma.company.findUnique({
@@ -320,9 +322,15 @@ export class VkService {
       jobIds: enqueuedJobs,
       payloads
     }
+    } catch (error) {
+      console.error('[VK] runBrandSearch:error', error)
+      throw error
+    }
   }
 
   async runCommunitySync(userId: string, companyId: string) {
+    try {
+      console.log('[VK] runCommunitySync:start', { companyId, hasQueue: !!this.vkCommunitiesQueue })
     await this.assertCompanyAccess(userId, companyId)
 
     const communities = await this.prisma.vkTrackedCommunity.findMany({
@@ -390,9 +398,15 @@ export class VkService {
       jobsCount: enqueuedJobs.length,
       jobIds: enqueuedJobs
     }
+    } catch (error) {
+      console.error('[VK] runCommunitySync:error', error)
+      throw error
+    }
   }
 
   async runOwnedCommunitySync(userId: string, companyId: string) {
+    try {
+      console.log('[VK] runOwnedCommunitySync:start', { companyId, hasQueue: !!this.vkOwnedQueue })
     await this.assertCompanyAccess(userId, companyId)
 
     const communities = await this.prisma.vkTrackedCommunity.findMany({
@@ -459,6 +473,10 @@ export class VkService {
       queue: 'vk_owned_community_sync',
       jobsCount: enqueuedJobs.length,
       jobIds: enqueuedJobs
+    }
+    } catch (error) {
+      console.error('[VK] runOwnedCommunitySync:error', error)
+      throw error
     }
   }
 

@@ -27,36 +27,53 @@ function OverviewCards({ overview }: { overview: any }) {
 }
 
 export default async function CompanyVkPage({ params }: { params: { id: string } }) {
-  let overview: any = null
-  let profiles: any[] = []
-  let communities: any[] = []
-  let posts: any[] = []
-  let authRequired = false
+  const [overviewRes, profilesRes, communitiesRes, postsRes] = await Promise.allSettled([
+    getVkOverview(params.id),
+    getVkSearchProfiles(params.id),
+    getVkCommunities(params.id),
+    getVkPosts(params.id)
+  ])
 
-  try {
-    overview = await getVkOverview(params.id)
-    profiles = await getVkSearchProfiles(params.id)
-    communities = await getVkCommunities(params.id)
-    posts = await getVkPosts(params.id)
-  } catch {
-    authRequired = true
-  }
+  const overview: any =
+    overviewRes.status === 'fulfilled'
+      ? overviewRes.value
+      : {
+          trackedCommunitiesCount: 0,
+          activeSearchProfilesCount: 0,
+          discoveredVkPostsCount: 0,
+          relevantVkMentionsCount: 0,
+          recentPosts: [],
+          recentMentions: []
+        }
+
+  const profiles: any[] = profilesRes.status === 'fulfilled' ? profilesRes.value : []
+  const communities: any[] = communitiesRes.status === 'fulfilled' ? communitiesRes.value : []
+  const posts: any[] = postsRes.status === 'fulfilled' ? postsRes.value : []
 
   const priorityCommunities = communities.filter((c) => c.mode === 'PRIORITY_COMMUNITY')
   const ownedCommunities = communities.filter((c) => c.mode === 'OWNED_COMMUNITY')
+  const hasAnyData =
+    profiles.length > 0 ||
+    communities.length > 0 ||
+    posts.length > 0 ||
+    (overview?.recentMentions || []).length > 0 ||
+    (overview?.trackedCommunitiesCount ?? 0) > 0 ||
+    (overview?.activeSearchProfilesCount ?? 0) > 0 ||
+    (overview?.discoveredVkPostsCount ?? 0) > 0 ||
+    (overview?.relevantVkMentionsCount ?? 0) > 0
 
   return (
     <div>
       <PageHeader
         title="Мониторинг VK"
         subtitle="Отдельный контур мониторинга ВКонтакте с 3 режимами и сохранением только релевантных данных."
-        actions={!authRequired ? <VkActions companyId={params.id} /> : undefined}
+        actions={<VkActions companyId={params.id} />}
       />
 
-      {authRequired ? (
+      {!hasAnyData ? (
         <EmptyState
-          title="Требуется авторизация"
-          description="Войдите в систему, чтобы загрузить данные мониторинга VK из API."
+          title="Пока нет данных VK"
+          description="Подключите сообщества, добавьте поисковые профили или запустите синхронизацию VK."
         />
       ) : (
         <>

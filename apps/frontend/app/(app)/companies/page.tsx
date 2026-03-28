@@ -4,6 +4,8 @@ import Card from '@/components/ui/Card'
 import EmptyState from '@/components/ui/EmptyState'
 import Badge from '@/components/ui/Badge'
 import { getCompanies } from '@/lib/api/companies'
+import CompaniesCreateForm from '@/components/companies/CompaniesCreateForm'
+import DeleteCompanyButton from '@/components/companies/DeleteCompanyButton'
 
 export default async function CompaniesPage() {
   let companies: any[] = []
@@ -23,6 +25,10 @@ export default async function CompaniesPage() {
         subtitle="Управление компаниями и переход в рабочие пространства мониторинга."
       />
 
+      <div className="mb-6">
+        <CompaniesCreateForm />
+      </div>
+
       {authRequired ? (
         <EmptyState
           title="Требуется авторизация"
@@ -41,9 +47,12 @@ export default async function CompaniesPage() {
                     </div>
                   </div>
 
-                  <Badge>
-                    {company._count?.mentions || 0} упоминаний
-                  </Badge>
+                  <div className="flex flex-col items-end gap-3">
+                    <Badge>
+                      {company._count?.mentions || 0} упоминаний
+                    </Badge>
+                    <DeleteCompanyButton id={company.id} name={company.name} />
+                  </div>
                 </div>
               </Card>
             </Link>

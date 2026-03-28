@@ -15,3 +15,10 @@ export function generateReply(id: string) {
     draftText: 'Спасибо за отзыв!'
   })
 }
+
+export function updateMentionStatus(id: string, status: 'REVIEWED' | 'ARCHIVED') {
+  return apiFetch(`/mentions/${id}/status`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status })
+  })
+}

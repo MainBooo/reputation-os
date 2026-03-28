@@ -73,18 +73,18 @@ export class VkController {
   }
 
   @Post('run-brand-search')
-  runBrandSearch(@Param('id') companyId: string) {
-    return this.vkService.triggerBrandSearch(companyId)
+  runBrandSearch(@CurrentUser() user: AuthUser, @Param('id') companyId: string) {
+    return this.vkService.runBrandSearch(user.id, companyId)
   }
 
   @Post('run-community-sync')
-  runCommunitySync(@Param('id') companyId: string) {
-    return this.vkService.triggerPrioritySync(companyId)
+  runCommunitySync(@CurrentUser() user: AuthUser, @Param('id') companyId: string) {
+    return this.vkService.runCommunitySync(user.id, companyId)
   }
 
   @Post('run-owned-community-sync')
-  runOwnedCommunitySync(@Param('id') companyId: string) {
-    return this.vkService.triggerOwnedSync(companyId)
+  runOwnedCommunitySync(@CurrentUser() user: AuthUser, @Param('id') companyId: string) {
+    return this.vkService.runOwnedCommunitySync(user.id, companyId)
   }
 
   @Post('brand-search/trigger')
