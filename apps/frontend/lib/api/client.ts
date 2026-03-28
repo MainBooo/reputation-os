@@ -1,5 +1,16 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:4010'
+const SERVER_API_URL =
+  process.env.INTERNAL_API_URL ||
+  process.env.NEXT_PUBLIC_API_URL ||
+  'http://127.0.0.1:4010'
+
 const DEMO_MODE = process.env.NEXT_PUBLIC_DEMO_MODE === 'true'
+
+function getApiBase() {
+  if (typeof window !== 'undefined') {
+    return ''
+  }
+  return SERVER_API_URL
+}
 
 function readTokenFromBrowser() {
   if (typeof window === 'undefined') return ''
@@ -31,14 +42,14 @@ async function getToken() {
   if (typeof window !== 'undefined') {
     return readTokenFromBrowser()
   }
-
   return readTokenFromServer()
 }
 
 export async function apiFetch<T>(path: string, options?: RequestInit, fallback?: T): Promise<T> {
   const token = await getToken()
+  const base = getApiBase()
 
-  const response = await fetch(`${API_URL}/api${path}`, {
+  const response = await fetch(`${base}/api${path}`, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
