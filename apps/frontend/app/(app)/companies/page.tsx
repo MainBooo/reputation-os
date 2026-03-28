@@ -11,7 +11,7 @@ export default async function CompaniesPage() {
 
   try {
     companies = await getCompanies()
-  } catch (error: any) {
+  } catch {
     authRequired = true
     companies = []
   }
@@ -19,14 +19,14 @@ export default async function CompaniesPage() {
   return (
     <div>
       <PageHeader
-        title="Companies"
-        subtitle="Manage monitored companies and open company workspaces."
+        title="Компании"
+        subtitle="Управление компаниями и переход в рабочие пространства мониторинга."
       />
 
       {authRequired ? (
         <EmptyState
-          title="Authorization required"
-          description="Login is required before the app can load live companies from the API."
+          title="Требуется авторизация"
+          description="Войдите в систему, чтобы загрузить список компаний из API."
         />
       ) : companies.length ? (
         <div className="grid gap-4 lg:grid-cols-2">
@@ -37,12 +37,12 @@ export default async function CompaniesPage() {
                   <div>
                     <div className="text-lg font-semibold">{company.name}</div>
                     <div className="mt-2 text-sm text-muted">
-                      {company.website || 'No website'} · {company.city || 'No city'} · {company.industry || 'No industry'}
+                      {company.website || 'Без сайта'} · {company.city || 'Город не указан'} · {company.industry || 'Отрасль не указана'}
                     </div>
                   </div>
 
                   <Badge>
-                    {company._count?.mentions || 0} mentions
+                    {company._count?.mentions || 0} упоминаний
                   </Badge>
                 </div>
               </Card>
@@ -51,8 +51,8 @@ export default async function CompaniesPage() {
         </div>
       ) : (
         <EmptyState
-          title="No companies yet"
-          description="Create your first company to start monitoring reputation data."
+          title="Компаний пока нет"
+          description="Создайте первую компанию, чтобы начать мониторинг репутации."
         />
       )}
     </div>
