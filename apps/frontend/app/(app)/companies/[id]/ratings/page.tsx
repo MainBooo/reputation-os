@@ -19,38 +19,38 @@ export default async function CompanyRatingsPage({ params }: { params: { id: str
   return (
     <div>
       <PageHeader
-        title="Ratings"
-        subtitle="Aggregated ratings across connected review sources."
+        title="Рейтинги"
+        subtitle="Сводные рейтинги по подключённым источникам отзывов."
       />
 
       {authRequired ? (
         <EmptyState
-          title="Authorization required"
-          description="Login is required before the app can load rating data from the API."
+          title="Требуется авторизация"
+          description="Войдите в систему, чтобы загрузить данные рейтингов из API."
         />
       ) : (
         <>
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <StatCard label="Aggregated rating" value={overview?.aggregatedRating ?? '—'} />
-            <StatCard label="Reviews count" value={overview?.reviewsCount || 0} />
-            <StatCard label="Sources" value={overview?.sourcesCount || 0} />
-            <StatCard label="Last refresh" value={overview?.lastRefreshAt ? 'Done' : '—'} />
+            <StatCard label="Сводный рейтинг" value={overview?.aggregatedRating ?? '—'} />
+            <StatCard label="Количество отзывов" value={overview?.reviewsCount || 0} />
+            <StatCard label="Источники" value={overview?.sourcesCount || 0} />
+            <StatCard label="Последнее обновление" value={overview?.lastRefreshAt ? 'Готово' : '—'} />
           </div>
 
           <div className="mt-6">
             <Card className="p-5">
-              <div className="mb-4 text-base font-semibold">Ratings history</div>
+              <div className="mb-4 text-base font-semibold">История рейтингов</div>
               {history.length ? (
                 <div className="space-y-3 text-sm text-muted">
                   {history.map((row: any, idx: number) => (
                     <div key={idx} className="flex items-center justify-between rounded-xl border border-line bg-panel2 px-4 py-3">
-                      <div>{row.sourceName || row.platform || 'Source'}</div>
+                      <div>{row.sourceName || row.platform || 'Источник'}</div>
                       <div>{row.ratingValue ?? '—'}</div>
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="text-sm text-muted">No ratings history yet.</div>
+                <div className="text-sm text-muted">История рейтингов пока пуста.</div>
               )}
             </Card>
           </div>

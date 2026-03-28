@@ -3,6 +3,7 @@ import Card from '@/components/ui/Card'
 import Input from '@/components/ui/Input'
 import MentionRow from '@/components/mentions/MentionRow'
 import EmptyState from '@/components/ui/EmptyState'
+import MentionCard from '@/components/inbox/MentionCard'
 import { getCompanyMentions } from '@/lib/api/mentions'
 
 export default async function CompanyInboxPage({ params }: { params: { id: string } }) {
@@ -20,30 +21,30 @@ export default async function CompanyInboxPage({ params }: { params: { id: strin
   return (
     <div>
       <PageHeader
-        title="Inbox"
-        subtitle="Filter reviews, mentions, VK posts and VK comments in one queue."
+        title="Входящие"
+        subtitle="Отзывы, упоминания, посты VK и комментарии VK в одной очереди."
       />
 
       <Card className="mb-6 p-5">
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
-          <Input placeholder="Platform" />
-          <Input placeholder="Sentiment" />
-          <Input placeholder="Status" />
-          <Input placeholder="Type" />
-          <Input placeholder="From date" />
-          <Input placeholder="To date" />
+          <Input placeholder="Площадка" />
+          <Input placeholder="Тональность" />
+          <Input placeholder="Статус" />
+          <Input placeholder="Тип" />
+          <Input placeholder="Дата от" />
+          <Input placeholder="Дата до" />
         </div>
       </Card>
 
       {authRequired ? (
         <EmptyState
-          title="Authorization required"
-          description="Login is required before the app can load live mentions from the API."
+          title="Требуется авторизация"
+          description="Войдите в систему, чтобы загрузить живые упоминания из API."
         />
       ) : !mentions.length ? (
         <EmptyState
-          title="Inbox is empty"
-          description="No mentions found for this company yet."
+          title="Inbox пока пуст"
+          description="Для этой компании пока не найдено упоминаний."
         />
       ) : (
         <div className="space-y-3">
@@ -52,7 +53,7 @@ export default async function CompanyInboxPage({ params }: { params: { id: strin
       )}
 
       <div className="mt-6 text-sm text-muted">
-        Page {response.meta?.page || 1} · Total {response.meta?.total || 0}
+        Страница {response.meta?.page || 1} · Всего {response.meta?.total || 0}
       </div>
     </div>
   )

@@ -18,12 +18,12 @@ export default async function CompanyPage({ params }: { params: { id: string } }
     return (
       <div>
         <PageHeader
-          title="Company workspace"
-          subtitle="Overview, sources and monitoring actions."
+          title="Карточка компании"
+          subtitle="Обзор компании, источники и действия мониторинга."
         />
         <EmptyState
-          title="Authorization required"
-          description="Login is required before the app can load the company workspace from the API."
+          title="Требуется авторизация"
+          description="Войдите в систему, чтобы загрузить карточку компании из API."
         />
       </div>
     )
@@ -33,12 +33,12 @@ export default async function CompanyPage({ params }: { params: { id: string } }
     return (
       <div>
         <PageHeader
-          title="Company workspace"
-          subtitle="Overview, sources and monitoring actions."
+          title="Карточка компании"
+          subtitle="Обзор компании, источники и действия мониторинга."
         />
         <EmptyState
-          title="Company not found"
-          description="The requested company could not be loaded."
+          title="Компания не найдена"
+          description="Не удалось загрузить запрошенную компанию."
         />
       </div>
     )
@@ -47,42 +47,42 @@ export default async function CompanyPage({ params }: { params: { id: string } }
   return (
     <div>
       <PageHeader
-        title={company.name || 'Company workspace'}
-        subtitle="Overview, sources and monitoring actions."
+        title={company.name || 'Карточка компании'}
+        subtitle="Обзор компании, источники и действия мониторинга."
       />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Mentions" value={company._count?.mentions || 0} />
-        <StatCard label="Ratings snapshots" value={company._count?.ratingSnapshots || 0} />
-        <StatCard label="Connected sources" value={company.sourceTargets?.length || 0} />
-        <StatCard label="Aliases" value={company.aliases?.length || 0} />
+        <StatCard label="Упоминания" value={company._count?.mentions || 0} />
+        <StatCard label="Снимки рейтинга" value={company._count?.ratingSnapshots || 0} />
+        <StatCard label="Подключённые источники" value={company.sourceTargets?.length || 0} />
+        <StatCard label="Алиасы" value={company.aliases?.length || 0} />
       </div>
 
       <div className="mt-6 grid gap-6 xl:grid-cols-2">
         <Card className="p-5">
-          <div className="mb-4 text-base font-semibold">Company details</div>
+          <div className="mb-4 text-base font-semibold">Данные компании</div>
           <div className="space-y-2 text-sm text-muted">
-            <div><span className="text-brand">Website:</span> {company.website || '—'}</div>
-            <div><span className="text-brand">City:</span> {company.city || '—'}</div>
-            <div><span className="text-brand">Industry:</span> {company.industry || '—'}</div>
+            <div><span className="text-brand">Сайт:</span> {company.website || '—'}</div>
+            <div><span className="text-brand">Город:</span> {company.city || '—'}</div>
+            <div><span className="text-brand">Сфера:</span> {company.industry || '—'}</div>
           </div>
         </Card>
 
         <Card className="p-5">
-          <div className="mb-4 text-base font-semibold">Connected sources</div>
+          <div className="mb-4 text-base font-semibold">Подключённые источники</div>
           {company.sourceTargets?.length ? (
             <div className="space-y-3">
               {company.sourceTargets.map((t: any) => (
                 <div key={t.id} className="rounded-xl border border-line bg-panel2 px-4 py-3 text-sm">
-                  <div className="font-medium">{t.source?.name || 'Source'}</div>
+                  <div className="font-medium">{t.source?.name || 'Источник'}</div>
                   <div className="mt-1 text-muted">
-                    {t.displayName || t.externalUrl || t.externalPlaceId || 'No target details'}
+                    {t.displayName || t.externalUrl || t.externalPlaceId || 'Нет данных по источнику'}
                   </div>
                 </div>
               ))}
             </div>
           ) : (
-            <div className="text-sm text-muted">No connected sources yet.</div>
+            <div className="text-sm text-muted">Подключённых источников пока нет.</div>
           )}
         </Card>
       </div>

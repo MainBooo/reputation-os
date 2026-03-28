@@ -8,10 +8,10 @@ import { getVkOverview, getVkSearchProfiles, getVkCommunities, getVkPosts } from
 
 function OverviewCards({ overview }: { overview: any }) {
   const items = [
-    ['Tracked communities', overview?.trackedCommunitiesCount ?? 0],
-    ['Active search profiles', overview?.activeSearchProfilesCount ?? 0],
-    ['Discovered VK posts', overview?.discoveredVkPostsCount ?? 0],
-    ['Relevant VK mentions', overview?.relevantVkMentionsCount ?? 0]
+    ['Отслеживаемые сообщества', overview?.trackedCommunitiesCount ?? 0],
+    ['Активные поисковые профили', overview?.activeSearchProfilesCount ?? 0],
+    ['Найденные посты VK', overview?.discoveredVkPostsCount ?? 0],
+    ['Релевантные упоминания VK', overview?.relevantVkMentionsCount ?? 0]
   ]
 
   return (
@@ -48,15 +48,15 @@ export default async function CompanyVkPage({ params }: { params: { id: string }
   return (
     <div>
       <PageHeader
-        title="VK monitoring"
-        subtitle="Dedicated social monitoring pipeline with 3 modes and relevance-based persistence."
+        title="Мониторинг VK"
+        subtitle="Отдельный контур мониторинга ВКонтакте с 3 режимами и сохранением только релевантных данных."
         actions={!authRequired ? <VkActions companyId={params.id} /> : undefined}
       />
 
       {authRequired ? (
         <EmptyState
-          title="Authorization required"
-          description="Login is required before the app can load VK monitoring data from the API."
+          title="Требуется авторизация"
+          description="Войдите в систему, чтобы загрузить данные мониторинга VK из API."
         />
       ) : (
         <>
@@ -71,17 +71,17 @@ export default async function CompanyVkPage({ params }: { params: { id: string }
                     <div key={profile.id} className="flex items-center justify-between rounded-xl border border-line bg-panel2 px-4 py-3">
                       <div>
                         <div className="text-sm font-medium text-brand">{profile.query}</div>
-                        <div className="mt-1 text-xs text-muted">priority: {profile.priority}</div>
+                        <div className="mt-1 text-xs text-muted">приоритет: {profile.priority}</div>
                       </div>
                       <div className="flex items-center gap-2">
                         <Badge tone={profile.mode}>{profile.mode}</Badge>
-                        <Badge>{profile.isActive ? 'ACTIVE' : 'INACTIVE'}</Badge>
+                        <Badge>{profile.isActive ? 'АКТИВЕН' : 'НЕАКТИВЕН'}</Badge>
                       </div>
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="text-sm text-muted">No search profiles yet.</div>
+                <div className="text-sm text-muted">Поисковых профилей пока нет.</div>
               )}
             </Card>
 
@@ -101,13 +101,13 @@ export default async function CompanyVkPage({ params }: { params: { id: string }
                       </div>
                       <div className="flex items-center gap-2">
                         <Badge tone={community.mode}>{community.mode}</Badge>
-                        <Badge>{community.isActive ? 'ACTIVE' : 'INACTIVE'}</Badge>
+                        <Badge>{community.isActive ? 'АКТИВЕН' : 'НЕАКТИВЕН'}</Badge>
                       </div>
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="text-sm text-muted">No priority communities yet.</div>
+                <div className="text-sm text-muted">Приоритетных сообществ пока нет.</div>
               )}
             </Card>
 
@@ -127,19 +127,19 @@ export default async function CompanyVkPage({ params }: { params: { id: string }
                       </div>
                       <div className="flex items-center gap-2">
                         <Badge tone={community.mode}>{community.mode}</Badge>
-                        <Badge>{community.isActive ? 'ACTIVE' : 'INACTIVE'}</Badge>
+                        <Badge>{community.isActive ? 'АКТИВЕН' : 'НЕАКТИВЕН'}</Badge>
                       </div>
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="text-sm text-muted">No owned community configured yet.</div>
+                <div className="text-sm text-muted">Собственное сообщество пока не настроено.</div>
               )}
             </Card>
 
             <div className="grid gap-6 xl:grid-cols-[1.1fr,1fr]">
               <Card className="p-5">
-                <div className="mb-4 text-base font-semibold">Recent VK tracked posts</div>
+                <div className="mb-4 text-base font-semibold">Последние отслеживаемые посты VK</div>
                 {posts.length ? (
                   <div className="space-y-3">
                     {posts.map((post: any) => (
@@ -148,20 +148,20 @@ export default async function CompanyVkPage({ params }: { params: { id: string }
                           {post.trackedCommunity?.mode ? <Badge tone={post.trackedCommunity.mode}>{post.trackedCommunity.mode}</Badge> : null}
                           {post.discoveryStatus ? <Badge>{post.discoveryStatus}</Badge> : null}
                         </div>
-                        <div className="mt-3 text-sm leading-6 text-brand">{post.text || 'No text'}</div>
+                        <div className="mt-3 text-sm leading-6 text-brand">{post.text || 'Нет текста'}</div>
                         <div className="mt-3 text-xs text-muted">
-                          {post.url || 'No URL'} · {post.publishedAt ? new Date(post.publishedAt).toLocaleString() : ''}
+                          {post.url || 'Нет URL'} · {post.publishedAt ? new Date(post.publishedAt).toLocaleString() : ''}
                         </div>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <div className="text-sm text-muted">No tracked VK posts yet.</div>
+                  <div className="text-sm text-muted">Отслеживаемых постов VK пока нет.</div>
                 )}
               </Card>
 
               <Card className="p-5">
-                <div className="mb-4 text-base font-semibold">Recent VK mentions/comments</div>
+                <div className="mb-4 text-base font-semibold">Последние упоминания и комментарии VK</div>
                 {(overview?.recentMentions || []).length ? (
                   <div className="space-y-3">
                     {(overview.recentMentions || []).map((mention: any) => (
@@ -169,7 +169,7 @@ export default async function CompanyVkPage({ params }: { params: { id: string }
                     ))}
                   </div>
                 ) : (
-                  <div className="text-sm text-muted">No recent VK mentions yet.</div>
+                  <div className="text-sm text-muted">Свежих упоминаний VK пока нет.</div>
                 )}
               </Card>
             </div>

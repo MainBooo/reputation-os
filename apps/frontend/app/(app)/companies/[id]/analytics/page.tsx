@@ -21,54 +21,54 @@ export default async function CompanyAnalyticsPage({ params }: { params: { id: s
   return (
     <div>
       <PageHeader
-        title="Analytics"
-        subtitle="Aggregate sentiment, platform mix and reputation dynamics."
+        title="Аналитика"
+        subtitle="Сводная аналитика по тональности, площадкам и динамике репутации."
       />
 
       {authRequired ? (
         <EmptyState
-          title="Authorization required"
-          description="Login is required before the app can load analytics from the API."
+          title="Требуется авторизация"
+          description="Войдите в систему, чтобы загрузить аналитику из API."
         />
       ) : (
         <>
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <StatCard label="Total mentions" value={overview?.mentionsCount || 0} />
-            <StatCard label="Negative mentions" value={overview?.negativeCount || 0} />
-            <StatCard label="Positive mentions" value={overview?.positiveCount || 0} />
-            <StatCard label="Reviews count" value={overview?.reviewsCount || 0} />
+            <StatCard label="Всего упоминаний" value={overview?.mentionsCount || 0} />
+            <StatCard label="Негативные упоминания" value={overview?.negativeCount || 0} />
+            <StatCard label="Позитивные упоминания" value={overview?.positiveCount || 0} />
+            <StatCard label="Количество отзывов" value={overview?.reviewsCount || 0} />
           </div>
 
           <div className="mt-6 grid gap-6 xl:grid-cols-2">
             <Card className="p-5">
-              <div className="mb-4 text-base font-semibold">Sentiment breakdown</div>
+              <div className="mb-4 text-base font-semibold">Разбивка по тональности</div>
               {sentiment.length ? (
                 <div className="space-y-3 text-sm text-muted">
                   {sentiment.map((row: any, idx: number) => (
                     <div key={idx} className="flex items-center justify-between rounded-xl border border-line bg-panel2 px-4 py-3">
-                      <div>{row.sentiment || 'UNKNOWN'}</div>
+                      <div>{row.sentiment || 'НЕИЗВЕСТНО'}</div>
                       <div>{row.count || 0}</div>
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="text-sm text-muted">No sentiment data yet.</div>
+                <div className="text-sm text-muted">Данных по тональности пока нет.</div>
               )}
             </Card>
 
             <Card className="p-5">
-              <div className="mb-4 text-base font-semibold">Platforms</div>
+              <div className="mb-4 text-base font-semibold">Площадки</div>
               {platforms?.items?.length ? (
                 <div className="space-y-3 text-sm text-muted">
                   {platforms.items.map((row: any, idx: number) => (
                     <div key={idx} className="flex items-center justify-between rounded-xl border border-line bg-panel2 px-4 py-3">
-                      <div>{row.platform || 'UNKNOWN'}</div>
+                      <div>{row.platform || 'НЕИЗВЕСТНО'}</div>
                       <div>{row.count || 0}</div>
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="text-sm text-muted">No platform analytics yet.</div>
+                <div className="text-sm text-muted">Данных по площадкам пока нет.</div>
               )}
             </Card>
           </div>
