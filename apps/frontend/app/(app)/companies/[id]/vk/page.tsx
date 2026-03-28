@@ -1,77 +1,181 @@
 import PageHeader from '@/components/ui/PageHeader'
 import Card from '@/components/ui/Card'
 import Badge from '@/components/ui/Badge'
-import VkOverview from '@/components/vk/VkOverview'
-import VkSearchProfiles from '@/components/vk/VkSearchProfiles'
-import VkCommunities from '@/components/vk/VkCommunities'
+import EmptyState from '@/components/ui/EmptyState'
 import MentionRow from '@/components/mentions/MentionRow'
 import VkActions from '@/components/vk/VkActions'
-import { getVkCommunities, getVkOverview, getVkPosts, getVkSearchProfiles } from '@/lib/api/vk'
+import { getVkOverview, getVkSearchProfiles, getVkCommunities, getVkPosts } from '@/lib/api/vk'
 
-export default async function VkPage({ params }: { params: { id: string } }) {
-  const overview: any = await getVkOverview(params.id)
-  const profiles: any[] = await getVkSearchProfiles(params.id)
-  const communities: any[] = await getVkCommunities(params.id)
-  const posts: any[] = await getVkPosts(params.id)
+function OverviewCards({ overview }: { overview: any }) {
+  const items = [
+    ['Tracked communities', overview?.trackedCommunitiesCount ?? 0],
+    ['Active search profiles', overview?.activeSearchProfilesCount ?? 0],
+    ['Discovered VK posts', overview?.discoveredVkPostsCount ?? 0],
+    ['Relevant VK mentions', overview?.relevantVkMentionsCount ?? 0]
+  ]
 
-  const priorityCommunities = communities.filter((item) => item.mode === 'PRIORITY_COMMUNITY')
-  const ownedCommunities = communities.filter((item) => item.mode === 'OWNED_COMMUNITY')
+  return (
+    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      {items.map(([label, value]) => (
+        <Card key={String(label)} className="p-5">
+          <div className="text-sm text-muted">{label}</div>
+          <div className="mt-3 text-3xl font-semibold tracking-tight text-brand">{value}</div>
+        </Card>
+      ))}
+    </div>
+  )
+}
+
+export default async function CompanyVkPage({ params }: { params: { id: string } }) {
+  let overview: any = null
+  let profiles: any[] = []
+  let communities: any[] = []
+  let posts: any[] = []
+  let authRequired = false
+
+  try {
+    overview = await getVkOverview(params.id)
+    profiles = await getVkSearchProfiles(params.id)
+    communities = await getVkCommunities(params.id)
+    posts = await getVkPosts(params.id)
+  } catch {
+    authRequired = true
+  }
+
+  const priorityCommunities = communities.filter((c) => c.mode === 'PRIORITY_COMMUNITY')
+  const ownedCommunities = communities.filter((c) => c.mode === 'OWNED_COMMUNITY')
 
   return (
     <div>
       <PageHeader
         title="VK monitoring"
         subtitle="Dedicated social monitoring pipeline with 3 modes and relevance-based persistence."
-        actions={<VkActions companyId={params.id} />}
+        actions={!authRequired ? <VkActions companyId={params.id} /> : undefined}
       />
 
-      <VkOverview overview={overview} />
-
-      <div className="mt-6 grid gap-6">
-        <VkSearchProfiles profiles={profiles} />
-
-        <VkCommunities
-          title="PRIORITY_COMMUNITIES"
-          description="Scans only configured communities, then comments for relevant/new posts."
-          communities={priorityCommunities}
+      {authRequired ? (
+        <EmptyState
+          title="Authorization required"
+          description="Login is required before the app can load VK monitoring data from the API."
         />
+      ) : (
+        <>
+          <OverviewCards overview={overview} />
 
-        <VkCommunities
-          title="OWNED_COMMUNITY"
-          description="Frequent incremental sync, event-ready/callback-ready architecture."
-          communities={ownedCommunities}
-        />
-      </div>
-
-      <div className="mt-6 grid gap-6 xl:grid-cols-[1.1fr,1fr]">
-        <Card className="p-5">
-          <div className="mb-4 flex items-center justify-between">
-            <div className="text-base font-semibold">Recent VK tracked posts</div>
-            <Badge tone="VK">VK</Badge>
-          </div>
-          <div className="space-y-3">
-            {(overview.recentPosts || posts).map((post: any) => (
-              <div key={post.id || `${post.ownerId}-${post.postId}`} className="rounded-xl border border-line bg-panel2 p-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  {post.trackedCommunity?.mode ? <Badge tone={post.trackedCommunity.mode}>{post.trackedCommunity.mode}</Badge> : null}
-                  {post.discoveryStatus ? <Badge>{post.discoveryStatus}</Badge> : null}
+          <div className="mt-6 grid gap-6">
+            <Card className="p-5">
+              <div className="mb-4 text-base font-semibold text-brand">BRAND_SEARCH</div>
+              {profiles.length ? (
+                <div className="space-y-3">
+                  {profiles.map((profile: any) => (
+                    <div key={profile.id} className="flex items-center justify-between rounded-xl border border-line bg-panel2 px-4 py-3">
+                      <div>
+                        <div className="text-sm font-medium text-brand">{profile.query}</div>
+                        <div className="mt-1 text-xs text-muted">priority: {profile.priority}</div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge tone={profile.mode}>{profile.mode}</Badge>
+                        <Badge>{profile.isActive ? 'ACTIVE' : 'INACTIVE'}</Badge>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-                <div className="mt-3 text-sm leading-6 text-brand">{post.text || 'No text'}</div>
-                <div className="mt-3 text-xs text-muted">{post.url || 'No URL'} · {post.publishedAt ? new Date(post.publishedAt).toLocaleString() : ''}</div>
-              </div>
-            ))}
-          </div>
-        </Card>
+              ) : (
+                <div className="text-sm text-muted">No search profiles yet.</div>
+              )}
+            </Card>
 
-        <Card className="p-5">
-          <div className="mb-4 text-base font-semibold">Recent VK mentions/comments</div>
-          <div className="space-y-3">
-            {(overview.recentMentions || []).map((mention: any) => (
-              <MentionRow key={mention.id} mention={mention} />
-            ))}
+            <Card className="p-5">
+              <div className="mb-4 text-base font-semibold text-brand">PRIORITY_COMMUNITIES</div>
+              {priorityCommunities.length ? (
+                <div className="space-y-3">
+                  {priorityCommunities.map((community: any) => (
+                    <div key={community.id} className="flex items-center justify-between rounded-xl border border-line bg-panel2 px-4 py-3">
+                      <div>
+                        <div className="text-sm font-medium text-brand">
+                          {community.title || community.screenName || community.vkCommunityId}
+                        </div>
+                        <div className="mt-1 text-xs text-muted">
+                          {community.url || community.screenName || community.vkCommunityId}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge tone={community.mode}>{community.mode}</Badge>
+                        <Badge>{community.isActive ? 'ACTIVE' : 'INACTIVE'}</Badge>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-sm text-muted">No priority communities yet.</div>
+              )}
+            </Card>
+
+            <Card className="p-5">
+              <div className="mb-4 text-base font-semibold text-brand">OWNED_COMMUNITY</div>
+              {ownedCommunities.length ? (
+                <div className="space-y-3">
+                  {ownedCommunities.map((community: any) => (
+                    <div key={community.id} className="flex items-center justify-between rounded-xl border border-line bg-panel2 px-4 py-3">
+                      <div>
+                        <div className="text-sm font-medium text-brand">
+                          {community.title || community.screenName || community.vkCommunityId}
+                        </div>
+                        <div className="mt-1 text-xs text-muted">
+                          {community.url || community.screenName || community.vkCommunityId}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge tone={community.mode}>{community.mode}</Badge>
+                        <Badge>{community.isActive ? 'ACTIVE' : 'INACTIVE'}</Badge>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-sm text-muted">No owned community configured yet.</div>
+              )}
+            </Card>
+
+            <div className="grid gap-6 xl:grid-cols-[1.1fr,1fr]">
+              <Card className="p-5">
+                <div className="mb-4 text-base font-semibold">Recent VK tracked posts</div>
+                {posts.length ? (
+                  <div className="space-y-3">
+                    {posts.map((post: any) => (
+                      <div key={post.id || `${post.ownerId}-${post.postId}`} className="rounded-xl border border-line bg-panel2 p-4">
+                        <div className="flex flex-wrap items-center gap-2">
+                          {post.trackedCommunity?.mode ? <Badge tone={post.trackedCommunity.mode}>{post.trackedCommunity.mode}</Badge> : null}
+                          {post.discoveryStatus ? <Badge>{post.discoveryStatus}</Badge> : null}
+                        </div>
+                        <div className="mt-3 text-sm leading-6 text-brand">{post.text || 'No text'}</div>
+                        <div className="mt-3 text-xs text-muted">
+                          {post.url || 'No URL'} · {post.publishedAt ? new Date(post.publishedAt).toLocaleString() : ''}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-sm text-muted">No tracked VK posts yet.</div>
+                )}
+              </Card>
+
+              <Card className="p-5">
+                <div className="mb-4 text-base font-semibold">Recent VK mentions/comments</div>
+                {(overview?.recentMentions || []).length ? (
+                  <div className="space-y-3">
+                    {(overview.recentMentions || []).map((mention: any) => (
+                      <MentionRow key={mention.id} mention={mention} />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-sm text-muted">No recent VK mentions yet.</div>
+                )}
+              </Card>
+            </div>
           </div>
-        </Card>
-      </div>
+        </>
+      )}
     </div>
   )
 }

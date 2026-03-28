@@ -5,14 +5,5 @@ export function getCompanies() {
 }
 
 export function getCompany(id: string) {
-  return apiFetch(`/companies/${id}`, undefined, {
-    id,
-    name: 'Acme Corp',
-    website: 'https://acme.example.com',
-    city: 'Moscow',
-    industry: 'Tech',
-    aliases: [],
-    sourceTargets: [],
-    _count: { mentions: 12, ratingSnapshots: 4 }
-  })
+  return apiFetch(`/companies/${id}`)
 }

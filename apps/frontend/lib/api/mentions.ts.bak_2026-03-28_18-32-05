@@ -1,0 +1,23 @@
+import { apiFetch } from './client'
+
+export function getCompanyMentions(id: string, params: Record<string, any> = {}) {
+  const query = new URLSearchParams(
+    Object.entries(params).reduce((acc, [k, v]) => {
+      if (v !== undefined && v !== '') acc[k] = String(v)
+      return acc
+    }, {} as Record<string, string>)
+  ).toString()
+  return apiFetch(`/companies/${id}/mentions${query ? '?' + query : ''}`, undefined, {
+    data: [],
+    meta: { total: 0, page: 1, limit: 20 }
+  })
+}
+
+export function generateReply(id: string) {
+  return apiFetch(`/mentions/${id}/generate-reply`, {
+    method: 'POST',
+    body: JSON.stringify({})
+  }, {
+    draftText: 'Спасибо за отзыв!'
+  })
+}

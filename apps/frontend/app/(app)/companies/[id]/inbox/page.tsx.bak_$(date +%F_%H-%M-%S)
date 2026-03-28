@@ -6,15 +6,7 @@ import EmptyState from '@/components/ui/EmptyState'
 import { getCompanyMentions } from '@/lib/api/mentions'
 
 export default async function CompanyInboxPage({ params }: { params: { id: string } }) {
-  let response: any = { data: [], meta: { total: 0, page: 1, limit: 20 } }
-  let authRequired = false
-
-  try {
-    response = await getCompanyMentions(params.id)
-  } catch {
-    authRequired = true
-  }
-
+  const response: any = await getCompanyMentions(params.id)
   const mentions = response.data || []
 
   return (
@@ -35,15 +27,10 @@ export default async function CompanyInboxPage({ params }: { params: { id: strin
         </div>
       </Card>
 
-      {authRequired ? (
-        <EmptyState
-          title="Authorization required"
-          description="Login is required before the app can load live mentions from the API."
-        />
-      ) : !mentions.length ? (
+      {!mentions.length ? (
         <EmptyState
           title="Inbox is empty"
-          description="No mentions found for this company yet."
+          description="Seed/demo mode will populate mentions, reviews and VK content after startup."
         />
       ) : (
         <div className="space-y-3">
