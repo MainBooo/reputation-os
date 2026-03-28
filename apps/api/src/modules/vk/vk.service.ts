@@ -237,245 +237,352 @@ export class VkService {
 
   async runBrandSearch(userId: string, companyId: string) {
     try {
-      console.log('[VK] runBrandSearch:start', { companyId, hasQueue: !!this.vkBrandQueue })
-    await this.assertCompanyAccess(userId, companyId)
+      console.log('[VK] runBrandSearch:start', { companyId, userId, hasQueue: !!this.vkBrandQueue })
 
-    const company = await this.prisma.company.findUnique({
-      where: { id: companyId },
-      select: { id: true, name: true }
-    })
+      console.log('[VK] runBrandSearch:assertCompanyAccess:before', { companyId, userId })
+      await this.assertCompanyAccess(userId, companyId)
+      console.log('[VK] runBrandSearch:assertCompanyAccess:after', { companyId, userId })
 
-    if (!company) {
-      throw new NotFoundException('Company not found')
-    }
-
-    const profiles = await this.prisma.vkSearchProfile.findMany({
-      where: {
-        companyId,
-        isActive: true
-      },
-      orderBy: [{ priority: 'asc' }, { createdAt: 'asc' }]
-    })
-
-    const payloads: Array<{ companyId: string; query: string; searchProfileId?: string }> = []
-
-    for (const profile of profiles) {
-      const query = String(profile.query ?? '').trim()
-      if (!query) continue
-
-      payloads.push({
-        companyId,
-        query,
-        searchProfileId: profile.id
+      console.log('[VK] runBrandSearch:company:before', { companyId })
+      const company = await this.prisma.company.findUnique({
+        where: { id: companyId },
+        select: {
+          id: true,
+          name: true
+        }
       })
-    }
+      console.log('[VK] runBrandSearch:company:after', { company })
 
-    if (payloads.length === 0) {
-      const fallbackQuery = String(company.name ?? '').trim()
-
-      if (!fallbackQuery) {
-        throw new NotFoundException('No active VK search profiles and empty company name')
+      if (!company) {
+        throw new NotFoundException('Company not found')
       }
 
-      payloads.push({
-        companyId,
-        query: fallbackQuery
+      console.log('[VK] runBrandSearch:profiles:before', { companyId })
+      const profiles = await this.prisma.vkSearchProfile.findMany({
+        where: {
+          companyId,
+          isActive: true,
+          mode: VkMonitoringMode.BRAND_SEARCH
+        },
+        orderBy: [{ priority: 'asc' }, { createdAt: 'asc' }]
       })
-    }
+      console.log('[VK] runBrandSearch:profiles:after', {
+        count: profiles.length,
+        profiles: profiles.map((p) => ({
+          id: p.id,
+          query: p.query,
+          normalizedQuery: p.normalizedQuery,
+          priority: p.priority,
+          isActive: p.isActive,
+          mode: p.mode
+        }))
+      })
 
-    const enqueuedJobs: string[] = []
+      const queries = profiles.length > 0
+        ? profiles.map((profile) => ({
+            profileId: profile.id,
+            query: profile.query,
+            normalizedQuery: profile.normalizedQuery || this.normalize(profile.query)
+          }))
+        : [{
+            profileId: null,
+            query: company.name,
+            normalizedQuery: this.normalize(company.name)
+          }]
 
-    for (const payload of payloads) {
-      const job = await this.vkBrandQueue.add(
-        JOBS.VK_BRAND_SEARCH,
-        payload,
-        {
-          removeOnComplete: 100,
-          removeOnFail: 100,
-          jobId: `manual:vk-brand:${companyId}:${payload.searchProfileId || 'fallback'}:${Date.now()}`
+      console.log('[VK] runBrandSearch:queries', { queries })
+
+      const enqueuedJobs: string[] = []
+
+      for (const item of queries) {
+        const payload = {
+          companyId,
+          query: item.query,
+          normalizedQuery: item.normalizedQuery,
+          profileId: item.profileId
         }
-      )
 
-      enqueuedJobs.push(String(job.id))
-    }
+        console.log('[VK] runBrandSearch:queue.add:before', payload)
 
-    await this.prisma.jobLog.create({
-      data: {
-        companyId,
-        triggeredByUserId: userId,
-        queueName: 'vk_brand_search_discovery',
-        jobName: 'vk.brand-search',
-        jobStatus: 'PENDING',
-        payload: {
-          mode: 'BRAND_SEARCH',
-          jobsCount: enqueuedJobs.length,
-          searchProfileIds: payloads.map((item) => item.searchProfileId).filter((id): id is string => Boolean(id)),
-          queries: payloads.map((item) => item.query)
-        }
+        const job = await this.vkBrandQueue.add(
+          JOBS.VK_BRAND_SEARCH,
+          payload,
+          {
+            removeOnComplete: 100,
+            removeOnFail: 100,
+            jobId: `manual__vk-brand__${companyId}__${item.profileId ?? 'fallback'}__${Date.now()}`
+          }
+        )
+
+        console.log('[VK] runBrandSearch:queue.add:after', {
+          jobId: job.id,
+          payload
+        })
+
+        enqueuedJobs.push(String(job.id))
       }
-    })
 
-    return {
-      ok: true,
-      queue: 'vk_brand_search_discovery',
-      jobsCount: enqueuedJobs.length,
-      jobIds: enqueuedJobs,
-      payloads
-    }
+      console.log('[VK] runBrandSearch:jobLog:before', {
+        companyId,
+        userId,
+        jobsCount: enqueuedJobs.length
+      })
+
+      await this.prisma.jobLog.create({
+        data: {
+          companyId,
+          triggeredByUserId: userId,
+          queueName: 'vk_brand_search_discovery',
+          jobName: 'vk.brand-search',
+          jobStatus: 'PENDING',
+          payload: {
+            mode: 'BRAND_SEARCH',
+            jobsCount: enqueuedJobs.length
+          }
+        }
+      })
+
+      console.log('[VK] runBrandSearch:jobLog:after', {
+        companyId,
+        jobsCount: enqueuedJobs.length
+      })
+
+      return {
+        ok: true,
+        queue: 'vk_brand_search_discovery',
+        jobsCount: enqueuedJobs.length,
+        jobIds: enqueuedJobs
+      }
     } catch (error) {
-      console.error('[VK] runBrandSearch:error', error)
+      console.error('[VK] runBrandSearch:error', error instanceof Error ? error.stack || error.message : error)
       throw error
     }
   }
 
   async runCommunitySync(userId: string, companyId: string) {
     try {
-      console.log('[VK] runCommunitySync:start', { companyId, hasQueue: !!this.vkCommunitiesQueue })
-    await this.assertCompanyAccess(userId, companyId)
+      console.log('[VK] runCommunitySync:start', { companyId, userId, hasQueue: !!this.vkCommunitiesQueue })
 
-    const communities = await this.prisma.vkTrackedCommunity.findMany({
-      where: {
-        companyId,
-        isActive: true,
-        mode: VkTrackedCommunityMode.PRIORITY_COMMUNITY
-      }
-    })
+      console.log('[VK] runCommunitySync:assertCompanyAccess:before', { companyId, userId })
+      await this.assertCompanyAccess(userId, companyId)
+      console.log('[VK] runCommunitySync:assertCompanyAccess:after', { companyId, userId })
 
-    const payloads = communities
-      .map((community) => {
-        const communityId = this.resolveCommunityId(community)
-        if (!community.id || !communityId) {
-          return null
+      console.log('[VK] runCommunitySync:communities:before', { companyId })
+      const communities = await this.prisma.vkTrackedCommunity.findMany({
+        where: {
+          companyId,
+          mode: VkTrackedCommunityMode.PRIORITY_COMMUNITY,
+          isActive: true
+        },
+        orderBy: { createdAt: 'asc' }
+      })
+      console.log('[VK] runCommunitySync:communities:after', {
+        count: communities.length,
+        communities: communities.map((c) => ({
+          id: c.id,
+          title: c.title,
+          screenName: c.screenName,
+          vkCommunityId: (c as any).vkCommunityId ?? null,
+          communityId: (c as any).communityId ?? null,
+          externalId: (c as any).externalId ?? null,
+          groupId: (c as any).groupId ?? null,
+          ownerId: (c as any).ownerId ?? null,
+          vkId: (c as any).vkId ?? null,
+          mode: c.mode,
+          isActive: c.isActive
+        }))
+      })
+
+      const enqueuedJobs: string[] = []
+
+      for (const community of communities) {
+        const resolvedCommunityId = this.resolveCommunityId(community)
+
+        console.log('[VK] runCommunitySync:resolveCommunityId', {
+          trackedCommunityId: community.id,
+          resolvedCommunityId
+        })
+
+        if (!resolvedCommunityId) {
+          console.log('[VK] runCommunitySync:skip:no-community-id', {
+            trackedCommunityId: community.id
+          })
+          continue
         }
 
-        return {
+        const payload = {
           companyId,
           trackedCommunityId: community.id,
-          communityId,
-          sourceId: (community as any).sourceId ?? undefined
+          communityId: String(resolvedCommunityId)
+        }
+
+        console.log('[VK] runCommunitySync:queue.add:before', payload)
+
+        const job = await this.vkCommunitiesQueue.add(
+          JOBS.VK_PRIORITY_COMMUNITIES,
+          payload,
+          {
+            removeOnComplete: 100,
+            removeOnFail: 100,
+            jobId: `manual__vk-priority__${companyId}__${community.id}__${Date.now()}`
+          }
+        )
+
+        console.log('[VK] runCommunitySync:queue.add:after', {
+          jobId: job.id,
+          payload
+        })
+
+        enqueuedJobs.push(String(job.id))
+      }
+
+      console.log('[VK] runCommunitySync:jobLog:before', {
+        companyId,
+        userId,
+        jobsCount: enqueuedJobs.length
+      })
+
+      await this.prisma.jobLog.create({
+        data: {
+          companyId,
+          triggeredByUserId: userId,
+          queueName: 'vk_priority_communities_sync',
+          jobName: 'vk.priority-communities',
+          jobStatus: 'PENDING',
+          payload: {
+            mode: 'PRIORITY_COMMUNITIES',
+            jobsCount: enqueuedJobs.length
+          }
         }
       })
-      .filter(Boolean) as Array<{
-        companyId: string
-        trackedCommunityId: string
-        communityId: string
-        sourceId?: string
-      }>
 
-    const enqueuedJobs: string[] = []
-
-    for (const payload of payloads) {
-      const job = await this.vkCommunitiesQueue.add(
-        JOBS.VK_PRIORITY_COMMUNITIES,
-        payload,
-        {
-          removeOnComplete: 100,
-          removeOnFail: 100,
-          jobId: `manual:vk-priority:${companyId}:${payload.trackedCommunityId}:${Date.now()}`
-        }
-      )
-
-      enqueuedJobs.push(String(job.id))
-    }
-
-    await this.prisma.jobLog.create({
-      data: {
+      console.log('[VK] runCommunitySync:jobLog:after', {
         companyId,
-        triggeredByUserId: userId,
-        queueName: 'vk_priority_communities_sync',
-        jobName: 'vk.priority-communities',
-        jobStatus: 'PENDING',
-        payload: {
-          mode: 'PRIORITY_COMMUNITIES',
-          jobsCount: enqueuedJobs.length
-        }
-      }
-    })
+        jobsCount: enqueuedJobs.length
+      })
 
-    return {
-      ok: true,
-      queue: 'vk_priority_communities_sync',
-      jobsCount: enqueuedJobs.length,
-      jobIds: enqueuedJobs
-    }
+      return {
+        ok: true,
+        queue: 'vk_priority_communities_sync',
+        jobsCount: enqueuedJobs.length,
+        jobIds: enqueuedJobs
+      }
     } catch (error) {
-      console.error('[VK] runCommunitySync:error', error)
+      console.error('[VK] runCommunitySync:error', error instanceof Error ? error.stack || error.message : error)
       throw error
     }
   }
 
   async runOwnedCommunitySync(userId: string, companyId: string) {
     try {
-      console.log('[VK] runOwnedCommunitySync:start', { companyId, hasQueue: !!this.vkOwnedQueue })
-    await this.assertCompanyAccess(userId, companyId)
+      console.log('[VK] runOwnedCommunitySync:start', { companyId, userId, hasQueue: !!this.vkOwnedQueue })
 
-    const communities = await this.prisma.vkTrackedCommunity.findMany({
-      where: {
-        companyId,
-        isActive: true,
-        mode: VkTrackedCommunityMode.OWNED_COMMUNITY
-      }
-    })
+      console.log('[VK] runOwnedCommunitySync:assertCompanyAccess:before', { companyId, userId })
+      await this.assertCompanyAccess(userId, companyId)
+      console.log('[VK] runOwnedCommunitySync:assertCompanyAccess:after', { companyId, userId })
 
-    const payloads = communities
-      .map((community) => {
-        const communityId = this.resolveCommunityId(community)
-        if (!community.id || !communityId) {
-          return null
+      console.log('[VK] runOwnedCommunitySync:communities:before', { companyId })
+      const communities = await this.prisma.vkTrackedCommunity.findMany({
+        where: {
+          companyId,
+          mode: VkTrackedCommunityMode.OWNED_COMMUNITY,
+          isActive: true
+        },
+        orderBy: { createdAt: 'asc' }
+      })
+      console.log('[VK] runOwnedCommunitySync:communities:after', {
+        count: communities.length,
+        communities: communities.map((c) => ({
+          id: c.id,
+          title: c.title,
+          screenName: c.screenName,
+          vkCommunityId: (c as any).vkCommunityId ?? null,
+          communityId: (c as any).communityId ?? null,
+          externalId: (c as any).externalId ?? null,
+          groupId: (c as any).groupId ?? null,
+          ownerId: (c as any).ownerId ?? null,
+          vkId: (c as any).vkId ?? null,
+          mode: c.mode,
+          isActive: c.isActive
+        }))
+      })
+
+      const enqueuedJobs: string[] = []
+
+      for (const community of communities) {
+        const resolvedCommunityId = this.resolveCommunityId(community)
+
+        console.log('[VK] runOwnedCommunitySync:resolveCommunityId', {
+          trackedCommunityId: community.id,
+          resolvedCommunityId
+        })
+
+        if (!resolvedCommunityId) {
+          console.log('[VK] runOwnedCommunitySync:skip:no-community-id', {
+            trackedCommunityId: community.id
+          })
+          continue
         }
 
-        return {
+        const payload = {
           companyId,
           trackedCommunityId: community.id,
-          communityId,
-          sourceId: (community as any).sourceId ?? undefined
+          communityId: String(resolvedCommunityId)
+        }
+
+        console.log('[VK] runOwnedCommunitySync:queue.add:before', payload)
+
+        const job = await this.vkOwnedQueue.add(
+          JOBS.VK_OWNED_COMMUNITY,
+          payload,
+          {
+            removeOnComplete: 100,
+            removeOnFail: 100,
+            jobId: `manual__vk-owned__${companyId}__${community.id}__${Date.now()}`
+          }
+        )
+
+        console.log('[VK] runOwnedCommunitySync:queue.add:after', {
+          jobId: job.id,
+          payload
+        })
+
+        enqueuedJobs.push(String(job.id))
+      }
+
+      console.log('[VK] runOwnedCommunitySync:jobLog:before', {
+        companyId,
+        userId,
+        jobsCount: enqueuedJobs.length
+      })
+
+      await this.prisma.jobLog.create({
+        data: {
+          companyId,
+          triggeredByUserId: userId,
+          queueName: 'vk_owned_community_sync',
+          jobName: 'vk.owned-community',
+          jobStatus: 'PENDING',
+          payload: {
+            mode: 'OWNED_COMMUNITY',
+            jobsCount: enqueuedJobs.length
+          }
         }
       })
-      .filter(Boolean) as Array<{
-        companyId: string
-        trackedCommunityId: string
-        communityId: string
-        sourceId?: string
-      }>
 
-    const enqueuedJobs: string[] = []
-
-    for (const payload of payloads) {
-      const job = await this.vkOwnedQueue.add(
-        JOBS.VK_OWNED_COMMUNITY,
-        payload,
-        {
-          removeOnComplete: 100,
-          removeOnFail: 100,
-          jobId: `manual:vk-owned:${companyId}:${payload.trackedCommunityId}:${Date.now()}`
-        }
-      )
-
-      enqueuedJobs.push(String(job.id))
-    }
-
-    await this.prisma.jobLog.create({
-      data: {
+      console.log('[VK] runOwnedCommunitySync:jobLog:after', {
         companyId,
-        triggeredByUserId: userId,
-        queueName: 'vk_owned_community_sync',
-        jobName: 'vk.owned-community',
-        jobStatus: 'PENDING',
-        payload: {
-          mode: 'OWNED_COMMUNITY',
-          jobsCount: enqueuedJobs.length
-        }
-      }
-    })
+        jobsCount: enqueuedJobs.length
+      })
 
-    return {
-      ok: true,
-      queue: 'vk_owned_community_sync',
-      jobsCount: enqueuedJobs.length,
-      jobIds: enqueuedJobs
-    }
+      return {
+        ok: true,
+        queue: 'vk_owned_community_sync',
+        jobsCount: enqueuedJobs.length,
+        jobIds: enqueuedJobs
+      }
     } catch (error) {
-      console.error('[VK] runOwnedCommunitySync:error', error)
+      console.error('[VK] runOwnedCommunitySync:error', error instanceof Error ? error.stack || error.message : error)
       throw error
     }
   }

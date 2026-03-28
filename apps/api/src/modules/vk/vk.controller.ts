@@ -1,6 +1,7 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common'
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common'
 import { CurrentUser } from '../../common/decorators/current-user.decorator'
 import { AuthUser } from '../../common/auth/auth-user.type'
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard'
 import { VkService } from './vk.service'
 import { CreateVkSearchProfileDto } from './dto/create-vk-search-profile.dto'
 import { UpdateVkSearchProfileDto } from './dto/update-vk-search-profile.dto'
@@ -8,6 +9,7 @@ import { CreateVkTrackedCommunityDto } from './dto/create-vk-tracked-community.d
 import { UpdateVkTrackedCommunityDto } from './dto/update-vk-tracked-community.dto'
 import { ListVkPostsDto } from './dto/list-vk-posts.dto'
 
+@UseGuards(JwtAuthGuard)
 @Controller('companies/:id/vk')
 export class VkController {
   constructor(private readonly vkService: VkService) {}
