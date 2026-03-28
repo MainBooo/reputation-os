@@ -1,0 +1,14 @@
+1. Unpack all zip archives into one root folder.
+2. Copy all .env.example files to .env equivalents.
+3. Start postgres and redis:
+   docker compose up -d
+4. Install dependencies:
+   pnpm install
+5. Prisma:
+   pnpm prisma:generate
+   pnpm prisma:migrate
+   pnpm prisma:seed
+6. Start apps:
+   pnpm --filter api dev
+   pnpm --filter worker dev
+   pnpm --filter frontend dev

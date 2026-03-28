@@ -1,0 +1,499 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Platform {
+  YANDEX
+  GOOGLE
+  TWOGIS
+  WEB
+  CUSTOM
+  VK
+}
+
+enum SourceType {
+  REVIEW_FEED
+  RATING_FEED
+  WEB_MENTION_FEED
+  CUSTOM_FEED
+  VK_BRAND_SEARCH
+  VK_PRIORITY_COMMUNITIES
+  VK_OWNED_COMMUNITY
+}
+
+enum MentionType {
+  REVIEW
+  ARTICLE
+  WEB_MENTION
+  SOCIAL_MENTION
+  COMMENT
+  VK_POST
+  VK_COMMENT
+}
+
+enum MentionStatus {
+  NEW
+  REVIEWED
+  HIDDEN
+  ARCHIVED
+}
+
+enum Sentiment {
+  POSITIVE
+  NEUTRAL
+  NEGATIVE
+  MIXED
+  UNKNOWN
+}
+
+enum WorkspaceRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+enum JobStatus {
+  PENDING
+  RUNNING
+  SUCCESS
+  FAILED
+  PARTIAL
+  CANCELLED
+}
+
+enum NotificationChannel {
+  EMAIL
+  TELEGRAM
+  WEBHOOK
+  IN_APP
+}
+
+enum NotificationType {
+  NEW_NEGATIVE_MENTION
+  NEW_REVIEW
+  RATING_DROP
+  DAILY_DIGEST
+  VK_NEW_MENTION
+  AI_REPLY_READY
+}
+
+enum VkMonitoringMode {
+  BRAND_SEARCH
+  PRIORITY_COMMUNITIES
+  OWNED_COMMUNITY
+}
+
+enum VkTrackedCommunityMode {
+  PRIORITY_COMMUNITY
+  OWNED_COMMUNITY
+}
+
+enum VkPostDiscoveryStatus {
+  DISCOVERED
+  RELEVANT
+  IRRELEVANT
+  COMMENTS_SYNCED
+  MENTIONS_EXTRACTED
+}
+
+model User {
+  id                String            @id @default(cuid())
+  email             String            @unique
+  passwordHash      String
+  fullName          String?
+  isActive          Boolean           @default(true)
+  lastLoginAt       DateTime?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  workspaceMembers  WorkspaceMember[]
+  aiReplyDrafts     AIReplyDraft[]    @relation("AIReplyDraftCreatedBy")
+  jobLogsTriggered  JobLog[]          @relation("JobLogTriggeredBy")
+}
+
+model Workspace {
+  id                String              @id @default(cuid())
+  name              String
+  slug              String              @unique
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  members           WorkspaceMember[]
+  companies         Company[]
+  sources           Source[]
+  notificationRules NotificationRule[]
+
+  @@index([slug])
+}
+
+model WorkspaceMember {
+  id            String         @id @default(cuid())
+  workspaceId   String
+  userId        String
+  role          WorkspaceRole
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+  @@index([workspaceId, role])
+}
+
+model Company {
+  id                       String                @id @default(cuid())
+  workspaceId              String
+  name                     String
+  normalizedName           String
+  website                  String?
+  normalizedWebsite        String?
+  city                     String?
+  normalizedCity           String?
+  industry                 String?
+  description              String?
+  isActive                 Boolean               @default(true)
+  initialSyncCompletedAt   DateTime?
+  lastSyncedAt             DateTime?
+  createdAt                DateTime              @default(now())
+  updatedAt                DateTime              @updatedAt
+
+  workspace                Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  aliases                  CompanyAlias[]
+  sourceTargets            CompanySourceTarget[]
+  mentions                 Mention[]
+  ratingSnapshots          RatingSnapshot[]
+  aiReplyDrafts            AIReplyDraft[]
+  notificationRules        NotificationRule[]
+  jobLogs                  JobLog[]
+  vkSearchProfiles         VkSearchProfile[]
+  vkTrackedCommunities     VkTrackedCommunity[]
+  vkTrackedPosts           VkTrackedPost[]
+
+  @@index([workspaceId])
+  @@index([workspaceId, isActive])
+  @@index([normalizedName])
+  @@index([normalizedWebsite])
+  @@index([normalizedCity])
+}
+
+model CompanyAlias {
+  id               String      @id @default(cuid())
+  companyId        String
+  value            String
+  normalizedValue  String
+  priority         Int         @default(100)
+  isPrimary        Boolean     @default(false)
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  company          Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, normalizedValue])
+  @@index([companyId, priority])
+  @@index([normalizedValue])
+}
+
+model Source {
+  id                 String                @id @default(cuid())
+  workspaceId        String
+  name               String
+  platform           Platform
+  type               SourceType
+  baseUrl            String?
+  isEnabled          Boolean               @default(true)
+  config             Json?
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+
+  workspace          Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  companyTargets     CompanySourceTarget[]
+  mentions           Mention[]
+  ratingSnapshots    RatingSnapshot[]
+  jobLogs            JobLog[]
+  notificationRules  NotificationRule[]
+
+  @@index([workspaceId])
+  @@index([workspaceId, platform, type])
+  @@index([platform, type])
+}
+
+model CompanySourceTarget {
+  id                    String          @id @default(cuid())
+  companyId             String
+  sourceId              String
+  externalPlaceId       String?
+  externalUrl           String?
+  displayName           String?
+  isActive              Boolean         @default(true)
+  syncReviewsEnabled    Boolean         @default(true)
+  syncRatingsEnabled    Boolean         @default(true)
+  syncMentionsEnabled   Boolean         @default(true)
+  config                Json?
+  lastSyncedAt          DateTime?
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+
+  company               Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  source                Source          @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  mentions              Mention[]
+  ratingSnapshots       RatingSnapshot[]
+
+  @@unique([companyId, sourceId, externalPlaceId])
+  @@index([companyId])
+  @@index([sourceId])
+  @@index([companyId, isActive])
+  @@index([companyId, sourceId])
+}
+
+model Mention {
+  id                    String                @id @default(cuid())
+  companyId             String
+  platform              Platform
+  type                  MentionType
+  sourceId              String
+  companySourceTargetId String?
+  vkTrackedPostId       String?
+
+  externalMentionId     String?
+  url                   String?
+  title                 String?
+  content               String
+  normalizedContent     String
+  author                String?
+  authorExternalId      String?
+  publishedAt           DateTime
+  discoveredAt          DateTime              @default(now())
+  ratingValue           Decimal?              @db.Decimal(3, 1)
+  sentiment             Sentiment             @default(UNKNOWN)
+  status                MentionStatus         @default(NEW)
+
+  isRelevant            Boolean               @default(true)
+  relevanceScore        Decimal?              @db.Decimal(5, 2)
+  hash                  String
+  duplicateOfId         String?
+
+  rawPayload            Json?
+  metadata              Json?
+
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+
+  company               Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  source                Source                @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  companySourceTarget   CompanySourceTarget?  @relation(fields: [companySourceTargetId], references: [id], onDelete: SetNull)
+  vkTrackedPost         VkTrackedPost?        @relation(fields: [vkTrackedPostId], references: [id], onDelete: SetNull)
+
+  duplicateOf           Mention?              @relation("MentionDuplicateLink", fields: [duplicateOfId], references: [id], onDelete: SetNull)
+  duplicates            Mention[]             @relation("MentionDuplicateLink")
+
+  aiReplyDrafts         AIReplyDraft[]
+
+  @@index([companyId])
+  @@index([companyId, publishedAt(sort: Desc)])
+  @@index([companyId, platform, publishedAt(sort: Desc)])
+  @@index([companyId, type, publishedAt(sort: Desc)])
+  @@index([companyId, sentiment, publishedAt(sort: Desc)])
+  @@index([sourceId, publishedAt(sort: Desc)])
+  @@index([companySourceTargetId])
+  @@index([vkTrackedPostId])
+  @@index([externalMentionId])
+  @@index([hash])
+  @@index([duplicateOfId])
+  @@unique([companyId, platform, externalMentionId], map: "mention_company_platform_external_unique")
+  @@unique([companyId, hash], map: "mention_company_hash_unique")
+}
+
+model RatingSnapshot {
+  id                    String               @id @default(cuid())
+  companyId             String
+  sourceId              String
+  companySourceTargetId String?
+  platform              Platform
+  ratingValue           Decimal              @db.Decimal(3, 1)
+  reviewsCount          Int?
+  capturedAt            DateTime
+  rawPayload            Json?
+  metadata              Json?
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+
+  company               Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  source                Source               @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  companySourceTarget   CompanySourceTarget? @relation(fields: [companySourceTargetId], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
+  @@index([companyId, capturedAt(sort: Desc)])
+  @@index([companyId, platform, capturedAt(sort: Desc)])
+  @@index([sourceId, capturedAt(sort: Desc)])
+  @@index([companySourceTargetId])
+}
+
+model AIReplyDraft {
+  id                 String        @id @default(cuid())
+  companyId          String
+  mentionId          String
+  createdByUserId    String?
+  languageCode       String        @default("ru")
+  tone               String?
+  promptVersion      String?
+  draftText          String
+  status             String        @default("READY")
+  modelName          String?
+  metadata           Json?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  company            Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  mention            Mention       @relation(fields: [mentionId], references: [id], onDelete: Cascade)
+  createdByUser      User?         @relation("AIReplyDraftCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
+  @@index([mentionId])
+  @@index([createdByUserId])
+  @@index([companyId, createdAt(sort: Desc)])
+}
+
+model NotificationRule {
+  id                    String                @id @default(cuid())
+  workspaceId           String
+  companyId             String?
+  name                  String
+  isActive              Boolean               @default(true)
+  channel               NotificationChannel
+  type                  NotificationType
+
+  platformFilter        Platform?
+  mentionTypeFilter     MentionType?
+  sentimentFilter       Sentiment?
+  sourceIdFilter        String?
+
+  minRatingValue        Decimal?              @db.Decimal(3, 1)
+  maxRatingValue        Decimal?              @db.Decimal(3, 1)
+  config                Json?
+
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+
+  workspace             Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  company               Company?              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  sourceFilter          Source?               @relation(fields: [sourceIdFilter], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId])
+  @@index([companyId])
+  @@index([sourceIdFilter])
+  @@index([workspaceId, isActive])
+  @@index([workspaceId, type, channel])
+}
+
+model JobLog {
+  id                 String        @id @default(cuid())
+  companyId          String?
+  sourceId           String?
+  triggeredByUserId  String?
+  queueName          String
+  jobName            String
+  jobStatus          JobStatus
+  startedAt          DateTime?
+  finishedAt         DateTime?
+  itemsDiscovered    Int?
+  itemsCreated       Int?
+  itemsUpdated       Int?
+  itemsDeduped       Int?
+  errorMessage       String?
+  payload            Json?
+  result             Json?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  company            Company?      @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  source             Source?       @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  triggeredByUser    User?         @relation("JobLogTriggeredBy", fields: [triggeredByUserId], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
+  @@index([sourceId])
+  @@index([triggeredByUserId])
+  @@index([jobStatus])
+  @@index([queueName, jobName])
+  @@index([createdAt(sort: Desc)])
+}
+
+model VkSearchProfile {
+  id                String             @id @default(cuid())
+  companyId         String
+  query             String
+  normalizedQuery   String
+  priority          Int                @default(100)
+  isActive          Boolean            @default(true)
+  mode              VkMonitoringMode
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  company           Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, normalizedQuery, mode])
+  @@index([companyId])
+  @@index([companyId, isActive, priority])
+  @@index([normalizedQuery])
+}
+
+model VkTrackedCommunity {
+  id                String                  @id @default(cuid())
+  companyId         String
+  mode              VkTrackedCommunityMode
+  vkCommunityId     String
+  screenName        String?
+  title             String?
+  url               String?
+  isActive          Boolean                 @default(true)
+  lastSyncedAt      DateTime?
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+
+  company           Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  trackedPosts      VkTrackedPost[]
+
+  @@unique([companyId, vkCommunityId, mode])
+  @@index([companyId])
+  @@index([companyId, mode, isActive])
+  @@index([vkCommunityId])
+  @@index([screenName])
+}
+
+model VkTrackedPost {
+  id                  String                 @id @default(cuid())
+  companyId           String
+  trackedCommunityId  String?
+  ownerId             String
+  postId              String
+  postKey             String
+  text                String?
+  url                 String?
+  publishedAt         DateTime
+  commentsCount       Int?
+  commentsSyncedAt    DateTime?
+  discoveryStatus     VkPostDiscoveryStatus  @default(DISCOVERED)
+  relevanceScore      Decimal?               @db.Decimal(5, 2)
+  rawPayload          Json?
+  metadata            Json?
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+
+  company             Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  trackedCommunity    VkTrackedCommunity?    @relation(fields: [trackedCommunityId], references: [id], onDelete: SetNull)
+  mentions            Mention[]
+
+  @@unique([companyId, postKey])
+  @@index([companyId])
+  @@index([trackedCommunityId])
+  @@index([companyId, publishedAt(sort: Desc)])
+  @@index([companyId, discoveryStatus, publishedAt(sort: Desc)])
+  @@index([ownerId, postId])
+  @@index([postKey])
+}

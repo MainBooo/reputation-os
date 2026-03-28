@@ -1,0 +1,210 @@
+import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common'
+import { Queue } from 'bullmq'
+import { PrismaService } from '../common/prisma/prisma.service'
+import { QUEUES } from '../queues/queue.names'
+import { JOBS } from '../queues/job.names'
+
+@Injectable()
+export class SchedulerService implements OnModuleInit {
+  private readonly logger = new Logger(SchedulerService.name)
+
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(`QUEUE_${QUEUES.SOURCE_DISCOVERY}`) private readonly sourceDiscoveryQueue: Queue,
+    @Inject(`QUEUE_${QUEUES.REVIEWS_SYNC}`) private readonly reviewsSyncQueue: Queue,
+    @Inject(`QUEUE_${QUEUES.MENTIONS_SYNC}`) private readonly mentionsSyncQueue: Queue,
+    @Inject(`QUEUE_${QUEUES.RATING_REFRESH}`) private readonly ratingRefreshQueue: Queue,
+    @Inject(`QUEUE_${QUEUES.RECONCILE}`) private readonly reconcileQueue: Queue,
+    @Inject(`QUEUE_${QUEUES.VK_BRAND_SEARCH_DISCOVERY}`) private readonly vkBrandQueue: Queue,
+    @Inject(`QUEUE_${QUEUES.VK_PRIORITY_COMMUNITIES_SYNC}`) private readonly vkCommunitiesQueue: Queue,
+    @Inject(`QUEUE_${QUEUES.VK_OWNED_COMMUNITY_SYNC}`) private readonly vkOwnedQueue: Queue,
+    @Inject(`QUEUE_${QUEUES.VK_RECONCILE}`) private readonly vkReconcileQueue: Queue
+  ) {}
+
+  async onModuleInit() {
+    await this.scheduleAll().catch((error) => {
+      this.logger.error(`scheduleAll failed: ${error?.message || error}`)
+    })
+  }
+
+  async scheduleAll() {
+    const prismaAny = this.prisma as any
+
+    const companies = await prismaAny.company.findMany({
+      where: { isActive: true }
+    }).catch(() => [])
+
+    for (const company of companies) {
+      if (!company?.id) {
+        this.logger.log('Skipping scheduler company without id')
+        continue
+      }
+
+      await this.sourceDiscoveryQueue.add(
+        JOBS.SOURCE_DISCOVERY,
+        { companyId: company.id },
+        { repeat: { every: 12 * 60 * 60 * 1000 }, jobId: `source-discovery:${company.id}` }
+      ).catch(() => null)
+
+      await this.reviewsSyncQueue.add(
+        JOBS.REVIEWS_SYNC,
+        { companyId: company.id },
+        { repeat: { every: 6 * 60 * 60 * 1000 }, jobId: `reviews-sync:${company.id}` }
+      ).catch(() => null)
+
+      await this.mentionsSyncQueue.add(
+        JOBS.MENTIONS_SYNC,
+        { companyId: company.id },
+        { repeat: { every: 3 * 60 * 60 * 1000 }, jobId: `mentions-sync:${company.id}` }
+      ).catch(() => null)
+
+      await this.ratingRefreshQueue.add(
+        JOBS.RATING_REFRESH,
+        { companyId: company.id },
+        { repeat: { every: 24 * 60 * 60 * 1000 }, jobId: `rating-refresh:${company.id}` }
+      ).catch(() => null)
+
+      await this.reconcileQueue.add(
+        JOBS.RECONCILE,
+        { companyId: company.id },
+        { repeat: { every: 24 * 60 * 60 * 1000 }, jobId: `reconcile:${company.id}` }
+      ).catch(() => null)
+
+      await this.scheduleVkBrandSearchJobs(prismaAny, company).catch((error) => {
+        this.logger.error(`scheduleVkBrandSearchJobs failed for companyId=${company.id}: ${error?.message || error}`)
+      })
+
+      await this.vkReconcileQueue.add(
+        JOBS.VK_RECONCILE,
+        { companyId: company.id },
+        { repeat: { every: 24 * 60 * 60 * 1000 }, jobId: `vk-reconcile:${company.id}` }
+      ).catch(() => null)
+
+      const trackedCommunities = await prismaAny.vkTrackedCommunity.findMany({
+        where: { companyId: company.id, isActive: true }
+      }).catch(() => [])
+
+      if (!Array.isArray(trackedCommunities) || trackedCommunities.length === 0) {
+        this.logger.log(`No active vkTrackedCommunity rows for companyId=${company.id}`)
+        continue
+      }
+
+      for (const community of trackedCommunities) {
+        const trackedCommunityId = community?.id
+        const communityId = community?.vkCommunityId ?? null
+
+        const sourceId = community?.sourceId ?? undefined
+
+        if (!trackedCommunityId || !communityId) {
+          this.logger.log(
+            `Skipping VK community schedule: companyId=${company.id}, trackedCommunityId=${trackedCommunityId || '-'}, communityId=${communityId || '-'}`
+          )
+          continue
+        }
+
+        const payload = {
+          companyId: company.id,
+          sourceId,
+          trackedCommunityId,
+          communityId
+        }
+
+        const mode = String(
+          community?.mode ??
+          community?.syncMode ??
+          community?.kind ??
+          community?.type ??
+          ''
+        ).toUpperCase()
+
+        const isOwned =
+          mode === 'OWNED_COMMUNITY' ||
+          mode === 'OWNED' ||
+          community?.isOwned === true
+
+        if (isOwned) {
+          await this.vkOwnedQueue.add(
+            JOBS.VK_OWNED_COMMUNITY,
+            payload,
+            {
+              repeat: { every: 60 * 60 * 1000 },
+              jobId: `vk-owned:${company.id}:${trackedCommunityId}`
+            }
+          ).catch(() => null)
+        } else {
+          await this.vkCommunitiesQueue.add(
+            JOBS.VK_PRIORITY_COMMUNITIES,
+            payload,
+            {
+              repeat: { every: 5 * 60 * 60 * 1000 },
+              jobId: `vk-priority:${company.id}:${trackedCommunityId}`
+            }
+          ).catch(() => null)
+        }
+      }
+    }
+
+    this.logger.log('Scheduler initialized')
+  }
+
+  private async scheduleVkBrandSearchJobs(prismaAny: any, company: any) {
+    const profiles = await prismaAny.vkSearchProfile.findMany({
+      where: {
+        companyId: company.id,
+        isActive: true
+      },
+      orderBy: [{ priority: 'asc' }, { createdAt: 'asc' }]
+    }).catch(() => [])
+
+    let jobsScheduled = 0
+
+    if (Array.isArray(profiles) && profiles.length > 0) {
+      for (const profile of profiles) {
+        const query = String(profile?.query ?? '').trim()
+
+        if (!query) {
+          this.logger.log(`Skipping empty VK search profile id=${profile?.id || '-'} companyId=${company.id}`)
+          continue
+        }
+
+        await this.vkBrandQueue.add(
+          JOBS.VK_BRAND_SEARCH,
+          {
+            companyId: company.id,
+            query,
+            searchProfileId: profile.id
+          },
+          {
+            repeat: { every: 8 * 60 * 60 * 1000 },
+            jobId: `vk-brand:${company.id}:${profile.id}`
+          }
+        ).catch(() => null)
+
+        jobsScheduled += 1
+      }
+    }
+
+    if (jobsScheduled > 0) {
+      return
+    }
+
+    const fallbackQuery = String(company?.name ?? '').trim()
+
+    if (!fallbackQuery) {
+      this.logger.log(`Skipping VK brand fallback scheduling: empty company.name for companyId=${company.id}`)
+      return
+    }
+
+    await this.vkBrandQueue.add(
+      JOBS.VK_BRAND_SEARCH,
+      {
+        companyId: company.id,
+        query: fallbackQuery
+      },
+      {
+        repeat: { every: 8 * 60 * 60 * 1000 },
+        jobId: `vk-brand:${company.id}:fallback`
+      }
+    ).catch(() => null)
+  }
+}

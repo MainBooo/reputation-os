@@ -1,0 +1,38 @@
+import Link from 'next/link'
+import PageHeader from '@/components/ui/PageHeader'
+import Card from '@/components/ui/Card'
+import EmptyState from '@/components/ui/EmptyState'
+import Badge from '@/components/ui/Badge'
+import { getCompanies } from '@/lib/api/companies'
+
+export default async function CompaniesPage() {
+  const companies: any[] = await getCompanies()
+
+  return (
+    <div>
+      <PageHeader title="Companies" subtitle="Manage monitored companies and open company workspaces." />
+
+      {!companies.length ? (
+        <EmptyState title="No companies yet" description="Create your first company to start monitoring reputation data." />
+      ) : (
+        <div className="grid gap-4 lg:grid-cols-2">
+          {companies.map((company) => (
+            <Link key={company.id} href={`/companies/${company.id}`}>
+              <Card className="p-5 transition hover:bg-white/[0.03]">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <div className="text-lg font-semibold">{company.name}</div>
+                    <div className="mt-2 text-sm text-muted">
+                      {company.website || 'No website'} · {company.city || 'No city'} · {company.industry || 'No industry'}
+                    </div>
+                  </div>
+                  <Badge>{company._count?.mentions || 0} mentions</Badge>
+                </div>
+              </Card>
+            </Link>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}

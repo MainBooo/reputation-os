@@ -1,0 +1,100 @@
+import { Injectable, Logger } from '@nestjs/common'
+import { VkService } from './vk.service'
+
+@Injectable()
+export class VkBrandSearchService {
+  private readonly logger = new Logger(VkBrandSearchService.name)
+
+  constructor(private readonly vkService: VkService) {}
+
+  async run(
+    data: {
+      companyId: string
+      sourceId?: string
+      trackedCommunityId?: string
+      query?: string
+    },
+    _job?: any,
+  ) {
+    return this.processJob(data)
+  }
+
+  async processJob(data: {
+    companyId: string
+    sourceId?: string
+    trackedCommunityId?: string
+    query?: string
+  }) {
+    const adapter = this.vkService.getAdapter()
+    const adapterAny = adapter as any
+
+    if (!adapterAny) {
+      this.logger.warn('vk adapter is not configured')
+      return { ok: true, skipped: true, reason: 'adapter_not_configured' }
+    }
+
+    if (!data?.companyId) {
+      this.logger.warn('processJob: missing companyId')
+      return { ok: true, skipped: true, reason: 'missing_company_id' }
+    }
+
+    let result: any = null
+
+    if (typeof adapterAny.searchPosts === 'function') {
+      result = await adapterAny.searchPosts({
+        query: data.query || '',
+      })
+    } else if (typeof adapterAny.searchWallPosts === 'function') {
+      result = await adapterAny.searchWallPosts({
+        query: data.query || '',
+      })
+    } else if (typeof adapterAny.searchBrandPosts === 'function') {
+      result = await adapterAny.searchBrandPosts({
+        query: data.query || '',
+      })
+    } else {
+      this.logger.warn('vk adapter does not support brand search')
+      return {
+        ok: true,
+        skipped: true,
+        reason: 'adapter_method_not_supported',
+      }
+    }
+
+    const posts = Array.isArray(result?.items) ? result.items : []
+
+    let processed = 0
+    let skipped = 0
+
+    for (const post of posts) {
+      const trackedPost = await this.vkService.upsertTrackedPost({
+        companyId: data.companyId,
+        trackedCommunityId: data.trackedCommunityId,
+        post,
+      })
+
+      const trackedPostId = trackedPost?.id
+
+      if (!trackedPostId) {
+        skipped += 1
+        continue
+      }
+
+      await this.vkService.processRelevantPost({
+        companyId: data.companyId,
+        sourceId: data.sourceId,
+        vkTrackedPostId: trackedPostId,
+        post,
+      })
+
+      processed += 1
+    }
+
+    return {
+      ok: true,
+      processed,
+      skipped,
+      total: posts.length,
+    }
+  }
+}

@@ -1,0 +1,3 @@
+pnpm prisma:generate
+pnpm prisma:migrate
+pnpm prisma:seed

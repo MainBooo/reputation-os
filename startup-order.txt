@@ -1,0 +1,8 @@
+1. docker compose up -d
+2. pnpm install
+3. pnpm prisma:generate
+4. pnpm prisma:migrate
+5. pnpm prisma:seed
+6. pnpm --filter api dev
+7. pnpm --filter worker dev
+8. pnpm --filter frontend dev

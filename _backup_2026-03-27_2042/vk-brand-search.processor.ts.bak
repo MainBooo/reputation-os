@@ -1,0 +1,42 @@
+import { Injectable, OnModuleDestroy, OnModuleInit, Inject } from '@nestjs/common'
+import { Job, Queue, Worker } from 'bullmq'
+import { PrismaService } from '../../common/prisma/prisma.service'
+import { QUEUES } from '../../queues/queue.names'
+import { VkBrandSearchService } from '../../services/vk/vk-brand-search.service'
+
+@Injectable()
+export class VkBrandSearchProcessor implements OnModuleInit, OnModuleDestroy {
+  private worker!: Worker
+
+  constructor(
+    @Inject('BULLMQ_CONNECTION') private readonly connection: any,
+    @Inject(`QUEUE_${QUEUES.VK_BRAND_SEARCH_DISCOVERY}`) private readonly queue: Queue,
+    private readonly service: VkBrandSearchService,
+    private readonly prisma: PrismaService
+  ) {}
+
+  onModuleInit() {
+    this.worker = new Worker(QUEUES.VK_BRAND_SEARCH_DISCOVERY, async (job: Job) => this.handle(job), {
+      connection: this.connection
+    })
+  }
+
+  async onModuleDestroy() {
+    if (this.worker) await this.worker.close()
+  }
+
+  async handle(job: Job) {
+    const result = await this.service.run(job.data.companyId)
+    await this.prisma.jobLog.create({
+      data: {
+        companyId: job.data.companyId,
+        queueName: QUEUES.VK_BRAND_SEARCH_DISCOVERY,
+        jobName: 'vk.brand-search',
+        jobStatus: 'SUCCESS',
+        result
+      }
+    }).catch(() => null)
+
+    return result
+  }
+}
