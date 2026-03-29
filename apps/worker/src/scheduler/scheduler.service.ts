@@ -148,6 +148,17 @@ export class SchedulerService implements OnModuleInit {
   }
 
   private async scheduleVkBrandSearchJobs(prismaAny: any, company: any) {
+    const trackedCommunities = await prismaAny.vkTrackedCommunity.findMany({
+      where: {
+        companyId: company.id,
+        isActive: true
+      }
+    }).catch(() => [])
+
+    if (Array.isArray(trackedCommunities) && trackedCommunities.length > 0) {
+      this.logger.log(`Skipping VK brand-search scheduling for companyId=${company.id}: tracked communities are configured`)
+      return
+    }
     const profiles = await prismaAny.vkSearchProfile.findMany({
       where: {
         companyId: company.id,

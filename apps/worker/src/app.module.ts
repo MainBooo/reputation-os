@@ -8,6 +8,7 @@ import { MentionService } from './services/mention.service'
 import { RatingService } from './services/rating.service'
 import { VkService } from './services/vk/vk.service'
 import { VkBrandSearchService } from './services/vk/vk-brand-search.service'
+import { VkCommunitySyncService } from './services/vk/vk-community-sync.service'
 import { VkCommunityService } from './services/vk/vk-community.service'
 import { VkCommentsService } from './services/vk/vk-comments.service'
 import { SourceDiscoveryProcessor } from './processors/source-discovery.processor'
@@ -34,6 +35,7 @@ import { VkAdapter } from './adapters/vk.adapter'
     RatingService,
     VkService,
     VkBrandSearchService,
+    VkCommunitySyncService,
     VkCommunityService,
     VkCommentsService,
     SourceDiscoveryProcessor,

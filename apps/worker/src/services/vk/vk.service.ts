@@ -167,8 +167,6 @@ export class VkService {
         ownerId,
         postId,
         trackedCommunityId: input.trackedCommunityId ?? null,
-        authorName: null,
-        authorVkId: ownerId,
         text,
         url,
         publishedAt,
@@ -180,8 +178,6 @@ export class VkService {
         companyId: input.companyId,
         trackedCommunityId: input.trackedCommunityId ?? null,
         postKey,
-        authorName: null,
-        authorVkId: ownerId,
         text,
         url,
         publishedAt,
@@ -261,8 +257,6 @@ export class VkService {
         title: null,
         content,
         normalizedContent,
-        author: null,
-        authorExternalId: ownerId || null,
         publishedAt,
         sentiment: 'UNKNOWN',
         isRelevant: result.isRelevant,
@@ -285,8 +279,6 @@ export class VkService {
         title: null,
         content,
         normalizedContent,
-        author: null,
-        authorExternalId: ownerId || null,
         publishedAt,
         sentiment: 'UNKNOWN',
         isRelevant: result.isRelevant,
@@ -376,7 +368,6 @@ export class VkService {
         ? this.buildCommentUrl(ownerId, postId, commentId)
         : null
 
-    const authorName =
       input.comment?.from_id !== undefined && input.comment?.from_id !== null
         ? String(input.comment.from_id)
         : null
@@ -406,8 +397,6 @@ export class VkService {
         title: null,
         content,
         normalizedContent,
-        author: authorName,
-        authorExternalId: authorName,
         publishedAt,
         sentiment: 'UNKNOWN',
         isRelevant: result.isRelevant,
@@ -430,8 +419,6 @@ export class VkService {
         title: null,
         content,
         normalizedContent,
-        author: authorName,
-        authorExternalId: authorName,
         publishedAt,
         sentiment: 'UNKNOWN',
         isRelevant: result.isRelevant,
@@ -452,4 +439,14 @@ export class VkService {
       vkTrackedPostId: input.vkTrackedPostId ?? null
     }
   }
+}
+
+
+function sanitizeVkPostData(data: any) {
+  if (!data) return data
+  delete data.authorName
+  delete data.author
+  delete data.authorExternalId
+  delete data.authorVkId
+  return data
 }
