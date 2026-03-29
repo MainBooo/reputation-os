@@ -1,55 +1,45 @@
-import { Injectable, OnModuleDestroy, OnModuleInit, Inject, Logger } from '@nestjs/common'
+import { Injectable, Inject, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common'
+import { VkTrackedCommunityMode } from '@prisma/client'
 import { Job, Queue, Worker } from 'bullmq'
-import { PrismaService } from '../../common/prisma/prisma.service'
 import { QUEUES } from '../../queues/queue.names'
-import { VkCommunityService } from '../../services/vk/vk-community.service'
+import { VkCommunitySyncService } from '../../services/vk/vk-community-sync.service'
 
 @Injectable()
 export class VkPriorityCommunitiesProcessor implements OnModuleInit, OnModuleDestroy {
-  private worker!: Worker
   private readonly logger = new Logger(VkPriorityCommunitiesProcessor.name)
+  private worker!: Worker
 
   constructor(
     @Inject('BULLMQ_CONNECTION') private readonly connection: any,
     @Inject(`QUEUE_${QUEUES.VK_PRIORITY_COMMUNITIES_SYNC}`) private readonly queue: Queue,
-    private readonly service: VkCommunityService,
-    private readonly prisma: PrismaService
+    private readonly service: VkCommunitySyncService
   ) {}
 
   onModuleInit() {
     this.worker = new Worker(
-      QUEUES.VK_PRIORITY_COMMUNITIES_SYNC,
-      async (job: Job) => this.handle(job),
-      { connection: this.connection }
+      this.queue.name,
+      async (job: Job<any>) => {
+        return this.service.processJob({
+          ...job.data,
+          mode: VkTrackedCommunityMode.PRIORITY_COMMUNITY
+        })
+      },
+      {
+        connection: this.connection
+      }
     )
+
+    this.worker.on('failed', (job, error) => {
+      this.logger.error(
+        `VkPriorityCommunitiesProcessor failed job ${job?.id || '-'}: ${String(error)}`,
+        (error as any)?.stack
+      )
+    })
   }
 
   async onModuleDestroy() {
-    if (this.worker) await this.worker.close()
-  }
-
-  async handle(job: Job) {
-    const payload = {
-      companyId: job.data?.companyId,
-      sourceId: job.data?.sourceId,
-      trackedCommunityId: job.data?.trackedCommunityId,
-      communityId: job.data?.communityId
+    if (this.worker) {
+      await this.worker.close()
     }
-
-    const result = await this.service.run(payload, job)
-
-    await this.prisma.jobLog.create({
-      data: {
-        companyId: job.data?.companyId,
-        queueName: QUEUES.VK_PRIORITY_COMMUNITIES_SYNC,
-        jobName: 'vk.priority-communities',
-        jobStatus: 'SUCCESS',
-        result
-      }
-    }).catch(() => null)
-
-    this.logger.log(`vk-priority-communities finished for companyId=${job.data?.companyId}`)
-
-    return result
   }
 }
