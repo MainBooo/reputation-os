@@ -164,8 +164,8 @@ export class VkService {
         }
       },
       update: {
-        ownerId,
-        postId,
+            ownerId,
+            postId,
         trackedCommunityId: input.trackedCommunityId ?? null,
         authorName: null,
         authorVkId: ownerId,
@@ -175,8 +175,8 @@ export class VkService {
         rawPayload: input.post
       },
       create: {
-        ownerId,
-        postId,
+            ownerId,
+            postId,
         companyId: input.companyId,
         trackedCommunityId: input.trackedCommunityId ?? null,
         postKey,

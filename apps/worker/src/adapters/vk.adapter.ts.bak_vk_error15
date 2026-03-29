@@ -110,45 +110,12 @@ export class VkAdapter {
 
     this.logger.log(`getCommunityPosts communityId=${communityIdRaw} normalizedOwnerId=${ownerId}`)
 
-    if (!this.token) {
-      this.logger.warn('VK_TOKEN is not set')
-      return { items: [] }
-    }
+    const result = await this.call<any>('wall.get', {
+      owner_id: ownerId,
+      count: 20
+    })
 
-    try {
-      const { data } = await this.http.get<any>('/wall.get', {
-        params: {
-          owner_id: ownerId,
-          count: 20,
-          access_token: this.token,
-          v: this.version
-        }
-      })
-
-      if (data?.error) {
-        const code = data.error.error_code
-        const msg = data.error.error_msg
-
-        if (code === 15) {
-          this.logger.warn(
-            `getCommunityPosts skipped: communityId=${communityIdRaw} normalizedOwnerId=${ownerId} code=15 msg=${msg}`
-          )
-          return { items: [] }
-        }
-
-        this.logger.error(
-          `VK API error ${code}: ${msg} (method=wall.get communityId=${communityIdRaw} normalizedOwnerId=${ownerId})`
-        )
-        return { items: [] }
-      }
-
-      return data?.response ?? { items: [] }
-    } catch (error: any) {
-      this.logger.error(
-        `VK request failed in getCommunityPosts communityId=${communityIdRaw} normalizedOwnerId=${ownerId}: ${error?.message || error}`
-      )
-      return { items: [] }
-    }
+    return result ?? { items: [] }
   }
 
   async getComments(

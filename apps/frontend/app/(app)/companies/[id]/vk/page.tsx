@@ -4,14 +4,16 @@ import Badge from '@/components/ui/Badge'
 import EmptyState from '@/components/ui/EmptyState'
 import MentionRow from '@/components/mentions/MentionRow'
 import VkActions from '@/components/vk/VkActions'
+import VkSetupForms from '@/components/vk/VkSetupForms'
+import VkSearchProfiles from '@/components/vk/VkSearchProfiles'
 import { getVkOverview, getVkSearchProfiles, getVkCommunities, getVkPosts } from '@/lib/api/vk'
 
 function OverviewCards({ overview }: { overview: any }) {
   const items = [
-    ['Отслеживаемые сообщества', overview?.trackedCommunitiesCount ?? 0],
-    ['Активные поисковые профили', overview?.activeSearchProfilesCount ?? 0],
+    ['Выбранные сообщества', overview?.trackedCommunitiesCount ?? 0],
+    ['Активные поисковые запросы', overview?.activeSearchProfilesCount ?? 0],
     ['Найденные посты VK', overview?.discoveredVkPostsCount ?? 0],
-    ['Релевантные упоминания VK', overview?.relevantVkMentionsCount ?? 0]
+    ['Найденные упоминания VK', overview?.relevantVkMentionsCount ?? 0]
   ]
 
   return (
@@ -24,6 +26,12 @@ function OverviewCards({ overview }: { overview: any }) {
       ))}
     </div>
   )
+}
+
+function communityLabel(mode: string) {
+  if (mode === 'OWNED_COMMUNITY') return 'Собственное сообщество'
+  if (mode === 'PRIORITY_COMMUNITY') return 'Выбранное сообщество'
+  return mode
 }
 
 export default async function CompanyVkPage({ params }: { params: { id: string } }) {
@@ -52,147 +60,144 @@ export default async function CompanyVkPage({ params }: { params: { id: string }
 
   const priorityCommunities = communities.filter((c) => c.mode === 'PRIORITY_COMMUNITY')
   const ownedCommunities = communities.filter((c) => c.mode === 'OWNED_COMMUNITY')
-  const hasAnyData =
-    profiles.length > 0 ||
-    communities.length > 0 ||
-    posts.length > 0 ||
-    (overview?.recentMentions || []).length > 0 ||
-    (overview?.trackedCommunitiesCount ?? 0) > 0 ||
-    (overview?.activeSearchProfilesCount ?? 0) > 0 ||
-    (overview?.discoveredVkPostsCount ?? 0) > 0 ||
-    (overview?.relevantVkMentionsCount ?? 0) > 0
+  const mentions = overview?.recentMentions || []
 
   return (
     <div>
       <PageHeader
         title="Мониторинг VK"
-        subtitle="Отдельный контур мониторинга ВКонтакте с 3 режимами и сохранением только релевантных данных."
+        subtitle="Сверху показываются найденные посты и упоминания. Ниже — только настройки поиска и сообществ."
         actions={<VkActions companyId={params.id} />}
       />
 
-      {!hasAnyData ? (
-        <EmptyState
-          title="Пока нет данных VK"
-          description="Подключите сообщества, добавьте поисковые профили или запустите синхронизацию VK."
-        />
-      ) : (
-        <>
-          <OverviewCards overview={overview} />
+      <div className="mt-6">
+        <OverviewCards overview={overview} />
+      </div>
 
-          <div className="mt-6 grid gap-6">
-            <Card className="p-5">
-              <div className="mb-4 text-base font-semibold text-brand">BRAND_SEARCH</div>
-              {profiles.length ? (
-                <div className="space-y-3">
-                  {profiles.map((profile: any) => (
-                    <div key={profile.id} className="flex items-center justify-between rounded-xl border border-line bg-panel2 px-4 py-3">
-                      <div>
-                        <div className="text-sm font-medium text-brand">{profile.query}</div>
-                        <div className="mt-1 text-xs text-muted">приоритет: {profile.priority}</div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Badge tone={profile.mode}>{profile.mode}</Badge>
-                        <Badge>{profile.isActive ? 'АКТИВЕН' : 'НЕАКТИВЕН'}</Badge>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-sm text-muted">Поисковых профилей пока нет.</div>
-              )}
-            </Card>
-
-            <Card className="p-5">
-              <div className="mb-4 text-base font-semibold text-brand">PRIORITY_COMMUNITIES</div>
-              {priorityCommunities.length ? (
-                <div className="space-y-3">
-                  {priorityCommunities.map((community: any) => (
-                    <div key={community.id} className="flex items-center justify-between rounded-xl border border-line bg-panel2 px-4 py-3">
-                      <div>
-                        <div className="text-sm font-medium text-brand">
-                          {community.title || community.screenName || community.vkCommunityId}
-                        </div>
-                        <div className="mt-1 text-xs text-muted">
-                          {community.url || community.screenName || community.vkCommunityId}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Badge tone={community.mode}>{community.mode}</Badge>
-                        <Badge>{community.isActive ? 'АКТИВЕН' : 'НЕАКТИВЕН'}</Badge>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-sm text-muted">Приоритетных сообществ пока нет.</div>
-              )}
-            </Card>
-
-            <Card className="p-5">
-              <div className="mb-4 text-base font-semibold text-brand">OWNED_COMMUNITY</div>
-              {ownedCommunities.length ? (
-                <div className="space-y-3">
-                  {ownedCommunities.map((community: any) => (
-                    <div key={community.id} className="flex items-center justify-between rounded-xl border border-line bg-panel2 px-4 py-3">
-                      <div>
-                        <div className="text-sm font-medium text-brand">
-                          {community.title || community.screenName || community.vkCommunityId}
-                        </div>
-                        <div className="mt-1 text-xs text-muted">
-                          {community.url || community.screenName || community.vkCommunityId}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Badge tone={community.mode}>{community.mode}</Badge>
-                        <Badge>{community.isActive ? 'АКТИВЕН' : 'НЕАКТИВЕН'}</Badge>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-sm text-muted">Собственное сообщество пока не настроено.</div>
-              )}
-            </Card>
-
-            <div className="grid gap-6 xl:grid-cols-[1.1fr,1fr]">
-              <Card className="p-5">
-                <div className="mb-4 text-base font-semibold">Последние отслеживаемые посты VK</div>
-                {posts.length ? (
-                  <div className="space-y-3">
-                    {posts.map((post: any) => (
-                      <div key={post.id || `${post.ownerId}-${post.postId}`} className="rounded-xl border border-line bg-panel2 p-4">
-                        <div className="flex flex-wrap items-center gap-2">
-                          {post.trackedCommunity?.mode ? <Badge tone={post.trackedCommunity.mode}>{post.trackedCommunity.mode}</Badge> : null}
-                          {post.discoveryStatus ? <Badge>{post.discoveryStatus}</Badge> : null}
-                        </div>
-                        <div className="mt-3 text-sm leading-6 text-brand">{post.text || 'Нет текста'}</div>
-                        <div className="mt-3 text-xs text-muted">
-                          {post.url || 'Нет URL'} · {post.publishedAt ? new Date(post.publishedAt).toLocaleString() : ''}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-sm text-muted">Отслеживаемых постов VK пока нет.</div>
-                )}
-              </Card>
-
-              <Card className="p-5">
-                <div className="mb-4 text-base font-semibold">Последние упоминания и комментарии VK</div>
-                {(overview?.recentMentions || []).length ? (
-                  <div className="space-y-3">
-                    {(overview.recentMentions || []).map((mention: any) => (
-                      <MentionRow key={mention.id} mention={mention} />
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-sm text-muted">Свежих упоминаний VK пока нет.</div>
-                )}
-              </Card>
-            </div>
+      <div className="mt-6">
+        <Card className="p-5">
+          <div className="text-base font-semibold text-brand">Важно</div>
+          <div className="mt-2 text-sm text-muted">
+            Глобальный поиск по открытому VK зависит от типа VK-токена. Если текущий токен не поддерживает метод
+            newsfeed.search, поиск по всему VK будет возвращать 0 результатов, даже если запрос добавлен.
           </div>
-        </>
-      )}
+        </Card>
+      </div>
+
+      <div className="mt-6 grid gap-6 xl:grid-cols-[1.1fr,1fr]">
+        <Card className="p-5">
+          <div className="mb-4 text-base font-semibold">Найденные посты VK</div>
+          {posts.length ? (
+            <div className="space-y-3">
+              {posts.map((post: any) => (
+                <div key={post.id || `${post.ownerId}-${post.postId}`} className="rounded-xl border border-line bg-panel2 p-4">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {post.trackedCommunity?.mode ? (
+                      <Badge>{communityLabel(post.trackedCommunity.mode)}</Badge>
+                    ) : null}
+                    {post.discoveryStatus ? <Badge>{post.discoveryStatus}</Badge> : null}
+                  </div>
+
+                  <div className="mt-3 text-sm leading-6 text-brand">
+                    {post.text || 'Нет текста'}
+                  </div>
+
+                  <div className="mt-3 text-xs text-muted">
+                    {post.url || 'Нет URL'}
+                    {post.publishedAt ? ` · ${new Date(post.publishedAt).toLocaleString()}` : ''}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              title="Постов пока нет"
+              description="Здесь будут появляться найденные VK-посты после успешного прогона мониторинга."
+            />
+          )}
+        </Card>
+
+        <Card className="p-5">
+          <div className="mb-4 text-base font-semibold">Найденные комментарии и упоминания VK</div>
+          {mentions.length ? (
+            <div className="space-y-3">
+              {mentions.map((mention: any) => (
+                <MentionRow key={mention.id} mention={mention} />
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              title="Комментариев и упоминаний пока нет"
+              description="Здесь будут появляться найденные комментарии и релевантные упоминания VK."
+            />
+          )}
+        </Card>
+      </div>
+
+      <div className="mt-6">
+        <Card className="p-5">
+          <div className="text-base font-semibold text-brand">Настройки VK-мониторинга</div>
+          <div className="mt-1 text-sm text-muted">
+            Это настройки поиска и источников. Они не являются найденными результатами.
+          </div>
+        </Card>
+      </div>
+
+      <div className="mt-6">
+        <VkSetupForms companyId={params.id} />
+      </div>
+
+      <div className="mt-6 grid gap-6 xl:grid-cols-3">
+        <VkSearchProfiles companyId={params.id} profiles={profiles} />
+
+        <Card className="p-5">
+          <div className="mb-2 text-base font-semibold text-brand">Выбранные сообщества</div>
+          <div className="mb-4 text-sm text-muted">
+            Отдельный прогон по конкретным пабликам.
+          </div>
+
+          {priorityCommunities.length ? (
+            <div className="space-y-3">
+              {priorityCommunities.map((community: any) => (
+                <div key={community.id} className="rounded-xl border border-line bg-panel2 px-4 py-3">
+                  <div className="text-sm font-medium text-brand">
+                    {community.title || community.screenName || community.vkCommunityId}
+                  </div>
+                  <div className="mt-1 text-xs text-muted">
+                    {community.url || community.screenName || community.vkCommunityId}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-sm text-muted">Выбранных сообществ пока нет.</div>
+          )}
+        </Card>
+
+        <Card className="p-5">
+          <div className="mb-2 text-base font-semibold text-brand">Собственное сообщество</div>
+          <div className="mb-4 text-sm text-muted">
+            Прогон по собственному сообществу компании.
+          </div>
+
+          {ownedCommunities.length ? (
+            <div className="space-y-3">
+              {ownedCommunities.map((community: any) => (
+                <div key={community.id} className="rounded-xl border border-line bg-panel2 px-4 py-3">
+                  <div className="text-sm font-medium text-brand">
+                    {community.title || community.screenName || community.vkCommunityId}
+                  </div>
+                  <div className="mt-1 text-xs text-muted">
+                    {community.url || community.screenName || community.vkCommunityId}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-sm text-muted">Собственное сообщество пока не настроено.</div>
+          )}
+        </Card>
+      </div>
     </div>
   )
 }

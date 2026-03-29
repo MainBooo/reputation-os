@@ -17,17 +17,17 @@ export default function VkActions({ companyId }: { companyId: string }) {
     try {
       if (action === 'brand') {
         const result = await runBrandSearch(companyId) as { jobsCount?: number }
-        setMessage(`Поиск по бренду запущен${result?.jobsCount ? `: ${result.jobsCount} задач` : ''}`)
+        setMessage(`Глобальный прогон по открытому VK запущен${result?.jobsCount ? `: ${result.jobsCount} задач` : ''}`)
       }
 
       if (action === 'community') {
         const result = await runCommunitySync(companyId) as { jobsCount?: number }
-        setMessage(`Синхронизация сообществ запущена${result?.jobsCount ? `: ${result.jobsCount} задач` : ''}`)
+        setMessage(`Прогон по выбранным сообществам запущен${result?.jobsCount ? `: ${result.jobsCount} задач` : ''}`)
       }
 
       if (action === 'owned') {
         const result = await runOwnedCommunitySync(companyId) as { jobsCount?: number }
-        setMessage(`Синхронизация своего сообщества запущена${result?.jobsCount ? `: ${result.jobsCount} задач` : ''}`)
+        setMessage(`Прогон по собственному сообществу запущен${result?.jobsCount ? `: ${result.jobsCount} задач` : ''}`)
       }
 
       router.refresh()
@@ -42,15 +42,15 @@ export default function VkActions({ companyId }: { companyId: string }) {
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap gap-3">
         <Button variant="secondary" onClick={() => run('brand')} disabled={loading !== null}>
-          {loading === 'brand' ? 'Запуск...' : 'Запустить поиск по бренду'}
+          {loading === 'brand' ? 'Запуск...' : 'Прогнать весь открытый VK'}
         </Button>
 
         <Button variant="secondary" onClick={() => run('community')} disabled={loading !== null}>
-          {loading === 'community' ? 'Запуск...' : 'Синхронизировать сообщества'}
+          {loading === 'community' ? 'Запуск...' : 'Прогнать выбранные сообщества'}
         </Button>
 
         <Button onClick={() => run('owned')} disabled={loading !== null}>
-          {loading === 'owned' ? 'Запуск...' : 'Синхронизировать своё сообщество'}
+          {loading === 'owned' ? 'Запуск...' : 'Прогнать своё сообщество'}
         </Button>
       </div>
 
