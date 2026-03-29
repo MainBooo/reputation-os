@@ -444,9 +444,20 @@ export class VkService {
 
 function sanitizeVkPostData(data: any) {
   if (!data) return data
+
   delete data.authorName
   delete data.author
-  delete data.authorExternalId
-  delete data.authorVkId
+  delete data.author_name
+
+  return data
+}
+
+function sanitizeVkTrackedPostData<T extends Record<string, any>>(data: T): T {
+  if (!data) return data
+
+  delete (data as any).authorName
+  delete (data as any).author_name
+  delete (data as any).author
+
   return data
 }
