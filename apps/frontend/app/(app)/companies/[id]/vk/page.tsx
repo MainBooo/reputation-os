@@ -6,7 +6,15 @@ import MentionRow from '@/components/mentions/MentionRow'
 import VkActions from '@/components/vk/VkActions'
 import VkSetupForms from '@/components/vk/VkSetupForms'
 import VkSearchProfiles from '@/components/vk/VkSearchProfiles'
-import { getVkOverview, getVkSearchProfiles, getVkCommunities, getVkPosts } from '@/lib/api/vk'
+import VkPostSearchPanel from '@/components/vk/VkPostSearchPanel'
+import {
+  getVkOverview,
+  getVkSearchProfiles,
+  getVkCommunities,
+  getVkPosts,
+  getVkCompanySearchProfile,
+  getVkPostSearchRuns
+} from '@/lib/api/vk'
 
 function OverviewCards({ overview }: { overview: any }) {
   const items = [
@@ -35,11 +43,20 @@ function communityLabel(mode: string) {
 }
 
 export default async function CompanyVkPage({ params }: { params: { id: string } }) {
-  const [overviewRes, profilesRes, communitiesRes, postsRes] = await Promise.allSettled([
+  const [
+    overviewRes,
+    profilesRes,
+    communitiesRes,
+    postsRes,
+    companySearchProfileRes,
+    postSearchRunsRes
+  ] = await Promise.allSettled([
     getVkOverview(params.id),
     getVkSearchProfiles(params.id),
     getVkCommunities(params.id),
-    getVkPosts(params.id)
+    getVkPosts(params.id),
+    getVkCompanySearchProfile(params.id),
+    getVkPostSearchRuns(params.id)
   ])
 
   const overview: any =
@@ -57,6 +74,18 @@ export default async function CompanyVkPage({ params }: { params: { id: string }
   const profiles: any[] = profilesRes.status === 'fulfilled' ? profilesRes.value : []
   const communities: any[] = communitiesRes.status === 'fulfilled' ? communitiesRes.value : []
   const posts: any[] = postsRes.status === 'fulfilled' ? postsRes.value : []
+  const companySearchProfile: any =
+    companySearchProfileRes.status === 'fulfilled'
+      ? companySearchProfileRes.value
+      : {
+          includeKeywords: [],
+          excludeKeywords: [],
+          contextKeywords: [],
+          geoKeywords: [],
+          category: null
+        }
+
+  const postSearchRuns: any[] = postSearchRunsRes.status === 'fulfilled' ? postSearchRunsRes.value : []
 
   const priorityCommunities = communities.filter((c) => c.mode === 'PRIORITY_COMMUNITY')
   const ownedCommunities = communities.filter((c) => c.mode === 'OWNED_COMMUNITY')
@@ -66,7 +95,7 @@ export default async function CompanyVkPage({ params }: { params: { id: string }
     <div>
       <PageHeader
         title="Мониторинг VK"
-        subtitle="Сверху показываются найденные посты и упоминания. Ниже — только настройки поиска и сообществ."
+        subtitle="Сверху показываются найденные посты и упоминания. Ниже — настройки поиска, Playwright-поиск постов и сообщества."
         actions={<VkActions companyId={params.id} />}
       />
 
@@ -74,12 +103,18 @@ export default async function CompanyVkPage({ params }: { params: { id: string }
         <OverviewCards overview={overview} />
       </div>
 
-      <div className="mt-6">
+      <div className="mt-6 grid gap-6 xl:grid-cols-[1.25fr,0.95fr]">
+        <VkPostSearchPanel
+          companyId={params.id}
+          initialProfile={companySearchProfile}
+          runs={postSearchRuns}
+        />
+
         <Card className="p-5">
           <div className="text-base font-semibold text-brand">Важно</div>
           <div className="mt-2 text-sm text-muted">
-            Глобальный поиск по открытому VK зависит от типа VK-токена. Если текущий токен не поддерживает метод
-            newsfeed.search, поиск по всему VK будет возвращать 0 результатов, даже если запрос добавлен.
+            Playwright-поиск постов работает как основной механизм для нового модуля. Старый глобальный поиск через VK API
+            остаётся рядом как отдельный режим и fallback.
           </div>
         </Card>
       </div>

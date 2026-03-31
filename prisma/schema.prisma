@@ -114,6 +114,8 @@ model User {
   workspaceMembers  WorkspaceMember[]
   aiReplyDrafts     AIReplyDraft[]    @relation("AIReplyDraftCreatedBy")
   jobLogsTriggered  JobLog[]          @relation("JobLogTriggeredBy")
+  vkAuthSessions VkAuthSession[]
+
 }
 
 model Workspace {
@@ -129,6 +131,8 @@ model Workspace {
   notificationRules NotificationRule[]
 
   @@index([slug])
+  vkAuthSessions VkAuthSession[]
+
 }
 
 model WorkspaceMember {
@@ -181,6 +185,8 @@ model Company {
   @@index([normalizedName])
   @@index([normalizedWebsite])
   @@index([normalizedCity])
+  vkPostSearchConfig Json?
+
 }
 
 model CompanyAlias {
@@ -496,4 +502,20 @@ model VkTrackedPost {
   @@index([companyId, discoveryStatus, publishedAt(sort: Desc)])
   @@index([ownerId, postId])
   @@index([postKey])
+}
+
+model VkAuthSession {
+  id               String   @id @default(cuid())
+  workspaceId      String
+  userId           String
+  status           String   @default("ACTIVE")
+  storageStatePath String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([userId])
 }

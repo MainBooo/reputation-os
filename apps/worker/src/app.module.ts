@@ -24,10 +24,16 @@ import { VkCommentsProcessor } from './processors/vk/vk-comments.processor'
 import { VkBrandMatchProcessor } from './processors/vk/vk-brand-match.processor'
 import { VkReconcileProcessor } from './processors/vk/vk-reconcile.processor'
 import { VkAdapter } from './adapters/vk.adapter'
+import { VkPlaywrightSearchService } from './services/vk/vk-playwright-search.service'
+import { VkRelevanceService } from './services/vk/vk-relevance.service'
+import { VkPostSearchService } from './services/vk/vk-post-search.service'
+import { VkPostSearchProcessor } from './processors/vk/vk-post-search.processor'
+import { VkAuthSessionService } from './services/vk/vk-auth-session.service'
 
 @Module({
   imports: [ConfigModule.forRoot({ isGlobal: true }), PrismaModule, BullmqModule],
   providers: [
+    VkAuthSessionService,
     VkAdapter,
     SchedulerService,
     DedupService,
@@ -49,7 +55,10 @@ import { VkAdapter } from './adapters/vk.adapter'
     VkOwnedCommunityProcessor,
     VkCommentsProcessor,
     VkBrandMatchProcessor,
-    VkReconcileProcessor
-  ]
+    VkReconcileProcessor,
+    VkPostSearchProcessor,
+    VkPostSearchService,
+    VkPlaywrightSearchService,
+    VkRelevanceService]
 })
 export class AppModule {}

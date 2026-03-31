@@ -10,5 +10,6 @@ export const QUEUES = {
   VK_OWNED_COMMUNITY_SYNC: 'vk_owned_community_sync',
   VK_COMMENTS_SYNC: 'vk_comments_sync',
   VK_BRAND_MATCH: 'vk_brand_match',
-  VK_RECONCILE: 'vk_reconcile'
+  VK_RECONCILE: 'vk_reconcile',
+  VK_POST_SEARCH: 'vk_post_search'
 } as const

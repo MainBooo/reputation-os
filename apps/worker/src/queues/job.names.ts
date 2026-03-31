@@ -10,5 +10,6 @@ export const JOBS = {
   VK_OWNED_COMMUNITY: 'vk.owned-community',
   VK_COMMENTS: 'vk.comments',
   VK_BRAND_MATCH: 'vk.brand-match',
-  VK_RECONCILE: 'vk.reconcile'
+  VK_RECONCILE: 'vk.reconcile',
+  VK_POST_SEARCH: 'vk.post-search'
 } as const
