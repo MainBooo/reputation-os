@@ -16,7 +16,8 @@ export class VkService {
     private readonly prisma: PrismaService,
     @Inject(`QUEUE_${QUEUES.VK_BRAND_SEARCH_DISCOVERY}`) private readonly vkBrandQueue: Queue,
     @Inject(`QUEUE_${QUEUES.VK_PRIORITY_COMMUNITIES_SYNC}`) private readonly vkCommunitiesQueue: Queue,
-    @Inject(`QUEUE_${QUEUES.VK_OWNED_COMMUNITY_SYNC}`) private readonly vkOwnedQueue: Queue
+    @Inject(`QUEUE_${QUEUES.VK_OWNED_COMMUNITY_SYNC}`) private readonly vkOwnedQueue: Queue,
+    @Inject(`QUEUE_${QUEUES.VK_POST_SEARCH}`) private readonly vkPostSearchQueue: Queue
   ) {}
 
   private async assertCompanyAccess(userId: string, companyId: string) {
@@ -603,6 +604,166 @@ export class VkService {
 
     return { ok: true }
   }
+
+  async getCompanySearchProfile(userId: string, companyId: string) {
+    await this.assertCompanyAccess(userId, companyId)
+
+    const company = await this.prisma.company.findUnique({
+      where: { id: companyId },
+      select: {
+        id: true,
+        vkPostSearchConfig: true
+      }
+    })
+
+    const profiles = await this.prisma.vkSearchProfile.findMany({
+      where: {
+        companyId,
+        mode: VkMonitoringMode.BRAND_SEARCH,
+        isActive: true
+      },
+      orderBy: [{ priority: 'asc' }, { createdAt: 'asc' }]
+    })
+
+    const config = (company?.vkPostSearchConfig || {}) as Record<string, unknown>
+
+    return {
+      includeKeywords: profiles.map((item) => item.query),
+      excludeKeywords: Array.isArray(config.excludeKeywords) ? config.excludeKeywords : [],
+      contextKeywords: Array.isArray(config.contextKeywords) ? config.contextKeywords : [],
+      geoKeywords: Array.isArray(config.geoKeywords) ? config.geoKeywords : [],
+      category: typeof config.category === 'string' ? config.category : null
+    }
+  }
+
+  async updateCompanySearchProfile(userId: string, companyId: string, payload: Record<string, unknown>) {
+    await this.assertCompanyAccess(userId, companyId)
+
+    const includeKeywords = Array.from(
+      new Set(
+        (Array.isArray(payload.includeKeywords) ? payload.includeKeywords : [])
+          .map((item) => String(item || '').trim())
+          .filter(Boolean)
+      )
+    )
+
+    const excludeKeywords = Array.from(
+      new Set(
+        (Array.isArray(payload.excludeKeywords) ? payload.excludeKeywords : [])
+          .map((item) => String(item || '').trim())
+          .filter(Boolean)
+      )
+    )
+
+    const contextKeywords = Array.from(
+      new Set(
+        (Array.isArray(payload.contextKeywords) ? payload.contextKeywords : [])
+          .map((item) => String(item || '').trim())
+          .filter(Boolean)
+      )
+    )
+
+    const geoKeywords = Array.from(
+      new Set(
+        (Array.isArray(payload.geoKeywords) ? payload.geoKeywords : [])
+          .map((item) => String(item || '').trim())
+          .filter(Boolean)
+      )
+    )
+
+    const category =
+      typeof payload.category === 'string' && payload.category.trim()
+        ? payload.category.trim()
+        : null
+
+    await this.prisma.vkSearchProfile.deleteMany({
+      where: {
+        companyId,
+        mode: VkMonitoringMode.BRAND_SEARCH
+      }
+    })
+
+    if (includeKeywords.length > 0) {
+      await this.prisma.vkSearchProfile.createMany({
+        data: includeKeywords.map((query, index) => ({
+          companyId,
+          query,
+          normalizedQuery: this.normalize(query),
+          priority: (index + 1) * 10,
+          isActive: true,
+          mode: VkMonitoringMode.BRAND_SEARCH
+        })),
+        skipDuplicates: true
+      })
+    }
+
+    await this.prisma.company.update({
+      where: { id: companyId },
+      data: {
+        vkPostSearchConfig: {
+          excludeKeywords,
+          contextKeywords,
+          geoKeywords,
+          category
+        } as any
+      }
+    })
+
+    return {
+      includeKeywords,
+      excludeKeywords,
+      contextKeywords,
+      geoKeywords,
+      category
+    }
+  }
+
+  async runPostSearch(userId: string, companyId: string) {
+    await this.assertCompanyAccess(userId, companyId)
+
+    const job = await this.vkPostSearchQueue.add(
+      JOBS.VK_POST_SEARCH,
+      { companyId, triggeredByUserId: userId },
+      {
+        removeOnComplete: 100,
+        removeOnFail: 100,
+        jobId: `manual__vk-post-search__${companyId}__${Date.now()}`
+      }
+    )
+
+    await this.prisma.jobLog.create({
+      data: {
+        companyId,
+        triggeredByUserId: userId,
+        queueName: QUEUES.VK_POST_SEARCH,
+        jobName: JOBS.VK_POST_SEARCH,
+        jobStatus: 'PENDING',
+        payload: {
+          mode: 'VK_POST_SEARCH'
+        }
+      }
+    })
+
+    return {
+      ok: true,
+      queue: QUEUES.VK_POST_SEARCH,
+      jobId: String(job.id)
+    }
+  }
+
+  async getPostSearchRuns(userId: string, companyId: string) {
+    await this.assertCompanyAccess(userId, companyId)
+
+    return this.prisma.jobLog.findMany({
+      where: {
+        companyId,
+        queueName: QUEUES.VK_POST_SEARCH
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 20
+    })
+  }
+
 
   async triggerOwnedSync(companyId: string) {
     await this.vkOwnedQueue.add('vk.owned-community', {

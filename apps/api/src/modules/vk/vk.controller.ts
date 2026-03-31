@@ -14,6 +14,30 @@ import { ListVkPostsDto } from './dto/list-vk-posts.dto'
 export class VkController {
   constructor(private readonly vkService: VkService) {}
 
+  @Get('search-profile')
+  getCompanySearchProfile(@CurrentUser() user: AuthUser, @Param('id') companyId: string) {
+    return this.vkService.getCompanySearchProfile(user.id, companyId)
+  }
+
+  @Patch('search-profile')
+  updateCompanySearchProfile(
+    @CurrentUser() user: AuthUser,
+    @Param('id') companyId: string,
+    @Body() body: Record<string, unknown>
+  ) {
+    return this.vkService.updateCompanySearchProfile(user.id, companyId, body)
+  }
+
+  @Post('search-posts')
+  runPostSearch(@CurrentUser() user: AuthUser, @Param('id') companyId: string) {
+    return this.vkService.runPostSearch(user.id, companyId)
+  }
+
+  @Get('search-runs')
+  getPostSearchRuns(@CurrentUser() user: AuthUser, @Param('id') companyId: string) {
+    return this.vkService.getPostSearchRuns(user.id, companyId)
+  }
+
   @Get('search-profiles')
   getSearchProfiles(@CurrentUser() user: AuthUser, @Param('id') companyId: string) {
     return this.vkService.getSearchProfiles(user.id, companyId)
