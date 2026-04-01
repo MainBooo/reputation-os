@@ -10,7 +10,6 @@ type VkCommentResult = {
   author: string | null
   url: string
   publishedAt: Date
-  replyTo?: string | null
 }
 
 type VkPostResult = {
@@ -42,29 +41,6 @@ export class VkPlaywrightSearchService {
     return `vk:post:${ownerId}:${postId}`
   }
 
-  private buildCommentUrl(ownerId: string, postId: string, commentId: string): string {
-    return `https://vk.com/wall${ownerId}_${postId}?reply=${commentId}`
-  }
-
-  private parseReplyId(value: string | null | undefined): string | null {
-    const raw = String(value || '').trim()
-    if (!raw) return null
-
-    const match =
-      raw.match(/[?&]reply=(\d+)/i) ||
-      raw.match(/(?:^|\b)reply(\d+)\b/i) ||
-      raw.match(/comment[_:-]?(\d+)/i)
-
-    return match?.[1] ? String(match[1]) : null
-  }
-
-  private normalizeInlineText(value: string | null | undefined): string {
-    return String(value || '')
-      .replace(/\u00a0/g, ' ')
-      .replace(/[ \t]+/g, ' ')
-      .replace(/\n{3,}/g, '\n\n')
-      .trim()
-  }
 
   async searchPosts(queries: string[], workspaceId: string, companyId?: string): Promise<VkPostResult[]> {
     const storageStatePath = await this.vkAuthSessionService.getStorageStatePath(workspaceId)
@@ -403,67 +379,85 @@ const normalizedPostUrls: string[] = Array.from(
             this.logger.log(`VK DETAIL COMMENT NODES: ${postUrl} :: ${commentNodesCount}`)
 
             const extractedCommentRows = await this.extractVkCommentsFromDetail(detail, postUrl).catch(() => [])
-            const uniqueComments = new Map<string, VkCommentResult>()
 
-            for (const row of extractedCommentRows) {
-              const commentId = String(row.commentId || '').trim()
-              const text = this.normalizeInlineText(row.text)
-              const fallbackId = this.parseReplyId(row.url) || ''
-              const dedupeKey = commentId || fallbackId || String(row.url || '').trim()
-
-              if (!dedupeKey || !text || text.length < 2) {
-                continue
-              }
-
-              if (!uniqueComments.has(dedupeKey)) {
-                uniqueComments.set(dedupeKey, {
-                  commentId: commentId || fallbackId,
-                  text,
-                  author: row.author ? this.normalizeInlineText(row.author) : null,
-                  url: row.url,
-                  publishedAt: row.publishedAt || new Date(),
-                  replyTo: row.replyTo || null
-                })
-              }
+            for (const row of extractedCommentRows.slice(0, 100)) {
+              comments.push({
+                commentId: row.commentId,
+                text: row.text,
+                author: row.author,
+                url: row.url,
+                publishedAt: row.publishedAt || new Date()
+              })
             }
 
-            comments.push(...Array.from(uniqueComments.values()).slice(0, 100))
+            if (comments.length === 0) {
+            const commentRows = await detail.evaluate((postUrl: string) => {
+              const selectors = [
+                '.reply',
+                '[id^="reply"]',
+                '.RepliesList .Reply',
+                '.reply_wrap',
+                '[data-testid*="comment"]',
+                '[class*="reply"]'
+              ]
 
-              if (commentNodesCount > 0 && comments.length === 0) {
-                const commentDebug = await detail.evaluate(() => {
-                  const selectors = [
-                    '.reply',
-                    '[id^="reply"]',
-                    '.RepliesList .Reply',
-                    '.reply_wrap',
-                    '[data-testid*="comment"]',
-                    '[class*="reply"]'
-                  ]
+              const nodes = Array.from(
+                new Set(
+                  selectors.flatMap((selector) => Array.from(document.querySelectorAll(selector)))
+                )
+              )
 
-                  const nodes = Array.from(
-                    new Set(
-                      selectors.flatMap((selector) => Array.from(document.querySelectorAll(selector)))
-                    )
-                  ).slice(0, 5)
+              const rows = nodes.map((node, index) => {
+                const el = node as HTMLElement
+                const textEl =
+                  el.querySelector('.reply_text') as HTMLElement |
+                  null
 
-                  return nodes.map((node) => {
-                    const el = node as HTMLElement
-                    return {
-                      tag: el.tagName,
-                      id: el.id || '',
-                      className: String(el.className || ''),
-                      dataId: el.getAttribute('data-id') || '',
-                      dataCommentId: el.getAttribute('data-comment-id') || '',
-                      textSample: (el.innerText || '').slice(0, 400),
-                      htmlSample: (el.outerHTML || '').slice(0, 1200)
-                    }
-                  })
-                }).catch(() => [])
+                const authorEl =
+                  el.querySelector('.reply_author, a.reply_author, a.author') as HTMLElement |
+                  null
 
-                this.logger.log(`VK DETAIL COMMENT DEBUG: ${postUrl} :: ${JSON.stringify(commentDebug)}`)
-              }
+                const linkEl =
+                  el.querySelector('a[href*="reply="], a[href*="wall"]') as HTMLAnchorElement |
+                  null
 
+                const rawId = el.id || el.getAttribute('data-id') || el.getAttribute('data-comment-id') || ''
+                const href = linkEl?.href || ''
+                const replyMatch = href.match(/[?&]reply=([^&]+)/)
 
+                const commentId =
+                  (replyMatch ? replyMatch[1] : '') ||
+                  rawId.replace(/^reply/, '').replace(/^wpt/, '').trim() ||
+                  `comment_${index + 1}`
+
+                const text =
+                  (textEl?.innerText || el.innerText || '')
+                    .replace(/\n{3,}/g, '\n\n')
+                    .trim()
+
+                const author = (authorEl?.innerText || '').trim() || null
+
+                return {
+                  commentId,
+                  text,
+                  author,
+                  url: commentId ? `${postUrl}?reply=${commentId}` : postUrl
+                }
+              })
+
+              return rows.filter((row) => row.text && row.text.length >= 2)
+            }, postUrl).catch(() => [])
+
+            for (const row of commentRows.slice(0, 100)) {
+              comments.push({
+                commentId: row.commentId,
+                text: row.text,
+                author: row.author,
+                url: row.url,
+                publishedAt: new Date()
+              })
+            }
+            }
 
             this.logger.log(`VK DETAIL COMMENTS COUNT: ${postUrl} :: ${comments.length}`)
             await this.closeVkPostCard(detail)
@@ -507,245 +501,89 @@ const normalizedPostUrls: string[] = Array.from(
     text: string
     publishedAt: Date | null
     url: string
-    replyTo?: string | null
   }>> {
-    const readySelectors = [
-      '.reply',
-      '[id^="reply"]',
-      '.RepliesList .Reply',
-      '.reply_wrap',
-      '[data-testid*="comment"]',
-      '[class*="reply"]',
+    const commentSelectors = [
       '.vkitCommentBase__in--9swaG',
-      'a[href*="?reply="]'
+      '[data-testid="comment-text"]',
+      '[data-testid="comment-owner"]',
+      '[data-testid="wall_comment_date"]',
     ]
 
-    for (const selector of readySelectors) {
-      await page.waitForSelector(selector, { timeout: 2000 }).catch(() => null)
+    for (const selector of commentSelectors) {
+      await page.waitForSelector(selector, { timeout: 2500 }).catch(() => null)
     }
 
-    const expandSelectors = [
-      'text=Показать комментарии',
-      'text=Показать все комментарии',
-      'text=Показать ещё комментарии',
-      'text=Показать ещё ответы',
-      'text=Показать ответы',
-      'text=Показать ещё',
-      'text=Еще комментарии',
-      'text=Ещё комментарии',
-      'button',
-      '[role="button"]',
-      'a'
-    ]
-
-    for (let round = 0; round < 2; round += 1) {
-      for (const selector of expandSelectors) {
-        const locator = page.locator(selector)
-        const count = Math.min(await locator.count().catch(() => 0), 12)
-
-        for (let i = 0; i < count; i += 1) {
-          const el = locator.nth(i)
-          const text = await el.innerText().catch(() => '')
-          const normalized = this.normalizeInlineText(text)
-
-          if (
-            !normalized ||
-            !/коммент|ответ|ещё|еще|показать|развернуть/i.test(normalized)
-          ) {
-            continue
-          }
-
-          await el.click({ timeout: 1500 }).catch(() => null)
-          await page.waitForTimeout(500)
-        }
-      }
-
+    for (let i = 0; i < 8; i += 1) {
       await page.mouse.wheel(0, 1400).catch(() => null)
-      await page.waitForTimeout(450)
+      await page.waitForTimeout(500)
     }
-
-    const stats = await page.evaluate(() => {
-      const q = (selector: string) => document.querySelectorAll(selector).length
-      return {
-        replyNodes: q('.reply, [id^="reply"], .RepliesList .Reply, .reply_wrap, [class*="reply"]'),
-        replyLinks: q('a[href*="?reply="], a[href*="&reply="]'),
-        commentTexts: q('[data-testid="comment-text"], .reply_text, .vkitComment__contentText--6Jfyb'),
-      }
-    }).catch(() => null)
-
-    this.logger.log(`VK DETAIL COMMENT EXTRACT STATS: ${postUrl} :: ${JSON.stringify(stats)}`)
 
     const comments = await page.evaluate((currentPostUrl: string) => {
+      const rootNodes = Array.from(
+        document.querySelectorAll('.vkitCommentBase__in--9swaG')
+      )
+
       const normalizeText = (value: string | null | undefined): string =>
         String(value || '')
-          .replace(/\u00a0/g, ' ')
-          .replace(/[ \t]+/g, ' ')
-          .replace(/\n{3,}/g, '\n\n')
+          .replace(/\s+/g, ' ')
           .trim()
 
       const makeAbsoluteVkUrl = (href: string | null | undefined): string => {
         const raw = String(href || '').trim()
         if (!raw) return currentPostUrl
-        if (/^https?:\/\//i.test(raw)) return raw
+        if (raw.startsWith('http://') || raw.startsWith('https://')) return raw
         if (raw.startsWith('/')) return `https://vk.com${raw}`
-        return `https://vk.com/${raw.replace(/^\/+/, '')}`
+        return `https://vk.com/${raw}`
       }
 
-      const parseReplyId = (value: string | null | undefined): string => {
-        const raw = String(value || '')
-        const match =
-          raw.match(/[?&]reply=(\d+)/i) ||
-          raw.match(/(?:^|\b)reply(\d+)\b/i) ||
-          raw.match(/comment[_:-]?(\d+)/i)
-        return match?.[1] || ''
-      }
-
-      const selectors = [
-        '.reply',
-        '[id^="reply"]',
-        '.RepliesList .Reply',
-        '.reply_wrap',
-        '.vkitCommentBase__in--9swaG',
-        '[data-testid*="comment"]',
-        '[class*="reply"]'
-      ]
-
-      const nodes = Array.from(
-        new Set(
-          selectors.flatMap((selector) => Array.from(document.querySelectorAll(selector)))
-        )
-      )
-
-      const rows: Array<{
-        commentId: string
-        author: string | null
-        text: string
-        publishedAtRaw: string
-        url: string
-        replyTo: string | null
-      }> = []
-
-      for (const node of nodes) {
-        const el = node as HTMLElement
-
+      const parsed = rootNodes.map((node) => {
         const authorEl =
-          el.querySelector('[data-testid="comment-owner"]') ||
-          el.querySelector('.reply_author, a.reply_author, a.author') ||
-          el.querySelector('a[href^="/id"], a[href^="/club"], a[href^="/public"], a[href^="/away.php"]')
+          node.querySelector('[data-testid="comment-owner"]') ||
+          node.querySelector('a[href^="/id"], a[href^="/club"], a[href^="/public"]')
 
         const textEl =
-          el.querySelector('[data-testid="comment-text"]') ||
-          el.querySelector('.reply_text') ||
-          el.querySelector('.vkitComment__contentText--6Jfyb') ||
-          el.querySelector('[class*="reply_text"]') ||
-          el.querySelector('[class*="contentText"]')
+          node.querySelector('[data-testid="comment-text"]') ||
+          node.querySelector('.vkitFeedShowMoreText__text--0wZYb') ||
+          node.querySelector('.vkitComment__contentText--6Jfyb')
 
         const dateEl =
-          el.querySelector('[data-testid="wall_comment_date"]') ||
-          el.querySelector('a[href*="?reply="], a[href*="&reply="]')
+          node.querySelector('[data-testid="wall_comment_date"]') ||
+          node.querySelector('a[href*="?reply="]')
 
-        const permalinkEl =
-          el.querySelector('a[href*="?reply="], a[href*="&reply="], a[href*="/wall"]') as HTMLAnchorElement | null
+        const author = normalizeText(authorEl?.textContent || null)
+        const text = normalizeText(textEl?.textContent || null)
+        const href = dateEl?.getAttribute('href') || ''
+        const url = makeAbsoluteVkUrl(href)
 
-        const rawId =
-          el.id ||
-          el.getAttribute('data-id') ||
-          el.getAttribute('data-comment-id') ||
-          el.getAttribute('data-reply-id') ||
-          ''
+        let commentId = ''
+        const match = url.match(/[?&]reply=(\d+)/)
+        if (match) {
+          commentId = match[1]
+        } else {
+          const alt = href.match(/[?&]reply=(\d+)/)
+          if (alt) commentId = alt[1]
+        }
 
-        const rawHtml = el.outerHTML || ''
-        const href = permalinkEl?.getAttribute('href') || ''
-        const absoluteUrl = makeAbsoluteVkUrl(href)
-        const commentId =
-          parseReplyId(absoluteUrl) ||
-          parseReplyId(href) ||
-          parseReplyId(rawId) ||
-          parseReplyId(rawHtml)
-
-        const text =
-          normalizeText(textEl?.textContent || null) ||
-          normalizeText(el.innerText || '')
-
-        const author = normalizeText(authorEl?.textContent || null) || null
         const publishedAtRaw = normalizeText(dateEl?.textContent || null)
 
-        let replyTo: string | null = null
-        const replyToAttr =
-          el.getAttribute('data-reply-to') ||
-          el.getAttribute('data-to-id') ||
-          ''
-        const parsedReplyTo = parseReplyId(replyToAttr)
-        if (parsedReplyTo && parsedReplyTo !== commentId) {
-          replyTo = parsedReplyTo
+        return {
+          commentId,
+          author: author || null,
+          text,
+          publishedAtRaw,
+          url,
         }
-
-        if (commentId && text && text.length >= 2) {
-          rows.push({
-            commentId,
-            author,
-            text,
-            publishedAtRaw,
-            url: absoluteUrl.includes('reply=') ? absoluteUrl : `${currentPostUrl}?reply=${commentId}`,
-            replyTo
-          })
-        }
-      }
-
-      if (rows.length === 0) {
-        const anchors = Array.from(
-          document.querySelectorAll('a[href*="?reply="], a[href*="&reply="]')
-        ) as HTMLAnchorElement[]
-
-        for (const anchor of anchors) {
-          const href = anchor.getAttribute('href') || ''
-          const url = makeAbsoluteVkUrl(href)
-          const commentId = parseReplyId(url) || parseReplyId(href)
-          if (!commentId) continue
-
-          const holder =
-            (anchor.closest('.reply') as HTMLElement | null) ||
-            (anchor.closest('[id^="reply"]') as HTMLElement | null) ||
-            (anchor.closest('.reply_wrap') as HTMLElement | null) ||
-            (anchor.parentElement as HTMLElement | null)
-
-          const text = normalizeText(holder?.innerText || '')
-          if (!text || text.length < 2) continue
-
-          const authorEl =
-            holder?.querySelector('.reply_author, a.reply_author, a.author') ||
-            holder?.querySelector('[data-testid="comment-owner"]')
-
-          const author = normalizeText(authorEl?.textContent || null) || null
-
-          rows.push({
-            commentId,
-            author,
-            text,
-            publishedAtRaw: '',
-            url,
-            replyTo: null
-          })
-        }
-      }
-
-      const seen = new Set<string>()
-      return rows.filter((item) => {
-        const key = `${item.commentId}::${item.url}`
-        if (!item.commentId || !item.text) return false
-        if (seen.has(key)) return false
-        seen.add(key)
-        return true
       })
-    }, postUrl).catch(() => [])
+
+      return parsed.filter((item) => item.text && item.commentId)
+    }, postUrl)
 
     return comments.map((item: any) => ({
-      commentId: String(item.commentId || ''),
+      commentId: String(item.commentId),
       author: item.author ? String(item.author) : null,
       text: String(item.text || ''),
       publishedAt: null,
       url: String(item.url || postUrl),
-      replyTo: item.replyTo ? String(item.replyTo) : null,
     }))
   }
 
