@@ -1,0 +1,983 @@
+import { Injectable, Logger } from '@nestjs/common'
+import { chromium } from 'playwright'
+import * as fs from 'fs'
+import { VkAuthSessionService } from './vk-auth-session.service'
+import { PrismaService } from '../../common/prisma/prisma.service'
+
+type VkCommentResult = {
+  commentId: string
+  text: string
+  author: string | null
+  url: string
+  publishedAt: Date
+  replyTo?: string | null
+}
+
+type VkPostResult = {
+  ownerId: string
+  postId: string
+  url: string
+  text: string
+  author: string | null
+  publishedAt: Date
+  comments: VkCommentResult[]
+  rawPayload: Record<string, unknown>
+}
+
+@Injectable()
+export class VkPlaywrightSearchService
+
+  private readBoolEnv(name: string, fallback: boolean): boolean {
+    const raw = process.env[name]
+    if (raw == null || raw.trim() == '') return fallback
+    return ['1', 'true', 'yes', 'on'].includes(raw.trim().toLowerCase())
+  }
+
+  private readListEnv(name: string): string[] {
+    const raw = process.env[name]
+    if (!raw) return []
+    return raw
+      .split(/[\n,]/)
+      .map((item) => item.trim())
+      .filter(Boolean)
+  }
+
+  private buildVkChromiumLaunchOptions(executablePath?: string) {
+    const headless = this.readBoolEnv('VK_PLAYWRIGHT_HEADLESS', true)
+    const disableSandbox = this.readBoolEnv('VK_PLAYWRIGHT_DISABLE_SANDBOX', false)
+    const disableDevShm = this.readBoolEnv('VK_PLAYWRIGHT_DISABLE_DEV_SHM', true)
+    const disableGpu = this.readBoolEnv('VK_PLAYWRIGHT_DISABLE_GPU', true)
+
+    const args: string[] = []
+
+    if (disableSandbox) {
+      args.push('--no-sandbox', '--disable-setuid-sandbox')
+    }
+
+    if (disableDevShm) {
+      args.push('--disable-dev-shm-usage')
+    }
+
+    if (disableGpu) {
+      args.push('--disable-gpu')
+    }
+
+    args.push(
+      '--no-first-run',
+      '--no-default-browser-check',
+      '--disable-background-networking',
+      '--disable-background-timer-throttling',
+      '--disable-renderer-backgrounding',
+      '--disable-features=Translate,BackForwardCache'
+    )
+
+    for (const extra of this.readListEnv('VK_PLAYWRIGHT_EXTRA_ARGS')) {
+      if (!args.includes(extra)) args.push(extra)
+    }
+
+    this.logger.log(
+      `VK chromium launch config: ${JSON.stringify({
+        headless,
+        disableSandbox,
+        disableDevShm,
+        disableGpu,
+        executablePath: executablePath || 'playwright-managed',
+        display: process.env.DISPLAY || '',
+        args
+      })}`
+    )
+
+    return {
+      headless,
+      executablePath: executablePath || undefined,
+      args
+    }
+  }
+ {
+  private readonly logger = new Logger(VkPlaywrightSearchService.name)
+
+  constructor(
+    private readonly vkAuthSessionService: VkAuthSessionService,
+    private readonly prisma: PrismaService
+  ) {}
+
+  private parseWallIds(link: string): { ownerId: string; postId: string } | null {
+    const match = link.match(/wall(-?\d+)_(\d+)/)
+    if (!match) return null
+    return { ownerId: match[1], postId: match[2] }
+  }
+  private buildPostExternalMentionId(ownerId: string, postId: string): string {
+    return `vk:post:${ownerId}:${postId}`
+  }
+
+  private buildCommentUrl(ownerId: string, postId: string, commentId: string): string {
+    return `https://vk.com/wall${ownerId}_${postId}?reply=${commentId}`
+  }
+
+  private parseReplyId(value: string | null | undefined): string | null {
+    const raw = String(value || '').trim()
+    if (!raw) return null
+
+    const match =
+      raw.match(/[?&]reply=(\d+)/i) ||
+      raw.match(/(?:^|\b)reply(\d+)\b/i) ||
+      raw.match(/comment[_:-]?(\d+)/i)
+
+    return match?.[1] ? String(match[1]) : null
+  }
+
+  private normalizeInlineText(value: string | null | undefined): string {
+    return String(value || '')
+      .replace(/\u00a0/g, ' ')
+      .replace(/[ \t]+/g, ' ')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim()
+  }
+
+  async searchPosts(queries: string[], workspaceId: string, companyId?: string): Promise<VkPostResult[]> {
+    const storageStatePath = await this.vkAuthSessionService.getStorageStatePath(workspaceId)
+    const incrementalCompanyId = companyId || workspaceId
+
+    this.logger.log(
+      `VK SEARCH CONTEXT: workspaceId=${workspaceId} companyId=${companyId || '-'} incrementalCompanyId=${incrementalCompanyId}`
+    )
+
+    const sessionCandidates = [
+      storageStatePath,
+      process.env.VK_SESSION_PATH,
+      '/opt/reputation-os/storage/vk-sessions/vk-session.json',
+    ].filter((value): value is string => Boolean(value && fs.existsSync(value)))
+
+    const resolvedStorageStatePath = sessionCandidates[0] ?? null
+    const executablePath = this.resolveChromiumExecutablePath()
+
+    this.logger.log(`VK search storageState RESOLVED: ${resolvedStorageStatePath || 'NONE'}`)
+    this.logger.log(`VK chromium executable: ${executablePath || 'playwright-managed'}`)
+    this.logger.log(`VK DISPLAY: ${process.env.DISPLAY || ':99'}`)
+
+    const browser = await chromium.launch(
+        this.buildVkChromiumLaunchOptions(chromiumExecutablePath)
+      )
+
+    browser.on('disconnected', () => {
+      this.logger.error('VK browser disconnected unexpectedly')
+    })
+
+    const context = await browser.newContext(
+      resolvedStorageStatePath
+        ? { storageState: resolvedStorageStatePath }
+        : undefined
+    )
+
+    const page = await this.safeCreatePage(context, 'main-search-page')
+    const results: VkPostResult[] = []
+    const seenPostUrls = new Set<string>()
+
+    try {
+      for (const query of queries) {
+        const searchUrl = 'https://vk.com/search/statuses'
+
+        this.logger.log(`VK search start: ${query}`)
+
+        await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 })
+        await page.waitForTimeout(3000)
+
+        const authFeedCount = await page.locator('a[href="/feed"]').count().catch(() => 0)
+        const authLoginCount = await page.locator('input[name="login"], input[name="email"]').count().catch(() => 0)
+
+        this.logger.log(`VK PAGE URL: ${page.url()}`)
+        this.logger.log(`VK PAGE TITLE: ${await page.title().catch(() => '')}`)
+        this.logger.log(`VK AUTH CHECK: ${authFeedCount > 0 ? 'LOGGED_IN' : 'NOT_LOGGED'}`)
+        this.logger.log(`VK LOGIN FORM CHECK: ${authLoginCount > 0 ? 'LOGIN_FORM_VISIBLE' : 'LOGIN_FORM_HIDDEN'}`)
+
+        await page.waitForSelector('#statuses > div', { timeout: 15000 })
+        this.logger.log('VK POSTS ROOT FOUND: #statuses > div')
+
+        const searchInput = page.locator(
+          '#search-\\:rn\\:, #statuses input[type="search"], #statuses input, input[type="search"], input[name="c[q]"], input[placeholder*="Поиск"], input[placeholder*="Найти"]'
+        ).first()
+
+        this.logger.log(`VK SEARCH INPUT COUNT: ${await page.locator('#search-\\:rn\\:').count().catch(() => 0)}`)
+
+        await searchInput.click({ timeout: 5000 })
+        await searchInput.fill('')
+        await page.waitForTimeout(300)
+        await searchInput.type(query, { delay: 50 })
+        await page.waitForTimeout(700)
+        await searchInput.press('Enter')
+        await page.waitForTimeout(5000)
+
+        this.logger.log(`VK PAGE URL AFTER SEARCH: ${page.url()}`)
+        this.logger.log(`VK PAGE TITLE AFTER SEARCH: ${await page.title().catch(() => '')}`)
+
+        const selectorStats = await page.evaluate(() => {
+          const q = (selector: string) => document.querySelectorAll(selector).length
+          const html = document.documentElement.outerHTML
+
+          const wallAnchors = Array.from(document.querySelectorAll('a[href*="wall"]'))
+            .map((el) => (el as HTMLAnchorElement).href)
+            .filter(Boolean)
+
+          const searchAnchors = Array.from(document.querySelectorAll('a'))
+            .map((el) => (el as HTMLAnchorElement).href)
+            .filter((href) => typeof href === 'string' && /wall-?\d+_\d+/.test(href))
+
+          const htmlWallMatches = Array.from(html.matchAll(/wall-?\d+_\d+/g)).map((m) => m[0])
+
+          return {
+            url: location.href,
+            title: document.title,
+            anchorsCount: q('a'),
+            wallHrefCount: q('a[href*="wall"]'),
+            statusesRoot: q('#statuses'),
+            statusesChildren: q('#statuses > div'),
+            feedRows: q('[data-testid]'),
+            postCards: q('.Post, .wall_item, [data-post-id], [id^="post-"], [data-testid*="post"]'),
+            htmlWallMatchesCount: htmlWallMatches.length,
+            wallAnchorsSample: Array.from(new Set(wallAnchors)).slice(0, 10),
+            searchAnchorsSample: Array.from(new Set(searchAnchors)).slice(0, 10),
+            htmlWallMatchesSample: Array.from(new Set(htmlWallMatches)).slice(0, 10),
+            bodyTextSample: (document.body?.innerText || '').slice(0, 2000)
+          }
+        }).catch(() => null)
+
+        console.log('VK SELECTOR STATS:', JSON.stringify(selectorStats))
+
+        for (let i = 0; i < 8; i += 1) {
+          await page.mouse.wheel(0, 2200).catch(() => null)
+          await page.waitForTimeout(1200)
+        }
+
+        const postUrls = await page.evaluate(() => {
+          const urls = new Set<string>()
+
+          for (const a of Array.from(document.querySelectorAll('a'))) {
+            const href = (a as HTMLAnchorElement).href || ''
+            if (/wall-?\d+_\d+/.test(href)) {
+              urls.add(href)
+            }
+          }
+
+          const html = document.documentElement.outerHTML
+          for (const match of html.matchAll(/https:\/\/vk\.com\/wall-?\d+_\d+/g)) {
+            urls.add(match[0])
+          }
+          for (const match of html.matchAll(/\/wall-?\d+_\d+/g)) {
+            urls.add(`https://vk.com${match[0]}`)
+          }
+
+          return Array.from(urls)
+        }).catch(() => [])
+
+        console.log('VK SEARCH LINKS:', postUrls.length)
+        console.log('VK SEARCH SAMPLE:', JSON.stringify(postUrls.slice(0, 10)))
+
+        if (!postUrls.length) {
+          const html = await page.content().catch(() => '')
+          console.log('VK PAGE HTML SAMPLE:', html.slice(0, 5000))
+        }
+
+
+        
+        const rawLinks: string[] = (() => {
+          for (const candidateName of ['rawLinks', 'links', 'postLinks', 'searchLinks', 'hrefs', 'postUrls']) {
+            try {
+              const candidate = eval(candidateName)
+              if (Array.isArray(candidate)) {
+                return candidate.map((value: unknown) => String(value || ''))
+              }
+            } catch (_) {}
+          }
+
+          return []
+        })()
+
+const normalizedPostUrls: string[] = Array.from(
+          new Set(
+            rawLinks
+              .map((rawUrl: string) => String(rawUrl || '').trim())
+              .map((url: string) => {
+                const normalized = this.normalizeVkPostUrl(url)
+                return typeof normalized === 'string' ? normalized : ''
+              })
+              .filter((url: string) => Boolean(url))
+          )
+        )
+
+        this.logger.log(`VK SEARCH LINKS: ${rawLinks.length}`)
+        this.logger.log(`VK NORMALIZED POST LINKS: ${normalizedPostUrls.length}`)
+        this.logger.log(`VK LOOP START: ${normalizedPostUrls.length}`)
+
+        const parsedPosts = normalizedPostUrls
+          .map((postUrl: string) => {
+            const ids = this.parseWallIds(String(postUrl))
+            return ids
+              ? {
+                  postUrl,
+                  ids,
+                }
+              : null
+          })
+          .filter(
+            (
+              item,
+            ): item is { postUrl: string; ids: { ownerId: string; postId: string } } =>
+              Boolean(item),
+          )
+
+        const parsedExternalIds: string[] = parsedPosts.map(
+          (item: { postUrl: string; ids: { ownerId: string; postId: string } }) =>
+            this.buildPostExternalMentionId(item.ids.ownerId, item.ids.postId),
+        )
+
+        const existingPostMentions = await this.prisma.mention.findMany({
+          where: {
+            companyId: incrementalCompanyId,
+            externalMentionId: {
+              in: parsedPosts.map((item) =>
+                this.buildPostExternalMentionId(item.ids.ownerId, item.ids.postId)
+              )
+            }
+          },
+          select: {
+            externalMentionId: true
+          }
+        }).catch(() => [])
+
+        const existingExternalIds = new Set(
+          existingPostMentions
+            .map((item: { externalMentionId: string | null }) => item.externalMentionId)
+            .filter((value: string | null): value is string => Boolean(value)),
+        )
+
+        const newParsedPosts = parsedPosts.filter(
+          (item) =>
+            !existingExternalIds.has(
+              this.buildPostExternalMentionId(item.ids.ownerId, item.ids.postId)
+            )
+        )
+
+        const isBootstrapRun = existingExternalIds.size === 0
+        const postsToProcess = isBootstrapRun
+          ? parsedPosts.slice(0, 100)
+          : newParsedPosts
+
+        this.logger.log(`VK BOOTSTRAP RUN: ${isBootstrapRun ? 'YES' : 'NO'}`)
+        this.logger.log(`VK PARSED POSTS: ${parsedPosts.length}`)
+        this.logger.log(`VK KNOWN POSTS: ${existingExternalIds.size}`)
+        this.logger.log(`VK NEW POSTS: ${newParsedPosts.length}`)
+        this.logger.log(`VK POSTS TO PROCESS: ${postsToProcess.length}`)
+
+          const __limit = Number(process.env.VK_POST_SEARCH_LIMIT || 5)
+          const __safePosts = postsToProcess.slice(0, Math.min(__limit, 5))
+          this.logger.log(`VK FORCE LIMIT: ${__limit} -> ${__safePosts.length}`)
+
+        for (const item of __safePosts) {
+          const { postUrl, ids } = item
+
+          this.logger.log(`VK LOOP ITEM: ${postUrl}`)
+
+          if (seenPostUrls.has(postUrl)) continue
+          seenPostUrls.add(postUrl)
+
+          this.logger.log(`VK PARSE IDS: ${postUrl} -> ${JSON.stringify(ids)}`)
+
+          const detail = await this.safeCreatePage(context, 'detail-page')
+          const comments: VkCommentResult[] = []
+
+          try {
+            await detail.goto(postUrl, { waitUntil: 'domcontentloaded', timeout: 30000 })
+            await detail.waitForTimeout(2500)
+
+            this.logger.log(`VK DETAIL OPENED: ${postUrl}`)
+            this.logger.log(`VK DETAIL URL: ${detail.url()}`)
+            this.logger.log(`VK DETAIL TITLE: ${await detail.title().catch(() => '')}`)
+
+            const commentMeta = await detail.evaluate(() => {
+              const footer =
+                document.querySelector('[data-testid="post_footer_action_comment"]') ||
+                document.querySelector('[aria-label*="комментар"]')
+
+              const aria = footer?.getAttribute('aria-label') || ''
+              const text = (footer?.textContent || '').trim()
+              const source = `${aria} ${text}`.trim()
+              const m = source.match(/(\d+)/)
+              const count = m ? Number(m[1]) : null
+
+              return { aria, text, count }
+            })
+
+            this.logger.log(`VK COMMENT META: ${postUrl} :: ${JSON.stringify(commentMeta)}`)
+
+            if (commentMeta.count === 0) {
+              this.logger.log(`VK SKIP ZERO COMMENTS: ${postUrl}`)
+              try {
+                await detail.close()
+              } catch (e) {
+                this.logger.warn(`VK DETAIL CLOSE FAIL AFTER ZERO COMMENTS: ${postUrl}`)
+              }
+              continue
+            }
+
+            for (let i = 0; i < 6; i += 1) {
+              await detail.mouse.wheel(0, 1800).catch(() => null)
+              await detail.waitForTimeout(900)
+            }
+
+            const expandSelectors = [
+              'text=Показать комментарии',
+              'text=Показать все комментарии',
+              'text=Показать ещё комментарии',
+              'text=Показать ещё',
+              'text=Все комментарии',
+              '[data-testid*="replies"]',
+              '[data-testid*="comments"]',
+              'a[href*="reply"]',
+              'button'
+            ]
+
+            for (const selector of expandSelectors) {
+              const locator = detail.locator(selector)
+              const count = Math.min(await locator.count().catch(() => 0), 5)
+
+              for (let i = 0; i < count; i += 1) {
+                const el = locator.nth(i)
+                const txt = await el.innerText().catch(() => '')
+                const normalizedTxt = txt.trim()
+
+                if (
+                  selector === 'button' &&
+                  !/коммент|ответ|ещё|показать/i.test(normalizedTxt)
+                ) {
+                  continue
+                }
+
+                await el.click({ timeout: 2500 }).catch(() => null)
+                await detail.waitForTimeout(1200)
+              }
+            }
+
+            for (let i = 0; i < 8; i += 1) {
+              await detail.mouse.wheel(0, 2200).catch(() => null)
+              await detail.waitForTimeout(1000)
+            }
+
+            const postText =
+              await detail.locator('.wall_post_text').first().innerText().catch(() => '') ||
+              await detail.locator('[data-testid="post_view"] .wall_post_text').first().innerText().catch(() => '') ||
+              await detail.locator('[id^="wpt"] .wall_post_text').first().innerText().catch(() => '')
+
+            const author =
+              await detail.locator('.author').first().innerText().catch(() => null) ||
+              await detail.locator('a.author').first().innerText().catch(() => null) ||
+              await detail.locator('h1, h2').first().innerText().catch(() => null)
+
+            const commentNodesCount = await detail.evaluate(() => {
+              const selectors = [
+                '.reply',
+                '[id^="reply"]',
+                '.RepliesList .Reply',
+                '.reply_wrap',
+                '[data-testid*="comment"]',
+                '[class*="reply"]'
+              ]
+              return selectors.reduce((acc, selector) => acc + document.querySelectorAll(selector).length, 0)
+            }).catch(() => 0)
+
+            this.logger.log(`VK DETAIL COMMENT NODES: ${postUrl} :: ${commentNodesCount}`)
+
+            const extractedCommentRows = await this.extractVkCommentsFromDetail(detail, postUrl).catch(() => [])
+            const uniqueComments = new Map<string, VkCommentResult>()
+
+            for (const row of extractedCommentRows) {
+              const commentId = String(row.commentId || '').trim()
+              const text = this.normalizeInlineText(row.text)
+              const fallbackId = this.parseReplyId(row.url) || ''
+              const dedupeKey = commentId || fallbackId || String(row.url || '').trim()
+
+              if (!dedupeKey || !text || text.length < 2) {
+                continue
+              }
+
+              if (!uniqueComments.has(dedupeKey)) {
+                uniqueComments.set(dedupeKey, {
+                  commentId: commentId || fallbackId,
+                  text,
+                  author: row.author ? this.normalizeInlineText(row.author) : null,
+                  url: row.url,
+                  publishedAt: row.publishedAt || new Date(),
+                  replyTo: row.replyTo || null
+                })
+              }
+            }
+
+            comments.push(...Array.from(uniqueComments.values()).slice(0, 100))
+
+              if (commentNodesCount > 0 && comments.length === 0) {
+                const commentDebug = await detail.evaluate(() => {
+                  const selectors = [
+                    '.reply',
+                    '[id^="reply"]',
+                    '.RepliesList .Reply',
+                    '.reply_wrap',
+                    '[data-testid*="comment"]',
+                    '[class*="reply"]'
+                  ]
+
+                  const nodes = Array.from(
+                    new Set(
+                      selectors.flatMap((selector) => Array.from(document.querySelectorAll(selector)))
+                    )
+                  ).slice(0, 5)
+
+                  return nodes.map((node) => {
+                    const el = node as HTMLElement
+                    return {
+                      tag: el.tagName,
+                      id: el.id || '',
+                      className: String(el.className || ''),
+                      dataId: el.getAttribute('data-id') || '',
+                      dataCommentId: el.getAttribute('data-comment-id') || '',
+                      textSample: (el.innerText || '').slice(0, 400),
+                      htmlSample: (el.outerHTML || '').slice(0, 1200)
+                    }
+                  })
+                }).catch(() => [])
+
+                this.logger.log(`VK DETAIL COMMENT DEBUG: ${postUrl} :: ${JSON.stringify(commentDebug)}`)
+              }
+
+
+
+            this.logger.log(`VK DETAIL COMMENTS COUNT: ${postUrl} :: ${comments.length}`)
+
+            if (comments.length > 0) {
+              this.logger.log(`VK FOUND COMMENTED POST: ${postUrl}`)
+              break
+            }
+            await this.closeVkPostCard(detail)
+
+            results.push({
+              ownerId: ids.ownerId,
+              postId: ids.postId,
+              url: postUrl,
+              text: postText,
+              author,
+              publishedAt: new Date(),
+              comments,
+              rawPayload: {
+                query,
+                ownerId: ids.ownerId,
+                postId: ids.postId,
+                url: postUrl,
+                commentsCount: comments.length,
+                usedStorageState: true
+              }
+            })
+          } catch (error) {
+            this.logger.warn(`VK detail page failed for ${postUrl}: ${String(error)}`)
+          } finally {
+            await detail.close().catch(() => null)
+          }
+        }
+      }
+    } finally {
+      await page.close().catch(() => null)
+      await context.close().catch(() => null)
+      await browser.close().catch(() => null)
+    }
+
+    return results
+  }
+
+  private async extractVkCommentsFromDetail(page: any, postUrl: string): Promise<Array<{
+    commentId: string
+    author: string | null
+    text: string
+    publishedAt: Date | null
+    url: string
+    replyTo?: string | null
+  }>> {
+    const readySelectors = [
+      '.reply',
+      '[id^="reply"]',
+      '.RepliesList .Reply',
+      '.reply_wrap',
+      '[data-testid*="comment"]',
+      '[class*="reply"]',
+      '.vkitCommentBase__in--9swaG',
+      'a[href*="?reply="]'
+    ]
+
+    for (const selector of readySelectors) {
+      await page.waitForSelector(selector, { timeout: 2000 }).catch(() => null)
+    }
+
+    const expandSelectors = [
+      'text=Показать комментарии',
+      'text=Показать все комментарии',
+      'text=Показать ещё комментарии',
+      'text=Показать ещё ответы',
+      'text=Показать ответы',
+      'text=Показать ещё',
+      'text=Еще комментарии',
+      'text=Ещё комментарии',
+      'button',
+      '[role="button"]',
+      'a'
+    ]
+
+    for (let round = 0; round < 2; round += 1) {
+      for (const selector of expandSelectors) {
+        const locator = page.locator(selector)
+        const count = Math.min(await locator.count().catch(() => 0), 12)
+
+        for (let i = 0; i < count; i += 1) {
+          const el = locator.nth(i)
+          const text = await el.innerText().catch(() => '')
+          const normalized = this.normalizeInlineText(text)
+
+          if (
+            !normalized ||
+            !/коммент|ответ|ещё|еще|показать|развернуть/i.test(normalized)
+          ) {
+            continue
+          }
+
+          await el.click({ timeout: 1500 }).catch(() => null)
+          await page.waitForTimeout(500)
+        }
+      }
+
+      await page.mouse.wheel(0, 1400).catch(() => null)
+      await page.waitForTimeout(450)
+    }
+
+    const stats = await page.evaluate(() => {
+      const q = (selector: string) => document.querySelectorAll(selector).length
+      return {
+        replyNodes: q('.reply, [id^="reply"], .RepliesList .Reply, .reply_wrap, [class*="reply"]'),
+        replyLinks: q('a[href*="?reply="], a[href*="&reply="]'),
+        commentTexts: q('[data-testid="comment-text"], .reply_text, .vkitComment__contentText--6Jfyb'),
+      }
+    }).catch(() => null)
+
+    this.logger.log(`VK DETAIL COMMENT EXTRACT STATS: ${postUrl} :: ${JSON.stringify(stats)}`)
+
+    const comments = await page.evaluate((currentPostUrl: string) => {
+      const normalizeText = (value: string | null | undefined): string =>
+        String(value || '')
+          .replace(/\u00a0/g, ' ')
+          .replace(/[ \t]+/g, ' ')
+          .replace(/\n{3,}/g, '\n\n')
+          .trim()
+
+      const makeAbsoluteVkUrl = (href: string | null | undefined): string => {
+        const raw = String(href || '').trim()
+        if (!raw) return currentPostUrl
+        if (/^https?:\/\//i.test(raw)) return raw
+        if (raw.startsWith('/')) return `https://vk.com${raw}`
+        return `https://vk.com/${raw.replace(/^\/+/, '')}`
+      }
+
+      const parseReplyId = (value: string | null | undefined): string => {
+        const raw = String(value || '')
+        const match =
+          raw.match(/[?&]reply=(\d+)/i) ||
+          raw.match(/(?:^|\b)reply(\d+)\b/i) ||
+          raw.match(/comment[_:-]?(\d+)/i)
+        return match?.[1] || ''
+      }
+
+      const selectors = [
+        '.reply',
+        '[id^="reply"]',
+        '.RepliesList .Reply',
+        '.reply_wrap',
+        '.vkitCommentBase__in--9swaG',
+        '[data-testid*="comment"]',
+        '[class*="reply"]'
+      ]
+
+      const nodes = Array.from(
+        new Set(
+          selectors.flatMap((selector) => Array.from(document.querySelectorAll(selector)))
+        )
+      )
+
+      const rows: Array<{
+        commentId: string
+        author: string | null
+        text: string
+        publishedAtRaw: string
+        url: string
+        replyTo: string | null
+      }> = []
+
+      for (const node of nodes) {
+        const el = node as HTMLElement
+
+        const authorEl =
+          el.querySelector('[data-testid="comment-owner"]') ||
+          el.querySelector('.reply_author, a.reply_author, a.author') ||
+          el.querySelector('a[href^="/id"], a[href^="/club"], a[href^="/public"], a[href^="/away.php"]')
+
+        const textEl =
+          el.querySelector('[data-testid="comment-text"]') ||
+          el.querySelector('.reply_text') ||
+          el.querySelector('.vkitComment__contentText--6Jfyb') ||
+          el.querySelector('[class*="reply_text"]') ||
+          el.querySelector('[class*="contentText"]')
+
+        const dateEl =
+          el.querySelector('[data-testid="wall_comment_date"]') ||
+          el.querySelector('a[href*="?reply="], a[href*="&reply="]')
+
+        const permalinkEl =
+          el.querySelector('a[href*="?reply="], a[href*="&reply="], a[href*="/wall"]') as HTMLAnchorElement | null
+
+        const rawId =
+          el.id ||
+          el.getAttribute('data-id') ||
+          el.getAttribute('data-comment-id') ||
+          el.getAttribute('data-reply-id') ||
+          ''
+
+        const rawHtml = el.outerHTML || ''
+        const href = permalinkEl?.getAttribute('href') || ''
+        const absoluteUrl = makeAbsoluteVkUrl(href)
+        const commentId =
+          parseReplyId(absoluteUrl) ||
+          parseReplyId(href) ||
+          parseReplyId(rawId) ||
+          parseReplyId(rawHtml)
+
+        const text =
+          normalizeText(textEl?.textContent || null) ||
+          normalizeText(el.innerText || '')
+
+        const author = normalizeText(authorEl?.textContent || null) || null
+        const publishedAtRaw = normalizeText(dateEl?.textContent || null)
+
+        let replyTo: string | null = null
+        const replyToAttr =
+          el.getAttribute('data-reply-to') ||
+          el.getAttribute('data-to-id') ||
+          ''
+        const parsedReplyTo = parseReplyId(replyToAttr)
+        if (parsedReplyTo && parsedReplyTo !== commentId) {
+          replyTo = parsedReplyTo
+        }
+
+        if (commentId && text && text.length >= 2) {
+          rows.push({
+            commentId,
+            author,
+            text,
+            publishedAtRaw,
+            url: absoluteUrl.includes('reply=') ? absoluteUrl : `${currentPostUrl}?reply=${commentId}`,
+            replyTo
+          })
+        }
+      }
+
+      if (rows.length === 0) {
+        const anchors = Array.from(
+          document.querySelectorAll('a[href*="?reply="], a[href*="&reply="]')
+        ) as HTMLAnchorElement[]
+
+        for (const anchor of anchors) {
+          const href = anchor.getAttribute('href') || ''
+          const url = makeAbsoluteVkUrl(href)
+          const commentId = parseReplyId(url) || parseReplyId(href)
+          if (!commentId) continue
+
+          const holder =
+            (anchor.closest('.reply') as HTMLElement | null) ||
+            (anchor.closest('[id^="reply"]') as HTMLElement | null) ||
+            (anchor.closest('.reply_wrap') as HTMLElement | null) ||
+            (anchor.parentElement as HTMLElement | null)
+
+          const text = normalizeText(holder?.innerText || '')
+          if (!text || text.length < 2) continue
+
+          const authorEl =
+            holder?.querySelector('.reply_author, a.reply_author, a.author') ||
+            holder?.querySelector('[data-testid="comment-owner"]')
+
+          const author = normalizeText(authorEl?.textContent || null) || null
+
+          rows.push({
+            commentId,
+            author,
+            text,
+            publishedAtRaw: '',
+            url,
+            replyTo: null
+          })
+        }
+      }
+
+      const seen = new Set<string>()
+      return rows.filter((item) => {
+        const key = `${item.commentId}::${item.url}`
+        if (!item.commentId || !item.text) return false
+        if (seen.has(key)) return false
+        seen.add(key)
+        return true
+      })
+    }, postUrl).catch(() => [])
+
+    return comments.map((item: any) => ({
+      commentId: String(item.commentId || ''),
+      author: item.author ? String(item.author) : null,
+      text: String(item.text || ''),
+      publishedAt: null,
+      url: String(item.url || postUrl),
+      replyTo: item.replyTo ? String(item.replyTo) : null,
+    }))
+  }
+
+  private async closeVkPostCard(page: any): Promise<void> {
+    const closeSelectors = [
+      'button[aria-label*="Закры"]',
+      'button[aria-label*="закры"]',
+      'button[title*="Закры"]',
+      'button[title*="закры"]',
+      '[role="button"][aria-label*="Закры"]',
+      '[role="button"][aria-label*="закры"]',
+      '.vkuiModalDismissButton',
+      '.vkuimodal__dismiss',
+      '.vkuiPopout__close',
+      '.vkuiDialog__close',
+      '.vkuiInternalModalCardBase__dismiss',
+      'button:has(svg)',
+    ]
+
+    for (const selector of closeSelectors) {
+      try {
+        const locator = page.locator(selector).first()
+        const count = await locator.count().catch(() => 0)
+        if (!count) continue
+
+        const box = await locator.boundingBox().catch(() => null)
+        if (!box) continue
+
+        await locator.click({ timeout: 1500 }).catch(() => null)
+        await page.waitForTimeout(700)
+
+        const commentsStillVisible = await page
+          .locator('.vkitCommentBase__in--9swaG, [data-testid="comment-text"]')
+          .count()
+          .catch(() => 0)
+
+        if (commentsStillVisible === 0) {
+          return
+        }
+      } catch (_) {}
+    }
+
+    await page.keyboard.press('Escape').catch(() => null)
+    await page.waitForTimeout(700)
+  }
+
+
+  private async safeCreatePage(browserContext: any, label: string): Promise<any> {
+    let lastError: unknown = null
+
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        const pages = browserContext.pages?.() ?? []
+        if (Array.isArray(pages) && pages.length > 3) {
+          for (const extraPage of pages.slice(0, Math.max(0, pages.length - 2))) {
+            try {
+              if (!extraPage.isClosed?.()) {
+                await extraPage.close({ runBeforeUnload: false }).catch(() => null)
+              }
+            } catch (_) {}
+          }
+        }
+
+        const page = await browserContext.newPage()
+        await page.setViewportSize({ width: 1440, height: 900 }).catch(() => null)
+        this.logger.log(`VK SAFE NEW PAGE OK: ${label} :: attempt ${attempt}`)
+        return page
+      } catch (error) {
+        lastError = error
+        const message = error instanceof Error ? error.message : String(error)
+        this.logger.warn(`VK SAFE NEW PAGE FAIL: ${label} :: attempt ${attempt} :: ${message}`)
+
+        const pages = browserContext.pages?.() ?? []
+        if (Array.isArray(pages)) {
+          for (const extraPage of pages) {
+            try {
+              if (!extraPage.isClosed?.()) {
+                await extraPage.close({ runBeforeUnload: false }).catch(() => null)
+              }
+            } catch (_) {}
+          }
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 1200 * attempt))
+      }
+    }
+
+    throw lastError instanceof Error ? lastError : new Error(`Failed to create page: ${label}`)
+  }
+
+
+
+  private resolveChromiumExecutablePath(): string | null {
+    const candidates = [
+      process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH,
+      process.env.CHROMIUM_PATH,
+      '/usr/bin/chromium',
+      '/usr/bin/chromium-browser',
+      '/snap/bin/chromium',
+    ].filter((value): value is string => Boolean(value))
+
+    for (const candidate of candidates) {
+      try {
+        if (fs.existsSync(candidate)) {
+          return candidate
+        }
+      } catch (_) {}
+    }
+
+    return null
+  }
+
+  private normalizeVkPostUrl(url: string): string | null {
+    const value = String(url || '').trim()
+    if (!value) return null
+
+    let normalized = value
+
+    if (normalized.startsWith('//')) {
+      normalized = `https:${normalized}`
+    } else if (normalized.startsWith('/')) {
+      normalized = `https://vk.com${normalized}`
+    }
+
+    if (!/^https?:\/\//i.test(normalized)) {
+      normalized = `https://vk.com/${normalized.replace(/^\/+/, '')}`
+    }
+
+    try {
+      const parsed = new URL(normalized)
+      if (!/vk\.com$/i.test(parsed.hostname)) return null
+
+      parsed.hash = ''
+      parsed.search = ''
+
+      const pathname = parsed.pathname.replace(/\/+$/, '')
+      const match = pathname.match(/\/wall(-?\d+_\d+)$/i)
+      if (!match) return null
+
+      return `https://vk.com/wall${match[1]}`
+    } catch (_) {
+      return null
+    }
+  }
+
+}
