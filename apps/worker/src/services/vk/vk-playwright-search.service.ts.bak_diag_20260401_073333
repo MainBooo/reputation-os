@@ -429,42 +429,6 @@ const normalizedPostUrls: string[] = Array.from(
 
             comments.push(...Array.from(uniqueComments.values()).slice(0, 100))
 
-              if (commentNodesCount > 0 && comments.length === 0) {
-                const commentDebug = await detail.evaluate(() => {
-                  const selectors = [
-                    '.reply',
-                    '[id^="reply"]',
-                    '.RepliesList .Reply',
-                    '.reply_wrap',
-                    '[data-testid*="comment"]',
-                    '[class*="reply"]'
-                  ]
-
-                  const nodes = Array.from(
-                    new Set(
-                      selectors.flatMap((selector) => Array.from(document.querySelectorAll(selector)))
-                    )
-                  ).slice(0, 5)
-
-                  return nodes.map((node) => {
-                    const el = node as HTMLElement
-                    return {
-                      tag: el.tagName,
-                      id: el.id || '',
-                      className: String(el.className || ''),
-                      dataId: el.getAttribute('data-id') || '',
-                      dataCommentId: el.getAttribute('data-comment-id') || '',
-                      textSample: (el.innerText || '').slice(0, 400),
-                      htmlSample: (el.outerHTML || '').slice(0, 1200)
-                    }
-                  })
-                }).catch(() => [])
-
-                this.logger.log(`VK DETAIL COMMENT DEBUG: ${postUrl} :: ${JSON.stringify(commentDebug)}`)
-              }
-
-
-
             this.logger.log(`VK DETAIL COMMENTS COUNT: ${postUrl} :: ${comments.length}`)
             await this.closeVkPostCard(detail)
 
@@ -538,7 +502,7 @@ const normalizedPostUrls: string[] = Array.from(
       'a'
     ]
 
-    for (let round = 0; round < 2; round += 1) {
+    for (let round = 0; round < 3; round += 1) {
       for (const selector of expandSelectors) {
         const locator = page.locator(selector)
         const count = Math.min(await locator.count().catch(() => 0), 12)
@@ -560,8 +524,8 @@ const normalizedPostUrls: string[] = Array.from(
         }
       }
 
-      await page.mouse.wheel(0, 1400).catch(() => null)
-      await page.waitForTimeout(450)
+      await page.mouse.wheel(0, 1800).catch(() => null)
+      await page.waitForTimeout(700)
     }
 
     const stats = await page.evaluate(() => {

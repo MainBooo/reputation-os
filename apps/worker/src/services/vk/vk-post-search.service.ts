@@ -96,7 +96,7 @@ export class VkPostSearchService {
     }
 
     const source = await this.ensureSource(company.workspaceId)
-    const found = await this.searchService.searchPosts(aliases, company.workspaceId)
+    const found = await this.searchService.searchPosts(aliases, company.workspaceId, company.id)
 
     let relevantPosts = 0
     let relevantComments = 0
