@@ -115,7 +115,7 @@ export class VkPostSearchService {
           title: null,
           content: post.text || '',
           author: post.author,
-          publishedAt: post.publishedAt,
+          publishedAt: post.publishedAt ?? new Date(),
           rawPayload: post.rawPayload,
           metadata: {
             relevanceScore: postScore.score,
@@ -141,7 +141,7 @@ export class VkPostSearchService {
           title: null,
           content: comment.text || '',
           author: comment.author,
-          publishedAt: comment.publishedAt,
+          publishedAt: comment.publishedAt ?? new Date(),
           rawPayload: {
             post,
             comment
