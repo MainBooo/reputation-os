@@ -6,7 +6,9 @@ import { VkPlaywrightSearchService } from './vk-playwright-search.service'
 import { VkRelevanceService, VkCompanySearchProfile } from './vk-relevance.service'
 
 @Injectable()
+
 export class VkPostSearchService {
+
   private readonly logger = new Logger(VkPostSearchService.name)
 
   constructor(
@@ -111,9 +113,9 @@ export class VkPostSearchService {
           platform: Platform.VK,
           type: MentionType.VK_POST,
           externalMentionId: `vk:post:${post.ownerId}:${post.postId}`,
-          url: post.url,
+          url: post.url || post.postUrl,
           title: null,
-          content: post.text || '',
+          content: (post.text || '').trim(),
           author: post.author,
           publishedAt: post.publishedAt ?? new Date(),
           rawPayload: post.rawPayload,
@@ -128,20 +130,22 @@ export class VkPostSearchService {
       }
 
       for (const comment of post.comments) {
-        const commentScore = this.relevanceService.score(comment.text || '', aliases, profile)
-        if (commentScore.decision !== 'RELEVANT') continue
+        const commentText = (comment.text || '').trim()
+        if (!commentText) continue
+
+        const commentScore = this.relevanceService.score(commentText, aliases, profile)
 
         await this.mentionService.persistExternalMention({
           companyId: company.id,
           sourceId: source.id,
           platform: Platform.VK,
           type: MentionType.VK_COMMENT,
-          externalMentionId: `vk:comment:${post.ownerId}:${post.postId}:${comment.commentId}`,
-          url: comment.url,
+          externalMentionId: `vk:comment:${post.ownerId}:${post.postId}:${comment.commentId || 'unknown'}`,
+          url: comment.url || `${post.url || post.postUrl}?reply=${comment.commentId || 'unknown'}`,
           title: null,
-          content: comment.text || '',
-          author: comment.author,
-          publishedAt: comment.publishedAt ?? new Date(),
+          content: commentText,
+          author: comment.author || undefined,
+          publishedAt: comment.publishedAt ?? post.publishedAt ?? new Date(),
           rawPayload: {
             post,
             comment
