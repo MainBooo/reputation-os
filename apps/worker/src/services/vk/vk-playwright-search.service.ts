@@ -57,11 +57,175 @@ export class VkPlaywrightSearchService {
     } catch {}
   }
 
-  private normalizeWallUrl(href: string): string | null {
-    if (!href) return null
-    const full = href.startsWith('http') ? href : `https://vk.com${href}`
-    const match = full.match(/https:\/\/vk\.com\/wall-?\d+_\d+/)
-    return match ? match[0] : null
+  private cleanVkText(value: string | null | undefined): string {
+    if (!value) return ''
+
+    let text = value
+      .replace(/[\u200B-\u200D\uFEFF]/g, '')
+      .replace(/\u00A0/g, ' ')
+      .replace(/\r/g, '\n')
+      .replace(/\t/g, ' ')
+
+    const noisePatterns = [
+      /Пожаловаться/gi,
+      /Ответить/gi,
+      /Поделиться/gi,
+      /Поставить лайк/gi,
+      /Сначала интересные/gi,
+      /Сначала новые/gi,
+      /Сначала старые/gi,
+      /Показать ещё/gi,
+      /Написать комментарий/gi
+    ]
+
+    for (const pattern of noisePatterns) {
+      text = text.replace(pattern, ' ')
+    }
+
+    text = text
+      .replace(/[ ]{2,}/g, ' ')
+      .replace(/\n{3,}/g, '\n\n')
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .join('\n')
+      .trim()
+
+    return text
+  }
+
+
+  private parseVkPublishedAt(value: string | null | undefined): Date | null {
+    const text = (value || '').trim().toLowerCase()
+    if (!text) return null
+
+    const months: Record<string, number> = {
+      'янв': 0,
+      'фев': 1,
+      'мар': 2,
+      'апр': 3,
+      'мая': 4,
+      'май': 4,
+      'июн': 5,
+      'июл': 6,
+      'авг': 7,
+      'сен': 8,
+      'сент': 8,
+      'окт': 9,
+      'ноя': 10,
+      'дек': 11
+    }
+
+    const absolute = text.match(/^(\d{1,2})\s+([а-яё]+)\s*(\d{4})?$/i)
+    if (absolute) {
+      const day = Number(absolute[1])
+      const monthToken = absolute[2].slice(0, 4)
+      const year = absolute[3] ? Number(absolute[3]) : new Date().getFullYear()
+
+      let month: number | undefined = undefined
+      for (const [key, value] of Object.entries(months)) {
+        if (monthToken.startsWith(key)) {
+          month = value
+          break
+        }
+      }
+
+      if (month !== undefined) {
+        const dt = new Date(year, month, day, 0, 0, 0, 0)
+        if (!Number.isNaN(dt.getTime())) return dt
+      }
+    }
+
+    const todayTime = text.match(/^сегодня\s+в\s+(\d{1,2}):(\d{2})$/i)
+    if (todayTime) {
+      const now = new Date()
+      const dt = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate(),
+        Number(todayTime[1]),
+        Number(todayTime[2]),
+        0,
+        0
+      )
+      if (!Number.isNaN(dt.getTime())) return dt
+    }
+
+    const yesterdayTime = text.match(/^вчера\s+в\s+(\d{1,2}):(\d{2})$/i)
+    if (yesterdayTime) {
+      const now = new Date()
+      const dt = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate() - 1,
+        Number(yesterdayTime[1]),
+        Number(yesterdayTime[2]),
+        0,
+        0
+      )
+      if (!Number.isNaN(dt.getTime())) return dt
+    }
+
+    return null
+  }
+
+  private cleanVkCommentText(
+    value: string | null | undefined,
+    author?: string | null
+  ): string {
+    let text = this.cleanVkText(value)
+    const cleanAuthor = this.cleanVkText(author || '')
+
+    if (!text) return ''
+
+    const uniqueLines: string[] = []
+    for (const rawLine of text.split('\n')) {
+      const line = rawLine.trim()
+      if (!line) continue
+      if (uniqueLines[uniqueLines.length - 1] === line) continue
+      uniqueLines.push(line)
+    }
+
+    const lines = uniqueLines.filter((line) => {
+      if (!line) return false
+      if (cleanAuthor && line === cleanAuthor) return false
+      if (/^Автор$/i.test(line)) return false
+      if (/^Сообществу$/i.test(line)) return false
+      if (/^(сегодня|вчера)$/i.test(line)) return false
+      if (/^\d{1,2}:\d{2}$/i.test(line)) return false
+      if (/^\d+$/i.test(line)) return false
+      if (/^\d{1,2}\s+[а-яё]{3,}(\s+в\s+\d{1,2}:\d{2})?$/i.test(line)) return false
+      if (/^[·,.;:!\-—–]+$/u.test(line)) return false
+      return true
+    })
+
+    text = lines.join('\n').trim()
+
+    if (cleanAuthor) {
+      const escapedAuthor = cleanAuthor.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      text = text
+        .replace(new RegExp(`^${escapedAuthor}[,:\s·\-—–]*`, 'i'), '')
+        .replace(new RegExp(`^Автор\s+${escapedAuthor}[,:\s·\-—–]*`, 'i'), '')
+        .trim()
+    }
+
+    text = text
+      .replace(/^Автор\s+/i, '')
+      .replace(/^Сообществу\s*/i, '')
+      .replace(/^[^\n,]{2,80}\s*[·•]\s*/u, '')
+      .replace(/^[,.;:!\-—–\s]+/u, '')
+      .replace(/\s+\d{1,2}\s+[а-яё]{3,}(\s+в\s+\d{1,2}:\d{2})?(\s+\d+)?$/i, '')
+      .replace(/\s+(сегодня|вчера)(\s+в\s+\d{1,2}:\d{2})?(\s+\d+)?$/i, '')
+      .replace(/\s+\d{1,2}:\d{2}(\s+\d+)?$/i, '')
+      .replace(/^(?:[A-Za-zА-Яа-яЁё0-9_.\- ]{2,60}),\s+/u, '')
+      .replace(/[ ]{2,}/g, ' ')
+      .trim()
+
+    if (/^[,.;:!\-—–·\s]*$/u.test(text)) {
+      return ''
+    }
+
+    return text
   }
 
   private async openSearchPage(page: Page, query: string) {
@@ -101,63 +265,154 @@ export class VkPlaywrightSearchService {
     await page.waitForTimeout(5000)
   }
 
-  private async collectSearchLinks(page: Page): Promise<string[]> {
-    const selectors = [
-      'a[href*="/wall"]',
-      '#spa_layout_content a[href*="/wall"]',
-      'main a[href*="/wall"]'
-    ]
+  private async autoScrollSearchResults(page: Page) {
+    let previousHeight = 0
 
-    const out = new Set<string>()
-
-    for (const selector of selectors) {
+    for (let i = 0; i < 12; i += 1) {
       try {
-        const hrefs = await page.$$eval(selector, (els) =>
-          els
-            .map((e) => (e as HTMLAnchorElement).getAttribute('href') || '')
-            .filter(Boolean)
-        )
+        const currentHeight = await page.evaluate(() => {
+          const el = document.scrollingElement || document.documentElement || document.body
+          return el.scrollHeight
+        })
 
-        for (const href of hrefs) {
-          const normalized = href
-            ? (href.startsWith('http') ? href : `https://vk.com${href}`)
-            : null
+        await page.evaluate(() => {
+          const el = document.scrollingElement || document.documentElement || document.body
+          el.scrollTo({ top: el.scrollHeight, behavior: 'instant' as ScrollBehavior })
+        })
 
-          const wallUrl = normalized ? normalized.match(/https:\/\/vk\.com\/wall-?\d+_\d+/)?.[0] : null
-          if (wallUrl) out.add(wallUrl)
+        await page.waitForTimeout(1800)
+
+        const nextHeight = await page.evaluate(() => {
+          const el = document.scrollingElement || document.documentElement || document.body
+          return el.scrollHeight
+        })
+
+        this.logger.log(`VK SEARCH SCROLL: step=${i + 1} height=${currentHeight} -> ${nextHeight}`)
+
+        if (nextHeight <= previousHeight || nextHeight === currentHeight) {
+          break
         }
-      } catch {}
+
+        previousHeight = nextHeight
+      } catch (e: any) {
+        this.logger.warn(`VK SEARCH SCROLL ERROR: ${e?.message || e}`)
+        break
+      }
+    }
+  }
+
+  private async collectSearchLinks(page: Page): Promise<string[]> {
+    const priorityLinks = await page.$$eval(
+      'a[data-testid="post_date_block_preview"][href*="/wall"]',
+      (els) => {
+        const normalizeWallUrl = (href: string): string | null => {
+          const normalized = href.startsWith('http') ? href : `https://vk.com${href}`
+          return normalized.match(/https:\/\/vk\.com\/wall-?\d+_\d+/)?.[0] || null
+        }
+
+        const extractPositiveInt = (value: string | null | undefined): number => {
+          const text = String(value || '').replace(/\s+/g, '')
+          if (!text) return 0
+          const match = text.match(/\d+/)
+          return match ? Number(match[0]) : 0
+        }
+
+        const getCommentCountFromCard = (anchor: Element): number => {
+          let node: Element | null = anchor
+
+          for (let level = 0; level < 8 && node; level += 1) {
+            const selectors = [
+              'div.vkuiFlex__host.vkuiFlex__wrap.vkuiRootComponent__host > div:nth-child(4) > span[class*="vkitPostFooterAction__label"]',
+              'div[class*="vkuiFlex__wrap"] > div:nth-child(4) > span[class*="vkitPostFooterAction__label"]',
+              'div:nth-child(4) > span[class*="vkitPostFooterAction__label"]'
+            ]
+
+            for (const selector of selectors) {
+              const el = node.querySelector(selector)
+              const count = extractPositiveInt(el?.textContent)
+              if (count > 0) return count
+            }
+
+            node = node.parentElement
+          }
+
+          return 0
+        }
+
+        const out: string[] = []
+        const seen = new Set<string>()
+
+        for (const el of els) {
+          const href = (el as HTMLAnchorElement).getAttribute('href') || ''
+          const wallUrl = normalizeWallUrl(href)
+          if (!wallUrl || seen.has(wallUrl)) continue
+
+          const commentCount = getCommentCountFromCard(el)
+          if (commentCount <= 0) continue
+
+          seen.add(wallUrl)
+          out.push(wallUrl)
+        }
+
+        return out
+      }
+    ).catch(() => [])
+
+    if (priorityLinks.length) {
+      return priorityLinks
     }
 
-    return Array.from(out)
+    return []
   }
 
   private async extractPostText(page: Page): Promise<string> {
     const selectors = [
-      'div[data-testid="post_message"]',
+      '[data-testid="post_message"]',
       '.wall_post_text',
       '.vkitPost__text',
       '.pi_text',
-      'article'
+      '.PostContentText',
+      'div[class*="post_text"]'
     ]
 
     for (const selector of selectors) {
       try {
-        const el = await page.$(selector)
-        if (!el) continue
-        const text = (await el.innerText()).trim()
-        if (text) return text
+        const allTexts = await page.$$eval(selector, (nodes) =>
+          nodes
+            .map((n) => ((n as HTMLElement).innerText || '').trim())
+            .filter(Boolean)
+        )
+
+        const best = allTexts
+          .map((text) => text.trim())
+          .sort((a, b) => b.length - a.length)[0]
+
+        if (best) {
+          const cleaned = this.cleanVkText(best)
+          if (cleaned && cleaned.length > 3) {
+            return cleaned
+          }
+        }
       } catch {}
     }
 
-    return ''
+    try {
+      const title = await page.title()
+      return this.cleanVkText(title)
+    } catch {
+      return ''
+    }
   }
 
   private async extractCommentBlocks(page: Page): Promise<VkComment[]> {
     const commentSelectors = [
+      '[data-testid^="wall_comments_comment"]',
+      'div[class*="vkitCommentBase__root"]',
+      'div[class*="vkitComment__root"]',
       '[id^="-"]',
       '.replies .reply',
-      '.vkitComment'
+      '.vkitComment',
+      '[data-testid="comment"]'
     ]
 
     for (const selector of commentSelectors) {
@@ -170,45 +425,95 @@ export class VkPlaywrightSearchService {
             .map((node, index) => {
               const root = node as HTMLElement
               const id = root.getAttribute('id') || ''
-              const textEl =
-                root.querySelector('div.vkitComment__contentWrapper') ||
-                root.querySelector('.reply_text') ||
-                root.querySelector('[data-testid="comment_text"]') ||
-                root
+
+              const text = (root.innerText || '').trim()
+              if (!text) return null
 
               const authorEl =
                 root.querySelector('a[href*="/id"]') ||
-                root.querySelector('a[href^="/"]') ||
-                root.querySelector('.author')
+                root.querySelector('.author') ||
+                root.querySelector('[class*="author"]')
 
-              const text = (textEl?.textContent || '').trim()
-              if (!text) return null
+              const ownerEl =
+                root.querySelector('[class*="OwnerName"]') ||
+                root.querySelector('[class*="ownerName"]') ||
+                root.querySelector('h4 a')
 
+              const replyLink = root.querySelector('a[href*="reply="]') as HTMLAnchorElement | null
+              const replyHref = replyLink?.getAttribute('href') || ''
               const rawIdMatch = id.match(/(\d+)$/)
-              const commentId = rawIdMatch ? rawIdMatch[1] : String(index + 1)
+              const replyIdMatch = replyHref.match(/reply=(\d+)/)
+
+              const dateEl =
+                root.querySelector('span[class*="vkitComment__date"] a') ||
+                root.querySelector('[class*="vkitComment__date"] a') ||
+                root.querySelector('[class*="date"] a')
+
+              const publishedAt =
+                (dateEl && (dateEl as HTMLElement).innerText.trim()) || null
+
+              const commentId =
+                (rawIdMatch ? rawIdMatch[1] : null) ||
+                (replyIdMatch ? replyIdMatch[1] : null)
+
+              if (!commentId) return null
 
               return {
                 commentId,
                 text,
-                author: (authorEl?.textContent || '').trim() || null
+                author: ((authorEl as HTMLElement | null)?.innerText || '').trim() || null,
+                ownerName: ((ownerEl as HTMLElement | null)?.innerText || '').trim() || null,
+                publishedAt
               }
             })
             .filter(Boolean) as Array<{
-              commentId: string
-              text: string
-              author: string | null
-            }>
+            commentId: string
+            text: string
+            author: string | null
+            ownerName: string | null
+            publishedAt: string | null
+          }>
         })
 
         if (comments.length) {
-          return comments.map((comment) => ({
-            commentId: comment.commentId,
-            text: comment.text,
-            url: page.url(),
-            author: comment.author,
-            publishedAt: null,
-            rawPayload: null
-          }))
+          const cleaned = comments
+            .map((comment) => {
+              const ownerName = comment.ownerName ? this.cleanVkText(comment.ownerName) : null
+              const authorBase = comment.author ? this.cleanVkText(comment.author) : null
+              const author = authorBase || ownerName || null
+
+              let text = this.cleanVkCommentText(comment.text, author)
+
+              if (ownerName) {
+                const escapedOwner = ownerName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+                text = text
+                  .replace(new RegExp(`^${escapedOwner}\\s*`, 'i'), '')
+                  .replace(new RegExp(`^${escapedOwner}\\s*,\\s*`, 'i'), '')
+                  .trim()
+              }
+
+              text = text
+                .replace(/^,\s*/u, '')
+                .replace(/[ ]{2,}/g, ' ')
+                .trim()
+
+              return {
+                commentId: comment.commentId,
+                text,
+                url: page.url(),
+                author,
+                publishedAt: this.parseVkPublishedAt(comment.publishedAt),
+                rawPayload: {
+                  ownerName,
+                  publishedAtText: comment.publishedAt || null
+                }
+              }
+            })
+            .filter((comment) => comment.text.length >= 2)
+
+          if (cleaned.length) {
+            return cleaned
+          }
         }
       } catch {}
     }
@@ -216,10 +521,128 @@ export class VkPlaywrightSearchService {
     return []
   }
 
+  private async expandMoreComments(page: Page) {
+    for (let round = 0; round < 6; round += 1) {
+      let clicked = 0
+
+      const selectors = [
+        'button',
+        'a',
+        '[role="button"]'
+      ]
+
+      for (const selector of selectors) {
+        try {
+          const elements = await page.$$(selector)
+
+          for (const element of elements) {
+            try {
+              const text = ((await element.innerText().catch(() => '')) || '').trim()
+
+              if (!text) continue
+
+              const normalized = text.toLowerCase()
+
+              const shouldClick =
+                normalized.includes('показать ещё') ||
+                normalized.includes('ещё комментар') ||
+                normalized.includes('еще комментар') ||
+                normalized.includes('ещё ответ') ||
+                normalized.includes('еще ответ') ||
+                normalized.includes('показать ответ') ||
+                normalized.includes('показать предыдущ')
+
+              if (!shouldClick) continue
+
+              await element.click({ timeout: 2000 }).catch(() => {})
+              await page.waitForTimeout(1200)
+              clicked += 1
+            } catch {}
+          }
+        } catch {}
+      }
+
+      this.logger.log(`VK EXPAND COMMENTS: round=${round + 1} clicked=${clicked}`)
+
+      if (!clicked) {
+        break
+      }
+
+      await page.evaluate(() => {
+        window.scrollBy(0, 1200)
+      }).catch(() => {})
+      await page.waitForTimeout(1000)
+    }
+  }
+
+  private async extractExplicitCommentCount(page: Page): Promise<number | null> {
+    try {
+      return await page.evaluate(() => {
+        const extractPositiveInt = (value: string | null | undefined): number => {
+          const text = String(value || '').replace(/\s+/g, '')
+          if (!text) return 0
+          const match = text.match(/\d+/)
+          return match ? Number(match[0]) : 0
+        }
+
+        const nodes = Array.from(
+          document.querySelectorAll('span[class*="vkitPostFooterAction__label"]')
+        )
+
+        const counts = nodes
+          .map((n) => extractPositiveInt((n as HTMLElement).innerText))
+          .filter((n) => n >= 0)
+
+        // VK footer: [likes, shares, views, comments]
+        if (counts.length >= 4) {
+          return counts[3]
+        }
+
+        return null
+      })
+    } catch {
+      return null
+    }
+  }
+
+  private async hasCommentSignals(page: Page): Promise<boolean> {
+    const selectors = [
+      '[data-testid^="wall_comments_comment"]',
+      'div[class*="vkitCommentBase__root"]',
+      'div[class*="vkitComment__root"]',
+      '[id^="-"]',
+      'a[href*="reply="]',
+      'button[aria-label*="Комментар"]',
+      'button[aria-label*="комментар"]'
+    ]
+
+    for (const selector of selectors) {
+      try {
+        const count = await page.locator(selector).count()
+        if (count > 0) {
+          return true
+        }
+      } catch {}
+    }
+
+    try {
+      const bodyText = await page.evaluate(() => {
+        return (document.body?.innerText || '').slice(0, 12000)
+      })
+
+      if (/коммент/i.test(bodyText)) {
+        return true
+      }
+    } catch {}
+
+    return false
+  }
+
   private async openCommentsIfNeeded(page: Page) {
     const openSelectors = [
       'div.vkuiFlex__wrap > div:nth-child(4)',
       'button[aria-label*="Комментар"]',
+      'button[aria-label*="комментар"]',
       'a[href*="reply="]'
     ]
 
@@ -270,6 +693,7 @@ export class VkPlaywrightSearchService {
           this.logger.log(`VK SEARCH START: ${query}`)
 
           await this.openSearchPage(page, query)
+          await this.autoScrollSearchResults(page)
 
           const links = await this.collectSearchLinks(page)
           this.logger.log(`VK LINKS FOUND: ${links.length}`)
@@ -299,15 +723,40 @@ export class VkPlaywrightSearchService {
 
               await postPage.waitForTimeout(3000)
 
+              // === FAST COMMENT PRESENCE CHECK ===
+              const hasRealComments = await postPage.evaluate(() => {
+                const hasNodes =
+                  document.querySelector('[data-testid^="wall_comments_comment"]') ||
+                  document.querySelector('div[class*="vkitComment"]') ||
+                  document.querySelector('a[href*="reply="]')
+
+                return Boolean(hasNodes)
+              })
+
+              if (!hasRealComments) {
+                // быстрый skip без тяжёлого парсинга
+                await postPage.close().catch(() => {})
+                continue
+              }
+
               const postText = await this.extractPostText(postPage)
 
+              const hasCommentSignals = await this.hasCommentSignals(postPage)
+              if (!hasCommentSignals) {
+                this.logger.log(`VK POST SKIP: ${href} no comment signals`)
+                await this.safeClosePage(postPage)
+                continue
+              }
+
               await this.openCommentsIfNeeded(postPage)
+              await this.expandMoreComments(postPage)
 
               const comments = await this.extractCommentBlocks(postPage)
 
               this.logger.log(`VK POST CHECK: ${href} comments=${comments.length}`)
 
               if (!comments.length) {
+                this.logger.log(`VK POST SKIP: ${href} extracted comments=0`)
                 await this.safeClosePage(postPage)
                 continue
               }
