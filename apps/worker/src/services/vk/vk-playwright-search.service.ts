@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { chromium, Browser, BrowserContext, Page } from 'playwright'
 import * as path from 'path'
+import { VkAuthSessionService } from './vk-auth-session.service'
 
 export type VkComment = {
   commentId: string
@@ -27,9 +28,30 @@ export type VkPostResult = {
 export class VkPlaywrightSearchService {
   private readonly logger = new Logger(VkPlaywrightSearchService.name)
 
+  constructor(
+    private readonly vkAuthSessionService: VkAuthSessionService
+  ) {}
+
   private readonly storagePath = path.resolve(
     '/opt/reputation-os/storage/vk-sessions/vk-session.json'
   )
+
+  private async resolveStorageStatePath(workspaceId?: string): Promise<string | null> {
+    try {
+      if (workspaceId) {
+        const fromDb = await this.vkAuthSessionService.getStorageStatePath(workspaceId)
+        if (fromDb) {
+          this.logger.log(`VK SESSION: using workspace session ${fromDb}`)
+          return fromDb
+        }
+      }
+    } catch (e) {
+      this.logger.warn(`VK SESSION: failed to load from DB: ${e instanceof Error ? e.message : e}`)
+    }
+
+    this.logger.log(`VK SESSION: fallback to default ${this.storagePath}`)
+    return this.storagePath
+  }
 
   private parsePostIds(url: string): { ownerId: string; postId: string } | null {
     const match = url.match(/wall(-?\d+)_(\d+)/)
@@ -171,12 +193,49 @@ export class VkPlaywrightSearchService {
 
   private cleanVkCommentText(
     value: string | null | undefined,
-    author?: string | null
+    author?: string | null,
+    ownerName?: string | null,
+    publishedAtText?: string | null
   ): string {
     let text = this.cleanVkText(value)
+      // remove zero-width chars
+      .replace(/[\u200B-\u200D\uFEFF]/g, '')
+      // normalize spaces
+      .replace(/\u00A0/g, ' ')
+      // remove VK badge
+      .replace(/Подтверждённый аккаунт/gi, '')
+      // remove VK reply prefixes
+      .replace(/^·\s*Автор\s+[^,\n]{1,80}[,:\s·\-—–]*/iu, '')
+      .replace(/^·\s*Сообществу\s+[^,\n]{1,120}[,:\s·\-—–]*/iu, '')
+      .replace(/^(?:Сообществу\s+){2,}/iu, '')
+      // remove ownerName prefix like "ALLERGIA\n,"
+      .replace(/^[^\n]{2,50}\n,\s*/g, '')
+      // remove leading commas/spaces
+      .replace(/^[,.;:!·\-—–\s]+/u, '')
+      // normalize newlines
+      .replace(/\n+/g, ' ')
+      // collapse spaces
+      .replace(/[ ]{2,}/g, ' ')
+      .trim()
+
     const cleanAuthor = this.cleanVkText(author || '')
+    const cleanOwnerName = this.cleanVkText(ownerName || '')
+    const cleanPublishedAtText = this.cleanVkText(publishedAtText || '')
 
     if (!text) return ''
+
+    const escapeRegExp = (input: string) => input.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+    const isVkDateLike = (input: string) => {
+      if (!input) return false
+      if (/^(сегодня|вчера)$/i.test(input)) return true
+      if (/^(сегодня|вчера)\s+в\s+\d{1,2}:\d{2}$/i.test(input)) return true
+      if (/^\d{1,2}:\d{2}$/i.test(input)) return true
+      if (/^\d{1,2}\s+[а-яё]{3,}(\s+\d{4})?(\s+в\s+\d{1,2}:\d{2})?$/i.test(input)) return true
+      if (/^\d{1,2}\s+[а-яё]{3,}\.?$/i.test(input)) return true
+      if (/^\d{1,2}\s+[а-яё]{3,}\s+в$/i.test(input)) return true
+      return false
+    }
 
     const uniqueLines: string[] = []
     for (const rawLine of text.split('\n')) {
@@ -189,37 +248,67 @@ export class VkPlaywrightSearchService {
     const lines = uniqueLines.filter((line) => {
       if (!line) return false
       if (cleanAuthor && line === cleanAuthor) return false
+      if (cleanOwnerName && line === cleanOwnerName) return false
+      if (cleanPublishedAtText && line === cleanPublishedAtText) return false
       if (/^Автор$/i.test(line)) return false
       if (/^Сообществу$/i.test(line)) return false
-      if (/^(сегодня|вчера)$/i.test(line)) return false
-      if (/^\d{1,2}:\d{2}$/i.test(line)) return false
+      if (/^ответить$/i.test(line)) return false
+      if (/^поделиться$/i.test(line)) return false
+      if (/^пожаловаться$/i.test(line)) return false
+      if (/^ещё\s*\d+\s*ответ/i.test(line)) return false
       if (/^\d+$/i.test(line)) return false
-      if (/^\d{1,2}\s+[а-яё]{3,}(\s+в\s+\d{1,2}:\d{2})?$/i.test(line)) return false
+      if (isVkDateLike(line)) return false
       if (/^[·,.;:!\-—–]+$/u.test(line)) return false
       return true
     })
 
     text = lines.join('\n').trim()
 
-    if (cleanAuthor) {
-      const escapedAuthor = cleanAuthor.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    for (const candidate of [cleanAuthor, cleanOwnerName]) {
+      if (!candidate) continue
+      const escapedCandidate = escapeRegExp(candidate)
       text = text
-        .replace(new RegExp(`^${escapedAuthor}[,:\s·\-—–]*`, 'i'), '')
-        .replace(new RegExp(`^Автор\s+${escapedAuthor}[,:\s·\-—–]*`, 'i'), '')
+        .replace(new RegExp(`^${escapedCandidate}[,:\s·\-—–]*`, 'i'), '')
+        .replace(new RegExp(`^Автор\s+${escapedCandidate}[,:\s·\-—–]*`, 'i'), '')
+        .replace(new RegExp(`^${escapedCandidate}\\n\s*,\s*`, 'i'), '')
+        .replace(new RegExp(`^${escapedCandidate}\s*,\s*`, 'i'), '')
         .trim()
     }
 
     text = text
+      .replace(/^·\s*Автор\s+[^,\n]{1,80}[,:\s·\-—–]*/iu, '')
+      .replace(/^·\s*Сообществу\s+[^,\n]{1,120}[,:\s·\-—–]*/iu, '')
+      .replace(/^(?:Сообществу\s+){2,}/iu, '')
       .replace(/^Автор\s+/i, '')
       .replace(/^Сообществу\s*/i, '')
+      .replace(/^Ответить\s*/i, '')
+      .replace(/^Поделиться\s*/i, '')
+      .replace(/^Пожаловаться\s*/i, '')
       .replace(/^[^\n,]{2,80}\s*[·•]\s*/u, '')
-      .replace(/^[,.;:!\-—–\s]+/u, '')
-      .replace(/\s+\d{1,2}\s+[а-яё]{3,}(\s+в\s+\d{1,2}:\d{2})?(\s+\d+)?$/i, '')
+      .replace(/^[,.;:!·\-—–\s]+/u, '')
+      .replace(/\s+\d{1,2}\s+[а-яё]{3,}(\s+\d{4})?(\s+в\s+\d{1,2}:\d{2})?(\s+\d+)?$/i, '')
+      .replace(/\s+\d{1,2}\s+[а-яё]{3,}\s+в$/i, '')
       .replace(/\s+(сегодня|вчера)(\s+в\s+\d{1,2}:\d{2})?(\s+\d+)?$/i, '')
       .replace(/\s+\d{1,2}:\d{2}(\s+\d+)?$/i, '')
       .replace(/^(?:[A-Za-zА-Яа-яЁё0-9_.\- ]{2,60}),\s+/u, '')
       .replace(/[ ]{2,}/g, ' ')
       .trim()
+
+    if (cleanPublishedAtText && text === cleanPublishedAtText) {
+      return ''
+    }
+
+    if (cleanAuthor && text === cleanAuthor) {
+      return ''
+    }
+
+    if (cleanOwnerName && text === cleanOwnerName) {
+      return ''
+    }
+
+    if (isVkDateLike(text)) {
+      return ''
+    }
 
     if (/^[,.;:!\-—–·\s]*$/u.test(text)) {
       return ''
@@ -482,7 +571,12 @@ export class VkPlaywrightSearchService {
               const authorBase = comment.author ? this.cleanVkText(comment.author) : null
               const author = authorBase || ownerName || null
 
-              let text = this.cleanVkCommentText(comment.text, author)
+              let text = this.cleanVkCommentText(
+                comment.text,
+                author,
+                ownerName,
+                comment.publishedAt
+              )
 
               if (ownerName) {
                 const escapedOwner = ownerName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -664,6 +758,7 @@ export class VkPlaywrightSearchService {
   ): Promise<VkPostResult[]> {
     const results: VkPostResult[] = []
     const visited = new Set<string>()
+    const maxPostsPerQuery = 12
 
     let browser: Browser | null = null
     let context: BrowserContext | null = null
@@ -672,11 +767,13 @@ export class VkPlaywrightSearchService {
     try {
       browser = await chromium.launch(this.buildVkLaunchOptions())
       browser.on('disconnected', () => {
-        this.logger.warn('VK browser disconnected unexpectedly')
+        this.logger.log('VK browser closed')
       })
 
+      const storageStatePath = await this.resolveStorageStatePath(workspaceId)
+
       context = await browser.newContext({
-        storageState: this.storagePath,
+        storageState: storageStatePath || undefined,
         viewport: { width: 1440, height: 1200 },
         userAgent:
           'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
@@ -696,9 +793,14 @@ export class VkPlaywrightSearchService {
           await this.autoScrollSearchResults(page)
 
           const links = await this.collectSearchLinks(page)
-          this.logger.log(`VK LINKS FOUND: ${links.length}`)
+          const limitedLinks = links.slice(0, maxPostsPerQuery)
 
-          for (const href of links) {
+          this.logger.log(
+            `VK LINKS FOUND: ${links.length}; PROCESSING: ${limitedLinks.length}`
+          )
+
+          for (const href of limitedLinks) {
+
             if (!href) continue
             if (visited.has(href)) continue
 
@@ -715,6 +817,7 @@ export class VkPlaywrightSearchService {
               if (!ids) continue
 
               postPage = await context.newPage()
+              
 
               await postPage.goto(href, {
                 waitUntil: 'domcontentloaded',
@@ -735,7 +838,7 @@ export class VkPlaywrightSearchService {
 
               if (!hasRealComments) {
                 // быстрый skip без тяжёлого парсинга
-                await postPage.close().catch(() => {})
+                await this.safeClosePage(postPage)
                 continue
               }
 
@@ -779,6 +882,10 @@ export class VkPlaywrightSearchService {
               })
 
               await this.safeClosePage(postPage)
+
+              // === THROTTLE (anti-crash) ===
+              await page.waitForTimeout(1200)
+
             } catch (e: any) {
               this.logger.warn(`POST ERROR: ${e?.message || e}`)
               await this.safeClosePage(postPage)
