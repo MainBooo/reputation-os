@@ -112,3 +112,14 @@ export function runCommunitySync(id: string) {
 export function runOwnedCommunitySync(id: string) {
   return apiFetch(`/companies/${id}/vk/run-owned-community-sync`, { method: 'POST' }, { ok: true })
 }
+
+
+export function getVkSession(id: string) {
+  return apiFetch<{ connected: boolean; updatedAt?: string | null }>(
+    `/companies/${id}/vk/session`
+  )
+}
+
+export function disconnectVk(id: string) {
+  return apiFetch(`/companies/${id}/vk/session`, { method: 'DELETE' }, { ok: true })
+}
