@@ -49,8 +49,8 @@ export class VkPlaywrightSearchService {
       this.logger.warn(`VK SESSION: failed to load from DB: ${e instanceof Error ? e.message : e}`)
     }
 
-    this.logger.log(`VK SESSION: fallback to default ${this.storagePath}`)
-    return this.storagePath
+    this.logger.warn('VK SESSION: no active VK session found')
+    return null
   }
 
   private parsePostIds(url: string): { ownerId: string; postId: string } | null {
@@ -771,9 +771,12 @@ export class VkPlaywrightSearchService {
       })
 
       const storageStatePath = await this.resolveStorageStatePath(workspaceId)
+      if (!storageStatePath) {
+        throw new Error('VK session is not connected')
+      }
 
       context = await browser.newContext({
-        storageState: storageStatePath || undefined,
+        storageState: storageStatePath,
         viewport: { width: 1440, height: 1200 },
         userAgent:
           'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'

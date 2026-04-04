@@ -1,0 +1,15 @@
+from pathlib import Path
+
+p = Path("vk.service.ts")
+s = p.read_text()
+
+old = "@Inject(`QUEUE_${QUEUES.VK_POST_SEARCH}`)"
+new = "@Inject(QUEUES.VK_POST_SEARCH)"
+
+if old not in s:
+    raise SystemExit("INJECT_PATTERN_NOT_FOUND")
+
+s = s.replace(old, new, 1)
+
+p.write_text(s)
+print("PATCH_QUEUE_INJECTION_OK")
