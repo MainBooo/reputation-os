@@ -123,6 +123,25 @@ export class VkController {
     return this.vkService.triggerPrioritySync(companyId)
   }
 
+
+
+  @Get('session')
+  getVkSession(@CurrentUser() user: AuthUser, @Param('id') companyId: string) {
+    return this.vkService.getVkSessionStatus(user.id, companyId)
+  }
+
+  
+
+  @Post('session/manual')
+  connectVkManual(@CurrentUser() user: AuthUser, @Param('id') companyId: string) {
+    return this.vkService.connectVkManual(user.id, companyId)
+  }
+
+  @Delete('session')
+  disconnectVk(@CurrentUser() user: AuthUser, @Param('id') companyId: string) {
+    return this.vkService.disconnectVk(user.id, companyId)
+  }
+
   @Post('owned-sync/trigger')
   triggerOwnedSync(@Param('id') companyId: string) {
     return this.vkService.triggerOwnedSync(companyId)

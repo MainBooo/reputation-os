@@ -1,4 +1,4 @@
-import { ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common'
+import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common'
 import { Prisma, VkMonitoringMode, VkTrackedCommunityMode } from '@prisma/client'
 import { Queue } from 'bullmq'
 import { PrismaService } from '../../common/prisma/prisma.service'
@@ -721,6 +721,27 @@ export class VkService {
   async runPostSearch(userId: string, companyId: string) {
     await this.assertCompanyAccess(userId, companyId)
 
+    const company = await this.prisma.company.findUnique({
+      where: { id: companyId },
+      select: { workspaceId: true }
+    })
+
+    if (!company) {
+      throw new NotFoundException('Company not found')
+    }
+
+    const session = await this.prisma.vkAuthSession.findFirst({
+      where: {
+        workspaceId: company.workspaceId,
+        status: 'ACTIVE'
+      },
+      orderBy: { updatedAt: 'desc' }
+    })
+
+    if (!session) {
+      throw new BadRequestException('VK session is not connected')
+    }
+
     const job = await this.vkPostSearchQueue.add(
       JOBS.VK_POST_SEARCH,
       { companyId, triggeredByUserId: userId },
@@ -764,6 +785,117 @@ export class VkService {
     })
   }
 
+
+
+
+  async getVkSessionStatus(userId: string, companyId: string) {
+    await this.assertCompanyAccess(userId, companyId)
+
+    const company = await this.prisma.company.findUnique({
+      where: { id: companyId },
+      select: { workspaceId: true }
+    })
+
+    if (!company) {
+      throw new NotFoundException('Company not found')
+    }
+
+    const session = await this.prisma.vkAuthSession.findFirst({
+      where: {
+        workspaceId: company.workspaceId,
+        status: 'ACTIVE'
+      },
+      orderBy: { updatedAt: 'desc' }
+    })
+
+    if (!session) {
+      return { connected: false }
+    }
+
+    const exists = require('fs').existsSync(session.storageStatePath)
+
+    if (!exists) {
+      await this.prisma.vkAuthSession.update({
+        where: { id: session.id },
+        data: { status: 'EXPIRED' }
+      })
+
+      return { connected: false }
+    }
+
+    return {
+      connected: true,
+      updatedAt: session.updatedAt
+    }
+  }
+
+  
+
+  async connectVkManual(userId: string, companyId: string) {
+    await this.assertCompanyAccess(userId, companyId)
+
+    const company = await this.prisma.company.findUnique({
+      where: { id: companyId },
+      select: { workspaceId: true },
+    })
+
+    if (!company) {
+      throw new Error('Company not found')
+    }
+
+    const storagePath = '/opt/reputation-os/storage/vk-sessions/vk-session.json'
+
+    const fs = await import('fs')
+    if (!fs.existsSync(storagePath)) {
+      throw new Error('VK session file not found')
+    }
+
+    // deactivate old sessions
+    await this.prisma.vkAuthSession.updateMany({
+      where: {
+        workspaceId: company.workspaceId,
+        status: 'ACTIVE',
+      },
+      data: {
+        status: 'EXPIRED',
+      },
+    })
+
+    // create new session
+    await this.prisma.vkAuthSession.create({
+      data: {
+        workspaceId: company.workspaceId,
+        userId,
+        status: 'ACTIVE',
+        storageStatePath: storagePath,
+      },
+    })
+
+    return { ok: true, connected: true }
+  }
+
+async disconnectVk(userId: string, companyId: string) {
+    await this.assertCompanyAccess(userId, companyId)
+
+    const company = await this.prisma.company.findUnique({
+      where: { id: companyId },
+      select: { workspaceId: true }
+    })
+
+    if (!company) {
+      throw new NotFoundException('Company not found')
+    }
+
+    await this.prisma.vkAuthSession.updateMany({
+      where: {
+        workspaceId: company.workspaceId,
+        status: 'ACTIVE'
+      },
+      data: { status: 'EXPIRED' }
+    })
+
+    return { ok: true }
+  }
 
   async triggerOwnedSync(companyId: string) {
     await this.vkOwnedQueue.add('vk.owned-community', {
