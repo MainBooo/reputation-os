@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
-import { disconnectVk } from '@/lib/api/vk'
+import { disconnectVk, startVkConnect } from '@/lib/api/vk'
 
 type VkSessionState = {
   connected: boolean
@@ -35,19 +35,14 @@ export default function VkConnectionCard({
     setError('')
 
     try {
-      const res = await fetch(`/api/companies/${companyId}/vk/session/manual`, {
-        method: 'POST',
-        credentials: 'include'
-      })
-
-      if (!res.ok) {
-        throw new Error('Не удалось подключить VK')
+      const started = await startVkConnect(companyId)
+      if (!started?.attemptToken) {
+        throw new Error('Не удалось запустить VK connect flow')
       }
 
-      setMessage('VK подключён')
-      router.refresh()
+      router.push(`/companies/${companyId}/vk/connect?attemptToken=${encodeURIComponent(started.attemptToken)}`)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Не удалось подключить VK')
+      setError(e instanceof Error ? e.message : 'Не удалось запустить подключение VK')
     } finally {
       setLoading(false)
     }
@@ -102,7 +97,12 @@ export default function VkConnectionCard({
             {session?.updatedAt ? ` Последнее обновление: ${new Date(session.updatedAt).toLocaleString()}.` : ''}
           </>
         ) : (
-          <>VK-сессия сейчас недоступна. Поиск можно запускать только после повторного подключения VK.</>
+          <>
+            VK-сессия сейчас недоступна. Поиск можно запускать только после повторного подключения VK.
+            <div className="mt-2 text-xs text-muted">
+              На телефоне откроется отдельная страница с удалённым окном VK и явной кнопкой для клавиатуры.
+            </div>
+          </>
         )}
       </div>
 
@@ -120,7 +120,7 @@ export default function VkConnectionCard({
           </Button>
         ) : (
           <Button type="button" disabled={loading} onClick={onConnect}>
-            {loading ? 'Подключение...' : 'Подключить VK'}
+            {loading ? 'Подготовка окна...' : 'Авторизоваться в VK'}
           </Button>
         )}
       </div>

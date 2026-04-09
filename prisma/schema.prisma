@@ -111,10 +111,11 @@ model User {
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
 
-  workspaceMembers  WorkspaceMember[]
-  aiReplyDrafts     AIReplyDraft[]    @relation("AIReplyDraftCreatedBy")
-  jobLogsTriggered  JobLog[]          @relation("JobLogTriggeredBy")
-  vkAuthSessions VkAuthSession[]
+  workspaceMembers    WorkspaceMember[]
+  aiReplyDrafts       AIReplyDraft[]       @relation("AIReplyDraftCreatedBy")
+  jobLogsTriggered    JobLog[]             @relation("JobLogTriggeredBy")
+  vkAuthSessions      VkAuthSession[]
+  vkConnectAttempts   VkConnectAttempt[]
 
 }
 
@@ -125,13 +126,14 @@ model Workspace {
   createdAt         DateTime            @default(now())
   updatedAt         DateTime            @updatedAt
 
-  members           WorkspaceMember[]
-  companies         Company[]
-  sources           Source[]
-  notificationRules NotificationRule[]
+  members             WorkspaceMember[]
+  companies           Company[]
+  sources             Source[]
+  notificationRules   NotificationRule[]
+  vkAuthSessions      VkAuthSession[]
+  vkConnectAttempts   VkConnectAttempt[]
 
   @@index([slug])
-  vkAuthSessions VkAuthSession[]
 
 }
 
@@ -179,6 +181,7 @@ model Company {
   vkSearchProfiles         VkSearchProfile[]
   vkTrackedCommunities     VkTrackedCommunity[]
   vkTrackedPosts           VkTrackedPost[]
+  vkConnectAttempts        VkConnectAttempt[]
 
   @@index([workspaceId])
   @@index([workspaceId, isActive])
@@ -502,6 +505,44 @@ model VkTrackedPost {
   @@index([companyId, discoveryStatus, publishedAt(sort: Desc)])
   @@index([ownerId, postId])
   @@index([postKey])
+}
+
+model VkConnectAttempt {
+  id               String   @id @default(cuid())
+  workspaceId      String
+  companyId        String
+  userId           String
+  status           String   @default("PENDING")
+  attemptToken     String   @unique
+  displayNum       Int?
+  vncPort          Int?
+  noVncPort        Int?
+  debugPort        Int?
+  xvfbPid          Int?
+  x11vncPid        Int?
+  websockifyPid    Int?
+  browserPid       Int?
+  userDataDir      String?
+  browserUrl       String?
+  storageStatePath String?
+  errorMessage     String?
+  expiresAt        DateTime?
+  completedAt      DateTime?
+  lastSeenAt       DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  workspace        Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  company          Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([companyId])
+  @@index([userId])
+  @@index([workspaceId, status])
+  @@index([companyId, status])
+  @@index([attemptToken])
+  @@index([expiresAt])
 }
 
 model VkAuthSession {

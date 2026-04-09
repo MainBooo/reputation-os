@@ -1,0 +1,5 @@
+2026/04/06-18:33:48.729 3b9f Creating DB /opt/reputation-os/storage/vk-connect/355517b964694a539ecfbde2029c162b/profile/Default/Local Storage/leveldb since it was missing.
+2026/04/06-18:33:48.747 3b9f Reusing MANIFEST /opt/reputation-os/storage/vk-connect/355517b964694a539ecfbde2029c162b/profile/Default/Local Storage/leveldb/MANIFEST-000001
+2026/04/06-20:00:49.067 3b9f Level-0 table #5: started
+2026/04/06-20:00:49.069 3b9f Level-0 table #5: 11457 bytes OK
+2026/04/06-20:00:49.070 3b9f Delete type=0 #3

@@ -1,0 +1,2 @@
+2026/04/07-18:54:39.712 12787 Creating DB /opt/reputation-os/storage/vk-connect/c7d3a66c77b0412dae3776bb423ffc1f/profile/Default/IndexedDB/https_m.vk.com_0.indexeddb.leveldb since it was missing.
+2026/04/07-18:54:39.714 12787 Reusing MANIFEST /opt/reputation-os/storage/vk-connect/c7d3a66c77b0412dae3776bb423ffc1f/profile/Default/IndexedDB/https_m.vk.com_0.indexeddb.leveldb/MANIFEST-000001

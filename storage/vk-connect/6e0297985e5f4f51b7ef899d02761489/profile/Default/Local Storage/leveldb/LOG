@@ -1,0 +1,29 @@
+2026/04/07-07:31:46.322 bd41 Creating DB /opt/reputation-os/storage/vk-connect/6e0297985e5f4f51b7ef899d02761489/profile/Default/Local Storage/leveldb since it was missing.
+2026/04/07-07:31:46.335 bd41 Reusing MANIFEST /opt/reputation-os/storage/vk-connect/6e0297985e5f4f51b7ef899d02761489/profile/Default/Local Storage/leveldb/MANIFEST-000001
+2026/04/07-08:58:46.643 bd46 Level-0 table #5: started
+2026/04/07-08:58:46.645 bd46 Level-0 table #5: 11438 bytes OK
+2026/04/07-08:58:46.646 bd46 Delete type=0 #3
+2026/04/07-10:37:46.642 bd46 Level-0 table #7: started
+2026/04/07-10:37:46.644 bd46 Level-0 table #7: 9607 bytes OK
+2026/04/07-10:37:46.646 bd46 Delete type=0 #4
+2026/04/07-12:17:46.643 bd46 Level-0 table #9: started
+2026/04/07-12:17:46.645 bd46 Level-0 table #9: 9361 bytes OK
+2026/04/07-12:17:46.646 bd46 Delete type=0 #6
+2026/04/07-13:56:46.643 bd41 Level-0 table #11: started
+2026/04/07-13:56:46.645 bd41 Level-0 table #11: 9579 bytes OK
+2026/04/07-13:56:46.646 bd41 Delete type=0 #8
+2026/04/07-15:35:46.642 bd46 Level-0 table #13: started
+2026/04/07-15:35:46.643 bd46 Level-0 table #13: 9638 bytes OK
+2026/04/07-15:35:46.645 bd46 Delete type=0 #10
+2026/04/07-17:15:46.645 bd46 Level-0 table #15: started
+2026/04/07-17:15:46.646 bd46 Level-0 table #15: 9289 bytes OK
+2026/04/07-17:15:46.648 bd46 Delete type=0 #12
+2026/04/07-17:15:46.649 bd46 Compacting 4@0 + 1@1 files
+2026/04/07-17:15:46.650 bd46 Generated table #16@0: 6 keys, 839 bytes
+2026/04/07-17:15:46.650 bd46 Compacted 4@0 + 1@1 files => 839 bytes
+2026/04/07-17:15:46.651 bd46 compacted to: files[ 0 1 1 0 0 0 0 ]
+2026/04/07-17:15:46.651 bd46 Delete type=2 #9
+2026/04/07-17:15:46.651 bd46 Delete type=2 #13
+2026/04/07-17:15:46.651 bd46 Delete type=2 #7
+2026/04/07-17:15:46.651 bd46 Delete type=2 #15
+2026/04/07-17:15:46.651 bd46 Delete type=2 #11
