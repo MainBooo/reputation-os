@@ -130,7 +130,28 @@ export class VkController {
     return this.vkService.getVkSessionStatus(user.id, companyId)
   }
 
-  
+  @Post('session/connect/start')
+  startVkConnect(@CurrentUser() user: AuthUser, @Param('id') companyId: string) {
+    return this.vkService.startVkConnect(user.id, companyId)
+  }
+
+  @Get('session/connect/status')
+  getVkConnectStatus(
+    @CurrentUser() user: AuthUser,
+    @Param('id') companyId: string,
+    @Query('attemptToken') attemptToken?: string
+  ) {
+    return this.vkService.getVkConnectStatus(user.id, companyId, attemptToken)
+  }
+
+  @Post('session/connect/complete')
+  completeVkConnect(
+    @CurrentUser() user: AuthUser,
+    @Param('id') companyId: string,
+    @Body('attemptToken') attemptToken?: string
+  ) {
+    return this.vkService.completeVkConnect(user.id, companyId, attemptToken)
+  }
 
   @Post('session/manual')
   connectVkManual(@CurrentUser() user: AuthUser, @Param('id') companyId: string) {

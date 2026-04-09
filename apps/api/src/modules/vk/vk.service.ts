@@ -21,11 +21,13 @@ export class VkService {
   ) {}
 
   private async assertCompanyAccess(userId: string, companyId: string) {
+    console.log('[VK COMPLETE] before company lookup')
     const company = await this.prisma.company.findUnique({
       where: { id: companyId },
       select: { workspaceId: true }
     })
 
+    console.log('[VK COMPLETE] company lookup result', company)
     if (!company) {
       throw new NotFoundException('Company not found')
     }
@@ -53,6 +55,154 @@ export class VkService {
       community?.vkId ??
       null
     )
+  }
+
+  private async isTcpPortFree(port: number): Promise<boolean> {
+    const net = require('net') as typeof import('net')
+
+    return new Promise((resolve) => {
+      const server = net.createServer()
+
+      server.unref()
+
+      server.once('error', () => {
+        resolve(false)
+      })
+
+      server.listen(port, '0.0.0.0', () => {
+        server.close(() => resolve(true))
+      })
+    })
+  }
+
+  private isDisplayFree(displayNum: number): boolean {
+    console.log('[VK COMPLETE][STAGE] before require fs');
+      const fs = require('fs') as typeof import('fs')
+    return !fs.existsSync(`/tmp/.X11-unix/X${displayNum}`)
+  }
+
+  private async allocateVkConnectResources() {
+    for (let displayNum = 120; displayNum <= 199; displayNum += 1) {
+      const offset = displayNum - 120
+      const vncPort = 5901 + offset
+      const noVncPort = 6081 + offset
+      const debugPort = 9223 + offset
+
+      if (!this.isDisplayFree(displayNum)) {
+        continue
+      }
+
+      const [vncFree, noVncFree, debugFree] = await Promise.all([
+        this.isTcpPortFree(vncPort),
+        this.isTcpPortFree(noVncPort),
+        this.isTcpPortFree(debugPort)
+      ])
+
+      if (vncFree && noVncFree && debugFree) {
+        return {
+          displayNum,
+          vncPort,
+          noVncPort,
+          debugPort
+        }
+      }
+    }
+
+    throw new BadRequestException('Нет свободных ресурсов для VK connect flow')
+  }
+
+    private resolveVkConnectBaseUrl() {
+      const fallbackHost = 'reputation.generationweb.ru'
+      const raw =
+        process.env.VK_CONNECT_BASE_URL ||
+        process.env.APP_BASE_URL ||
+        `http://${fallbackHost}`
+
+      try {
+        const url = new URL(raw)
+        const host = ['localhost', '127.0.0.1', '::1'].includes(url.hostname)
+          ? fallbackHost
+          : url.hostname
+
+        return `${url.protocol}//${host}`
+      } catch {
+        return raw
+          .replace('localhost', fallbackHost)
+          .replace('127.0.0.1', fallbackHost)
+          .replace(/:\d+$/, '')
+          .replace(/\/+$/, '')
+      }
+    }
+
+  private resolveChromiumExecutablePath() {
+    console.log('[VK COMPLETE][STAGE] before require fs');
+      const fs = require('fs') as typeof import('fs')
+    const childProcess = require('child_process') as typeof import('child_process')
+
+    const candidates = [
+      process.env.CHROMIUM_PATH,
+      process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH,
+      '/usr/bin/chromium',
+      '/usr/bin/chromium-browser',
+      '/usr/bin/google-chrome-stable',
+      '/usr/bin/google-chrome'
+    ].filter(Boolean) as string[]
+
+    for (const candidate of candidates) {
+      if (fs.existsSync(candidate)) {
+        return candidate
+      }
+    }
+
+    try {
+      const found = String(
+        childProcess.execSync(
+          'bash -lc "which chromium || which chromium-browser || which google-chrome-stable || which google-chrome"',
+          { encoding: 'utf8' }
+        )
+      ).trim()
+
+      if (found) {
+        return found
+      }
+    } catch {}
+
+    throw new BadRequestException('Chromium executable not found on server')
+  }
+
+  private isProcessAlive(pid?: number | null) {
+    if (!pid) return false
+
+    try {
+      process.kill(pid, 0)
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  private stopProcess(pid?: number | null) {
+    if (!pid) return
+
+    try {
+      process.kill(pid, 'SIGTERM')
+    } catch {}
+  }
+
+  private cleanupVkConnectAttemptProcesses(attempt: {
+    xvfbPid?: number | null
+    x11vncPid?: number | null
+    websockifyPid?: number | null
+    browserPid?: number | null
+  }) {
+    this.stopProcess(attempt.browserPid)
+    this.stopProcess(attempt.websockifyPid)
+    this.stopProcess(attempt.x11vncPid)
+    this.stopProcess(attempt.xvfbPid)
+  }
+
+  private isAttemptExpired(attempt: { expiresAt?: Date | null }) {
+    return Boolean(attempt.expiresAt && attempt.expiresAt.getTime() <= Date.now())
   }
 
   async getSearchProfiles(userId: string, companyId: string) {
@@ -245,6 +395,7 @@ export class VkService {
       console.log('[VK] runBrandSearch:assertCompanyAccess:after', { companyId, userId })
 
       console.log('[VK] runBrandSearch:company:before', { companyId })
+      console.log('[VK COMPLETE] before company lookup')
       const company = await this.prisma.company.findUnique({
         where: { id: companyId },
         select: {
@@ -254,6 +405,7 @@ export class VkService {
       })
       console.log('[VK] runBrandSearch:company:after', { company })
 
+      console.log('[VK COMPLETE] company found', company)
       if (!company) {
         throw new NotFoundException('Company not found')
       }
@@ -831,6 +983,495 @@ export class VkService {
 
   
 
+  async startVkConnect(userId: string, companyId: string) {
+    await this.assertCompanyAccess(userId, companyId)
+
+    const company = await this.prisma.company.findUnique({
+      where: { id: companyId },
+      select: { workspaceId: true }
+    })
+
+    if (!company) {
+      throw new NotFoundException('Company not found')
+    }
+
+    console.log('[VK COMPLETE][STAGE] before require fs');
+      const fs = require('fs') as typeof import('fs')
+    const childProcess = require('child_process') as typeof import('child_process')
+    const { randomUUID } = require('crypto') as typeof import('crypto')
+
+    const staleAttempts = await this.prisma.vkConnectAttempt.findMany({
+      where: {
+        workspaceId: company.workspaceId,
+        companyId,
+        userId,
+        status: { in: ['PENDING', 'AWAITING_AUTH'] }
+      },
+      orderBy: { createdAt: 'desc' }
+    })
+
+    for (const staleAttempt of staleAttempts) {
+      this.cleanupVkConnectAttemptProcesses(staleAttempt)
+    }
+
+    if (staleAttempts.length) {
+      await this.prisma.vkConnectAttempt.updateMany({
+        where: {
+          workspaceId: company.workspaceId,
+          companyId,
+          userId,
+          status: { in: ['PENDING', 'AWAITING_AUTH'] }
+        },
+        data: {
+          status: 'CANCELLED',
+          errorMessage: 'Superseded by a newer connect attempt',
+          completedAt: new Date(),
+          lastSeenAt: new Date()
+        }
+      })
+    }
+
+    const resources = await this.allocateVkConnectResources()
+    const attemptToken = randomUUID().replace(/-/g, '')
+    const baseDir = `/opt/reputation-os/storage/vk-connect/${attemptToken}`
+    const userDataDir = `${baseDir}/profile`
+    const browserUrl = `${this.resolveVkConnectBaseUrl()}/vk-connect/${resources.noVncPort}/${attemptToken}/vnc.html?autoconnect=true&resize=scale&path=vk-connect/${resources.noVncPort}/${attemptToken}/websockify`
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000)
+
+    fs.mkdirSync(baseDir, { recursive: true })
+    fs.mkdirSync(userDataDir, { recursive: true })
+
+    const attempt = await this.prisma.vkConnectAttempt.create({
+      data: {
+        workspaceId: company.workspaceId,
+        companyId,
+        userId,
+        status: 'PENDING',
+        attemptToken,
+        displayNum: resources.displayNum,
+        vncPort: resources.vncPort,
+        noVncPort: resources.noVncPort,
+        debugPort: resources.debugPort,
+        userDataDir,
+        browserUrl,
+        expiresAt,
+        lastSeenAt: new Date()
+      }
+    })
+
+    const xvfbLog = fs.openSync(`${baseDir}/xvfb.log`, 'a')
+    const x11vncLog = fs.openSync(`${baseDir}/x11vnc.log`, 'a')
+    const websockifyLog = fs.openSync(`${baseDir}/websockify.log`, 'a')
+    const browserLog = fs.openSync(`${baseDir}/browser.log`, 'a')
+    const chromiumPath = this.resolveChromiumExecutablePath()
+
+    try {
+      const xvfb = childProcess.spawn(
+        '/usr/bin/Xvfb',
+        [`:${resources.displayNum}`, '-screen', '0', '430x932x24', '-nolisten', 'tcp'],
+        {
+          detached: true,
+          stdio: ['ignore', xvfbLog, xvfbLog]
+        }
+      )
+      xvfb.unref()
+
+      await new Promise((resolve) => setTimeout(resolve, 800))
+
+      const x11vnc = childProcess.spawn(
+        '/usr/bin/x11vnc',
+        [
+          '-display',
+          `:${resources.displayNum}`,
+          '-rfbport',
+          String(resources.vncPort),
+          '-localhost',
+          '-forever',
+          '-shared',
+          '-nopw'
+        ],
+        {
+          detached: true,
+          stdio: ['ignore', x11vncLog, x11vncLog]
+        }
+      )
+      x11vnc.unref()
+
+      await new Promise((resolve) => setTimeout(resolve, 800))
+
+      const websockify = childProcess.spawn(
+        '/usr/bin/websockify',
+          ['--web', '/usr/share/novnc', String(resources.noVncPort), `localhost:${resources.vncPort}`],
+        {
+          detached: true,
+          stdio: ['ignore', websockifyLog, websockifyLog]
+        }
+      )
+      websockify.unref()
+
+      await new Promise((resolve) => setTimeout(resolve, 800))
+
+      const browser = childProcess.spawn(
+        chromiumPath,
+        [
+          '--no-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-gpu',
+          '--disable-setuid-sandbox',
+          '--no-first-run',
+          '--no-default-browser-check',
+          '--window-size=430,932',
+
+          '--window-position=0,0',
+
+          '--force-device-scale-factor=1',
+
+          '--user-agent=Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1',
+          `--remote-debugging-port=${resources.debugPort}`,
+          `--user-data-dir=${userDataDir}`,
+          'https://vk.com'
+        ],
+        {
+          detached: true,
+          stdio: ['ignore', browserLog, browserLog],
+          env: {
+            ...process.env,
+            DISPLAY: `:${resources.displayNum}`
+          }
+        }
+      )
+      browser.unref()
+
+      await this.prisma.vkConnectAttempt.update({
+        where: { id: attempt.id },
+        data: {
+          status: 'AWAITING_AUTH',
+          xvfbPid: xvfb.pid ?? null,
+          x11vncPid: x11vnc.pid ?? null,
+          websockifyPid: websockify.pid ?? null,
+          browserPid: browser.pid ?? null,
+          lastSeenAt: new Date()
+        }
+      })
+
+      return {
+        ok: true,
+        status: 'AWAITING_AUTH',
+        attemptToken,
+        browserUrl,
+        expiresAt
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'VK connect start failed'
+
+      await this.prisma.vkConnectAttempt.update({
+        where: { id: attempt.id },
+        data: {
+          status: 'FAILED',
+          errorMessage: message,
+          completedAt: new Date(),
+          lastSeenAt: new Date()
+        }
+      })
+
+      throw error
+    }
+  }
+
+  async getVkConnectStatus(userId: string, companyId: string, attemptToken?: string) {
+    await this.assertCompanyAccess(userId, companyId)
+
+    const company = await this.prisma.company.findUnique({
+      where: { id: companyId },
+      select: { workspaceId: true }
+    })
+
+    if (!company) {
+      throw new NotFoundException('Company not found')
+    }
+
+    const session = await this.getVkSessionStatus(userId, companyId)
+
+    console.log('[VK COMPLETE] before attempt lookup')
+    const attempt = await this.prisma.vkConnectAttempt.findFirst({
+      where: {
+        workspaceId: company.workspaceId,
+        companyId,
+        userId,
+        ...(attemptToken ? { attemptToken } : {})
+      },
+      orderBy: { createdAt: 'desc' }
+    })
+
+    console.log('[VK COMPLETE] attempt lookup result', attempt ? { id: attempt.id, status: attempt.status, debugPort: attempt.debugPort, expiresAt: attempt.expiresAt } : null)
+    if (!attempt) {
+      return {
+        status: session.connected ? 'CONNECTED' : 'NOT_CONNECTED',
+        connected: session.connected === true,
+        updatedAt: session.updatedAt ?? null,
+        attemptToken: null,
+        browserUrl: null,
+        expiresAt: null,
+        errorMessage: null
+      }
+    }
+
+    if (this.isAttemptExpired(attempt) && ['PENDING', 'AWAITING_AUTH'].includes(attempt.status)) {
+      try {
+          this.cleanupVkConnectAttemptProcesses(attempt)
+        } catch (e) {
+          console.error('[VK COMPLETE] cleanup failed', e)
+        }
+
+      const expired = await this.prisma.vkConnectAttempt.update({
+        where: { id: attempt.id },
+        data: {
+          status: 'EXPIRED',
+          errorMessage: 'VK connect attempt expired',
+          completedAt: new Date(),
+          lastSeenAt: new Date()
+        }
+      })
+
+      return {
+        status: session.connected ? 'CONNECTED' : expired.status,
+        connected: session.connected === true,
+        updatedAt: session.updatedAt ?? null,
+        attemptToken: expired.attemptToken,
+        browserUrl: expired.browserUrl ?? null,
+        expiresAt: expired.expiresAt ?? null,
+        errorMessage: expired.errorMessage ?? null
+      }
+    }
+
+    if (
+      attempt.status === 'AWAITING_AUTH' &&
+      attempt.browserPid &&
+      !this.isProcessAlive(attempt.browserPid)
+    ) {
+      const failed = await this.prisma.vkConnectAttempt.update({
+        where: { id: attempt.id },
+        data: {
+          status: 'FAILED',
+          errorMessage: 'VK connect browser process is no longer running',
+          completedAt: new Date(),
+          lastSeenAt: new Date()
+        }
+      })
+
+      return {
+        status: session.connected ? 'CONNECTED' : failed.status,
+        connected: session.connected === true,
+        updatedAt: session.updatedAt ?? null,
+        attemptToken: failed.attemptToken,
+        browserUrl: failed.browserUrl ?? null,
+        expiresAt: failed.expiresAt ?? null,
+        errorMessage: failed.errorMessage ?? null
+      }
+    }
+
+    await this.prisma.vkConnectAttempt.update({
+      where: { id: attempt.id },
+      data: {
+        lastSeenAt: new Date()
+      }
+    })
+
+    return {
+      status: session.connected ? 'CONNECTED' : attempt.status,
+      connected: session.connected === true,
+      updatedAt: session.updatedAt ?? null,
+      attemptToken: attempt.attemptToken,
+      browserUrl: attempt.browserUrl ?? null,
+      expiresAt: attempt.expiresAt ?? null,
+      errorMessage: attempt.errorMessage ?? null
+    }
+  }
+
+  async completeVkConnect(userId: string, companyId: string, attemptToken?: string) {
+    console.log('[VK COMPLETE] ENTER METHOD', { userId, companyId, attemptToken })
+    await this.assertCompanyAccess(userId, companyId)
+
+    if (!attemptToken) {
+      throw new BadRequestException('attemptToken is required')
+    }
+
+    const company = await this.prisma.company.findUnique({
+      where: { id: companyId },
+      select: { workspaceId: true }
+    })
+
+    if (!company) {
+      throw new NotFoundException('Company not found')
+    }
+
+    const attempt = await this.prisma.vkConnectAttempt.findFirst({
+      where: {
+        workspaceId: company.workspaceId,
+        companyId,
+        userId,
+        attemptToken
+      }
+    })
+
+    if (!attempt) {
+      throw new NotFoundException('VK connect attempt not found')
+    }
+
+    if (this.isAttemptExpired(attempt)) {
+      try {
+          this.cleanupVkConnectAttemptProcesses(attempt)
+        } catch (e) {
+          console.error('[VK COMPLETE] cleanup failed', e)
+        }
+
+      await this.prisma.vkConnectAttempt.update({
+        where: { id: attempt.id },
+        data: {
+          status: 'EXPIRED',
+          errorMessage: 'VK connect attempt expired',
+          completedAt: new Date(),
+          lastSeenAt: new Date()
+        }
+      })
+
+      throw new BadRequestException('VK connect attempt expired')
+    }
+
+    console.log('[VK COMPLETE] before debugPort check', { debugPort: attempt?.debugPort })
+    if (!attempt.debugPort) {
+      throw new BadRequestException('VK connect attempt is not ready')
+    }
+
+    console.log('[VK COMPLETE][STAGE] before require fs');
+      const fs = require('fs') as typeof import('fs')
+    console.log('[VK COMPLETE][STAGE] before require playwright');
+      const { chromium } = require('playwright')
+
+    let browser: any = null
+
+    try {
+      console.log('[VK COMPLETE][STAGE] before connectOverCDP', attempt.debugPort);
+        browser = await chromium.connectOverCDP(`http://127.0.0.1:${attempt.debugPort}`)
+
+      console.log('[VK COMPLETE][STAGE] after connectOverCDP');
+        console.log('[VK COMPLETE] connectedOverCDP')
+
+        const context = browser.contexts()[0]
+      if (!context) {
+        throw new BadRequestException('VK browser context not found')
+      }
+
+      const page = context.pages()[0] || (await context.newPage())
+
+      await page.waitForTimeout(1200)
+
+      const cookies = await context.cookies()
+      const currentUrl = page.url()
+
+      console.log('[VK COMPLETE] currentUrl', currentUrl)
+        console.log('[VK COMPLETE] cookiesCount', cookies.length)
+
+        const hasSessionCookie = cookies.some((cookie: any) => {
+        const name = String(cookie?.name || '').toLowerCase()
+        const domain = String(cookie?.domain || '').toLowerCase()
+        return (
+          name.startsWith('remix') &&
+          Boolean(cookie?.value) &&
+          domain.includes('vk.com')
+        )
+      })
+
+      console.log('[VK COMPLETE] hasSessionCookie', hasSessionCookie)
+
+        if (!hasSessionCookie || /login|auth|recover/i.test(currentUrl)) {
+        throw new BadRequestException('Сначала завершите вход в VK в открытой вкладке')
+      }
+
+      const storageDir = '/opt/reputation-os/storage/vk-sessions'
+      const storageStatePath = `${storageDir}/vk-session-${company.workspaceId}.json`
+
+      fs.mkdirSync(storageDir, { recursive: true })
+      await context.storageState({ path: storageStatePath })
+        console.log('[VK COMPLETE] storageStateSaved', storageStatePath)
+
+      await this.prisma.vkAuthSession.updateMany({
+        where: {
+          workspaceId: company.workspaceId,
+          status: 'ACTIVE'
+        },
+        data: {
+          status: 'EXPIRED'
+        }
+      })
+
+      console.log('[VK COMPLETE] creating vkAuthSession', {
+          workspaceId: company.workspaceId,
+          userId,
+          storageStatePath
+        })
+
+        await this.prisma.vkAuthSession.create({
+        data: {
+          workspaceId: company.workspaceId,
+          userId,
+          status: 'ACTIVE',
+          storageStatePath
+        }
+      })
+
+      await this.prisma.vkConnectAttempt.update({
+        where: { id: attempt.id },
+        data: {
+          status: 'COMPLETED',
+          storageStatePath,
+          errorMessage: null,
+          completedAt: new Date(),
+          lastSeenAt: new Date()
+        }
+      })
+
+      try {
+          this.cleanupVkConnectAttemptProcesses(attempt)
+        } catch (e) {
+          console.error('[VK COMPLETE] cleanup failed', e)
+        }
+
+      return {
+        ok: true,
+        connected: true,
+        updatedAt: new Date().toISOString()
+      }
+    } catch (error) {
+        console.error('[VK COMPLETE][STAGE] ERROR', error, (error as any)?.stack)
+
+        try {
+          await this.prisma.vkConnectAttempt.update({
+            where: { id: attempt.id },
+            data: {
+              status: 'FAILED',
+              errorMessage: String(
+              (error && typeof error === 'object' && 'message' in error)
+                ? (error as any).message
+                : error
+            ),
+              lastSeenAt: new Date()
+            }
+          })
+        } catch (e) {
+          console.error('[VK COMPLETE] ERROR saving attempt', e)
+        }
+
+        throw error
+      } finally {
+      if (browser) {
+        try {
+          await browser.close()
+        } catch {}
+      }
+    }
+  }
+
   async connectVkManual(userId: string, companyId: string) {
     await this.assertCompanyAccess(userId, companyId)
 
@@ -862,7 +1503,13 @@ export class VkService {
     })
 
     // create new session
-    await this.prisma.vkAuthSession.create({
+    console.log('[VK COMPLETE] creating vkAuthSession', {
+          workspaceId: company.workspaceId,
+          userId,
+          storagePath
+        })
+
+        await this.prisma.vkAuthSession.create({
       data: {
         workspaceId: company.workspaceId,
         userId,

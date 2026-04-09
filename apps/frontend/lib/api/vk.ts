@@ -33,6 +33,24 @@ export type UpdateVkCompanySearchProfileInput = {
   category: string | null
 }
 
+export type VkConnectStartResponse = {
+  ok: boolean
+  status: string
+  attemptToken: string
+  browserUrl: string
+  expiresAt: string
+}
+
+export type VkConnectStatusResponse = {
+  status: string
+  connected: boolean
+  updatedAt?: string | null
+  attemptToken?: string | null
+  browserUrl?: string | null
+  expiresAt?: string | null
+  errorMessage?: string | null
+}
+
 export function getVkOverview(id: string) {
   return apiFetch<VkOverviewResponse>(`/companies/${id}/vk/overview`, undefined, {
     trackedCommunitiesCount: 0,
@@ -113,11 +131,28 @@ export function runOwnedCommunitySync(id: string) {
   return apiFetch(`/companies/${id}/vk/run-owned-community-sync`, { method: 'POST' }, { ok: true })
 }
 
-
 export function getVkSession(id: string) {
   return apiFetch<{ connected: boolean; updatedAt?: string | null }>(
     `/companies/${id}/vk/session`
   )
+}
+
+export function startVkConnect(id: string) {
+  return apiFetch<VkConnectStartResponse>(`/companies/${id}/vk/session/connect/start`, {
+    method: 'POST'
+  })
+}
+
+export function getVkConnectStatus(id: string, attemptToken: string) {
+  const qs = new URLSearchParams({ attemptToken }).toString()
+  return apiFetch<VkConnectStatusResponse>(`/companies/${id}/vk/session/connect/status?${qs}`)
+}
+
+export function completeVkConnect(id: string, attemptToken: string) {
+  return apiFetch(`/companies/${id}/vk/session/connect/complete`, {
+    method: 'POST',
+    body: JSON.stringify({ attemptToken })
+  })
 }
 
 export function disconnectVk(id: string) {
