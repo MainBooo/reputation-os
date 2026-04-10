@@ -17,8 +17,8 @@ export default function CompanyTabs({ companyId }: { companyId: string }) {
   ]
 
   return (
-    <div className="mb-6 overflow-x-auto">
-      <div className="inline-flex min-w-full gap-2 rounded-[24px] border border-cyan-400/15 bg-white/[0.03] p-2 shadow-[0_0_24px_rgba(34,211,238,0.08)] backdrop-blur-xl">
+    <div className="mb-6 overflow-x-auto px-1">
+      <div className="inline-flex w-max min-w-0 gap-2 rounded-[24px] border border-cyan-400/15 bg-white/[0.03] p-2 shadow-[0_0_24px_rgba(34,211,238,0.08)] backdrop-blur-xl">
         {items.map((item) => {
           const Icon = item.icon
           const active = pathname === item.href

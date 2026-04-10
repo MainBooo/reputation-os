@@ -25,16 +25,27 @@ export default function MentionRow({
           </div>
         </div>
 
-        <div className="flex shrink-0 items-center justify-between gap-3 sm:block sm:text-right">
-          {mention.ratingValue ? <div className="text-lg font-semibold text-brand">{mention.ratingValue}</div> : <div />}
+        {/* FIX: mobile-safe block */}
+        <div className="mt-2 flex flex-col items-start gap-2 sm:mt-0 sm:items-end sm:text-right">
+          {mention.ratingValue ? (
+            <div className="text-lg font-semibold text-brand">{mention.ratingValue}</div>
+          ) : null}
+
           {mention.url ? (
             <a
               href={mention.url}
               target="_blank"
               rel="noreferrer"
-              className="inline-block text-xs text-muted transition hover:text-brand"
+              className="text-xs text-muted transition hover:text-brand break-all"
             >
-              Original source
+              <a
+              href={mention.url || '#'}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 rounded-md border border-cyan-400/20 bg-cyan-400/10 px-2.5 py-1 text-xs text-cyan-300 hover:bg-cyan-400/20 hover:text-white transition-all"
+            >
+              Открыть источник →
+            </a>
             </a>
           ) : null}
         </div>

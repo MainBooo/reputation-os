@@ -71,59 +71,52 @@ export default function VkConnectionCard({
   }
 
   return (
-    <Card className="p-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div className="text-base font-semibold text-brand">Подключение VK</div>
-          <div className="mt-1 text-sm text-muted">
-            Здесь показывается только состояние текущей VK-сессии для Playwright-поиска.
+    <Card className="p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <div className="text-sm font-medium text-muted">VK-сессия</div>
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            <Badge tone={connected ? 'SUCCESS' : 'PENDING'}>
+              {statusUnavailable ? 'Статус недоступен' : connected ? 'Подключено' : 'Не подключено'}
+            </Badge>
+            {connected && session?.updatedAt ? (
+              <span className="text-xs text-muted">
+                {`Обновлено ${new Date(session.updatedAt).toLocaleString()}`}
+              </span>
+            ) : null}
           </div>
         </div>
 
-        <Badge tone={connected ? 'SUCCESS' : 'PENDING'}>
-          {statusUnavailable ? 'Статус недоступен' : connected ? 'Подключено' : 'Не подключено'}
-        </Badge>
+        <div className="flex flex-wrap gap-2">
+          {statusUnavailable ? (
+            <Button type="button" variant="secondary" disabled={loading} onClick={onRefreshStatus}>
+              Обновить статус
+            </Button>
+          ) : connected ? (
+            <Button type="button" variant="secondary" disabled={loading} onClick={onDisconnect}>
+              {loading ? 'Отключение...' : 'Отключить'}
+            </Button>
+          ) : (
+            <Button type="button" disabled={loading} onClick={onConnect}>
+              {loading ? 'Подготовка...' : 'Подключить VK'}
+            </Button>
+          )}
+        </div>
       </div>
 
-      <div className="mt-4 rounded-xl border border-line bg-panel2 p-4 text-sm text-muted">
-        {statusUnavailable ? (
-          <>
-            Не удалось получить актуальное состояние VK-сессии.
-            {sessionError ? ` ${sessionError}.` : ''}
-          </>
-        ) : connected ? (
-          <>
-            VK-сессия активна.
-            {session?.updatedAt ? ` Последнее обновление: ${new Date(session.updatedAt).toLocaleString()}.` : ''}
-          </>
-        ) : (
-          <>
-            VK-сессия сейчас недоступна. Поиск можно запускать только после повторного подключения VK.
-            <div className="mt-2 text-xs text-muted">
-              На телефоне откроется отдельная страница с удалённым окном VK и явной кнопкой для клавиатуры.
-            </div>
-          </>
-        )}
-      </div>
+      {statusUnavailable ? (
+        <div className="mt-3 text-sm text-muted">
+          Не удалось получить актуальное состояние VK-сессии.
+          {sessionError ? ` ${sessionError}.` : ''}
+        </div>
+      ) : !connected ? (
+        <div className="mt-3 text-sm text-muted">
+          Поиск запускается только после подключения VK. На телефоне откроется отдельная страница с удалённым окном VK.
+        </div>
+      ) : null}
 
-      {error ? <div className="mt-4 text-sm text-red-400">{error}</div> : null}
-      {message ? <div className="mt-4 text-sm text-emerald-400">{message}</div> : null}
-
-      <div className="mt-4 flex flex-wrap gap-3">
-        {statusUnavailable ? (
-          <Button type="button" variant="secondary" disabled={loading} onClick={onRefreshStatus}>
-            Обновить статус
-          </Button>
-        ) : connected ? (
-          <Button type="button" variant="secondary" disabled={loading} onClick={onDisconnect}>
-            {loading ? 'Отключение...' : 'Отключить VK'}
-          </Button>
-        ) : (
-          <Button type="button" disabled={loading} onClick={onConnect}>
-            {loading ? 'Подготовка окна...' : 'Авторизоваться в VK'}
-          </Button>
-        )}
-      </div>
+      {error ? <div className="mt-3 text-sm text-red-400">{error}</div> : null}
+      {message ? <div className="mt-3 text-sm text-emerald-400">{message}</div> : null}
     </Card>
   )
 }

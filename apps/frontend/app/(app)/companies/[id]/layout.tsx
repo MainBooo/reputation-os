@@ -8,9 +8,9 @@ export default function CompanyLayout({
   params: { id: string }
 }) {
   return (
-    <>
+    <div>
       <CompanyTabs companyId={params.id} />
       {children}
-    </>
+    </div>
   )
 }

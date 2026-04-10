@@ -37,27 +37,32 @@ export default function Topbar() {
   }
 
   return (
-    <header className="sticky top-0 z-20 border-b border-white/10 bg-[#071019]/70 backdrop-blur-2xl">
-      <div className="flex min-h-16 items-center justify-between gap-4 px-5 py-3 lg:px-8">
-        <div>
+    <header className="sticky top-0 z-20 overflow-x-hidden border-b border-white/10 bg-[#071019]/70 backdrop-blur-2xl">
+      <div className="flex min-h-16 flex-col gap-3 px-4 py-3 sm:px-5 lg:flex-row lg:items-center lg:justify-between lg:px-8">
+        <div className="min-w-0">
           <div className="text-[11px] uppercase tracking-[0.28em] text-cyan-200/70">Workspace</div>
-          <div className="mt-1 text-sm font-medium text-white">Reputation OS</div>
+          <div className="mt-1 truncate text-sm font-medium text-white">Reputation OS</div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className={user
-            ? 'inline-flex items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1.5 text-xs text-emerald-100'
-            : 'inline-flex items-center gap-2 rounded-full border border-amber-400/20 bg-amber-400/10 px-3 py-1.5 text-xs text-amber-100'
-          }>
-            {user ? <ShieldCheck size={14} /> : <ShieldAlert size={14} />}
-            {loading ? 'Проверка...' : user ? (user.email || 'Выполнен вход') : 'Гость'}
+        <div className="flex min-w-0 flex-wrap items-center gap-2 lg:justify-end">
+          <div
+            className={
+              user
+                ? 'inline-flex min-w-0 max-w-full items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1.5 text-xs text-emerald-100'
+                : 'inline-flex min-w-0 max-w-full items-center gap-2 rounded-full border border-amber-400/20 bg-amber-400/10 px-3 py-1.5 text-xs text-amber-100'
+            }
+          >
+            {user ? <ShieldCheck size={14} className="shrink-0" /> : <ShieldAlert size={14} className="shrink-0" />}
+            <span className="truncate">
+              {loading ? 'Проверка...' : user ? (user.email || 'Выполнен вход') : 'Гость'}
+            </span>
           </div>
 
           {user ? (
             <button
               type="button"
               onClick={handleLogout}
-              className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs text-slate-200 transition hover:border-cyan-400/20 hover:bg-cyan-400/[0.08] hover:text-white"
+              className="inline-flex shrink-0 items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs text-slate-200 transition hover:border-cyan-400/20 hover:bg-cyan-400/[0.08] hover:text-white"
             >
               <LogOut size={14} />
               Выйти
@@ -65,7 +70,7 @@ export default function Topbar() {
           ) : (
             <Link
               href="/login"
-              className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs text-slate-200 transition hover:border-cyan-400/20 hover:bg-cyan-400/[0.08] hover:text-white"
+              className="inline-flex shrink-0 items-center rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs text-slate-200 transition hover:border-cyan-400/20 hover:bg-cyan-400/[0.08] hover:text-white"
             >
               Войти
             </Link>

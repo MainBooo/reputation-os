@@ -12,18 +12,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="min-h-screen bg-[#050b12] text-white">
-      <div className="flex min-h-screen">
+    <div className="min-h-screen overflow-x-hidden bg-[#050b12] text-white">
+      <div className="flex min-h-screen overflow-x-hidden">
         <Sidebar />
-        <div className="flex min-h-screen flex-1 flex-col">
+        <div className="flex min-h-screen min-w-0 flex-1 flex-col overflow-x-hidden">
           <Topbar />
-          <main className="flex-1 px-4 py-4 lg:px-8 lg:py-6">
+          <main className="flex-1 min-w-0 px-4 py-4 lg:px-8 lg:py-6">
             {children}
-            <div className="h-24 lg:hidden" />
           </main>
+          <MobileNav />
         </div>
       </div>
-      <MobileNav />
     </div>
   )
 }

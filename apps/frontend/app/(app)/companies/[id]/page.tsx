@@ -54,7 +54,7 @@ export default async function CompanyPage({ params }: { params: { id: string } }
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Упоминания" value={company._count?.mentions || 0} />
         <StatCard label="Снимки рейтинга" value={company._count?.ratingSnapshots || 0} />
-        <StatCard label="Подключённые источники" value={company.sourceTargets?.length || 0} />
+        
         <StatCard label="Алиасы" value={company.aliases?.length || 0} />
       </div>
 
@@ -68,23 +68,7 @@ export default async function CompanyPage({ params }: { params: { id: string } }
           </div>
         </Card>
 
-        <Card className="p-5">
-          <div className="mb-4 text-base font-semibold">Подключённые источники</div>
-          {company.sourceTargets?.length ? (
-            <div className="space-y-3">
-              {company.sourceTargets.map((t: any) => (
-                <div key={t.id} className="rounded-xl border border-line bg-panel2 px-4 py-3 text-sm">
-                  <div className="font-medium">{t.source?.name || 'Источник'}</div>
-                  <div className="mt-1 text-muted">
-                    {t.displayName || t.externalUrl || t.externalPlaceId || 'Нет данных по источнику'}
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-sm text-muted">Подключённых источников пока нет.</div>
-          )}
-        </Card>
+        
       </div>
     </div>
   )

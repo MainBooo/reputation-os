@@ -1,9 +1,8 @@
 import PageHeader from '@/components/ui/PageHeader'
 import Card from '@/components/ui/Card'
 import Input from '@/components/ui/Input'
-import MentionRow from '@/components/mentions/MentionRow'
 import EmptyState from '@/components/ui/EmptyState'
-import MentionCard from '@/components/inbox/MentionCard'
+import InboxMentionsList from '@/components/inbox/InboxMentionsList'
 import { getCompanyMentions } from '@/lib/api/mentions'
 
 export default async function CompanyInboxPage({ params }: { params: { id: string } }) {
@@ -16,7 +15,8 @@ export default async function CompanyInboxPage({ params }: { params: { id: strin
     authRequired = true
   }
 
-  const mentions = response.data || []
+  const mentions = Array.isArray(response?.data) ? response.data : []
+  const total = Number(response?.meta?.total || 0)
 
   return (
     <div>
@@ -26,7 +26,7 @@ export default async function CompanyInboxPage({ params }: { params: { id: strin
       />
 
       <Card className="mb-6 p-5">
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-6">
           <Input placeholder="Площадка" />
           <Input placeholder="Тональность" />
           <Input placeholder="Статус" />
@@ -41,15 +41,12 @@ export default async function CompanyInboxPage({ params }: { params: { id: strin
           title="Требуется авторизация"
           description="Войдите в систему, чтобы загрузить живые упоминания из API."
         />
-      ) : !mentions.length ? (
-        <EmptyState
-          title="Inbox пока пуст"
-          description="Для этой компании пока не найдено упоминаний."
-        />
       ) : (
-        <div className="space-y-3">
-          {mentions.map((mention: any) => <MentionRow key={mention.id} mention={mention} />)}
-        </div>
+        <InboxMentionsList
+          companyId={params.id}
+          initialMentions={mentions}
+          total={total}
+        />
       )}
 
       <div className="mt-6 text-sm text-muted">
