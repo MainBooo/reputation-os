@@ -15,11 +15,15 @@ export default function MobileNav() {
   const pathname = usePathname()
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-cyan-400/15 bg-[#071019]/90 px-3 py-3 backdrop-blur-2xl lg:hidden">
+    <div
+      className="sticky bottom-0 z-30 border-t border-cyan-400/15 bg-[#071019]/90 px-3 pt-3 backdrop-blur-2xl lg:hidden"
+      style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 12px)' }}
+    >
       <div className="grid grid-cols-3 gap-2 rounded-3xl border border-white/10 bg-white/[0.03] p-2 shadow-[0_0_30px_rgba(34,211,238,0.08)]">
         {items.map((item) => {
           const Icon = item.icon
           const active = pathname === item.href || pathname.startsWith(item.href + '/')
+
           return (
             <Link
               key={item.href}

@@ -138,8 +138,8 @@ export default function CompaniesCreateForm() {
 
         {error ? <div className="text-sm text-red-400">{error}</div> : null}
 
-        <div className="flex justify-end">
-          <Button type="submit" disabled={!canSubmit}>
+        <div className="flex">
+          <Button type="submit" disabled={!canSubmit} className="w-full sm:ml-auto sm:w-auto">
             {loading ? 'Создание...' : 'Создать компанию'}
           </Button>
         </div>
