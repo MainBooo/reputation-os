@@ -21,6 +21,7 @@ export class MentionService {
     rawPayload?: unknown
     metadata?: unknown
     vkTrackedPostId?: string | null
+      companySourceTargetId?: string | null
   }) {
     return this.dedupService.persistMention(params)
   }

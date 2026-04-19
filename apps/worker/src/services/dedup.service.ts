@@ -22,6 +22,7 @@ export class DedupService {
     publishedAt: Date
     ratingValue?: number | null
     vkTrackedPostId?: string | null
+      companySourceTargetId?: string | null
     rawPayload?: unknown
     metadata?: unknown
   }) {
@@ -88,7 +89,8 @@ export class DedupService {
         hash,
         rawPayload: params.rawPayload as any,
         metadata: params.metadata as any,
-        vkTrackedPostId: params.vkTrackedPostId || null
+        vkTrackedPostId: params.vkTrackedPostId || null,
+          companySourceTargetId: params.companySourceTargetId || null
       }
     })
   }

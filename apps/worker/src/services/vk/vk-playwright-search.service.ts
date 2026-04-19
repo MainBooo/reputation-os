@@ -754,7 +754,8 @@ export class VkPlaywrightSearchService {
   async searchPosts(
     queries: string[],
     workspaceId: string,
-    companyId: string
+      companyId: string,
+      onProgress?: (payload: { progress: number; stage: 'search_posts'; postsFound?: number }) => Promise<void> | void
   ): Promise<VkPostResult[]> {
     const results: VkPostResult[] = []
     const visited = new Set<string>()
@@ -793,16 +794,42 @@ export class VkPlaywrightSearchService {
           this.logger.log(`VK SEARCH START: ${query}`)
 
           await this.openSearchPage(page, query)
+
+            if (onProgress) {
+              await onProgress({ progress: 15, stage: 'search_posts' })
+            }
           await this.autoScrollSearchResults(page)
+
+            if (onProgress) {
+              await onProgress({ progress: 25, stage: 'search_posts' })
+            }
 
           const links = await this.collectSearchLinks(page)
           const limitedLinks = links.slice(0, maxPostsPerQuery)
+
+            if (onProgress) {
+              await onProgress({
+                progress: 35,
+                stage: 'search_posts',
+                postsFound: limitedLinks.length
+              })
+            }
 
           this.logger.log(
             `VK LINKS FOUND: ${links.length}; PROCESSING: ${limitedLinks.length}`
           )
 
-          for (const href of limitedLinks) {
+            for (let index = 0; index < limitedLinks.length; index += 1) {
+              const href = limitedLinks[index]
+
+              if (onProgress && limitedLinks.length > 0) {
+                const step = 35 + Math.min(40, Math.floor(((index + 1) / limitedLinks.length) * 40))
+                await onProgress({
+                  progress: step,
+                  stage: 'search_posts',
+                  postsFound: limitedLinks.length
+                })
+              }
 
             if (!href) continue
             if (visited.has(href)) continue

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Query, UseGuards } from '@nestjs/common'
+import { Body, Controller, Delete, Get, Param, Patch, Query, UseGuards } from '@nestjs/common'
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard'
 import { MentionsService } from './mentions.service'
 import { CurrentUser } from '../../common/decorators/current-user.decorator'
@@ -24,5 +24,10 @@ export class MentionsController {
   @Patch('mentions/:id/status')
   updateStatus(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: UpdateMentionStatusDto) {
     return this.mentionsService.updateStatus(user.id, id, dto)
+  }
+
+  @Delete('mentions/:id')
+  remove(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.mentionsService.remove(user.id, id)
   }
 }

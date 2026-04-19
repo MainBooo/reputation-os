@@ -6,6 +6,7 @@ import EmptyState from '@/components/ui/EmptyState'
 const PREVIEW_LIMIT = 3
 
 export default function VkMentionsList({
+  companyId,
   initialMentions,
   total
 }: {
@@ -39,8 +40,17 @@ export default function VkMentionsList({
       </div>
 
       {total > mentions.length ? (
-        <div className="mt-4 text-center text-sm text-muted">
-          Показаны последние {mentions.length} из {total}. Полный список доступен во Входящих.
+        <div className="mt-4 flex flex-col items-center gap-3 text-center">
+          <div className="text-sm text-muted">
+            Показаны последние {mentions.length} из {total}. Чтобы посмотреть все комментарии и упоминания, перейдите во Входящие.
+          </div>
+
+          <a
+            href={`/companies/${companyId}/inbox`}
+            className="inline-flex items-center justify-center rounded-lg border border-cyan-400/20 bg-cyan-400/10 px-4 py-2 text-sm font-medium text-cyan-300 transition-all hover:bg-cyan-400/20 hover:text-white"
+          >
+            Перейти во Входящие →
+          </a>
         </div>
       ) : (
         <div className="mt-4 text-center text-sm text-muted">

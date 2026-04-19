@@ -17,7 +17,10 @@ export class ReviewsSyncProcessor implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   onModuleInit() {
-    this.worker = new Worker(QUEUES.REVIEWS_SYNC, async (job: Job) => this.handle(job), {
+    console.log('[DEBUG] REVIEWS WORKER INIT queue=', 'reviews_sync')
+
+    console.log('[DEBUG] CREATING REVIEWS WORKER');
+      this.worker = new Worker(QUEUES.REVIEWS_SYNC, async (job: Job) => this.handle(job), {
       connection: this.connection
     })
   }
@@ -27,6 +30,8 @@ export class ReviewsSyncProcessor implements OnModuleInit, OnModuleDestroy {
   }
 
   async handle(job: Job) {
+      console.log('[DEBUG] REVIEWS JOB START', job.data)
+
     const { companyId } = job.data
     const targets = await this.prisma.companySourceTarget.findMany({
       where: { companyId, syncReviewsEnabled: true },
@@ -34,9 +39,14 @@ export class ReviewsSyncProcessor implements OnModuleInit, OnModuleDestroy {
     })
 
     for (const target of targets) {
+        console.log('[DEBUG] TARGET', target.source.platform, target.externalUrl)
+
       if (target.source.platform === 'VK') continue
       const adapter = SourceAdapterFactory.getAdapter(target.source.platform)
       const mentions = await adapter.fetchMentions(target)
+        console.log('[DEBUG] YANDEX RESULT COUNT=', mentions?.length)
+        console.log('[DEBUG] YANDEX RESULT SAMPLE=', mentions?.[0])
+
       for (const item of mentions) {
         await this.mentionService.persistExternalMention({
           companyId,
@@ -51,7 +61,8 @@ export class ReviewsSyncProcessor implements OnModuleInit, OnModuleDestroy {
           publishedAt: item.publishedAt,
           ratingValue: item.ratingValue,
           rawPayload: item,
-          metadata: { syncType: 'reviews' }
+          metadata: { syncType: 'reviews' },
+            companySourceTargetId: target.id,
         })
       }
     }

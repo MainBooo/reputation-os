@@ -70,4 +70,22 @@ export class MentionsService {
     await this.assertCompanyAccess(userId, mention.companyId)
     return this.prisma.mention.update({ where: { id }, data: { status: dto.status } })
   }
+
+  async remove(userId: string, id: string) {
+    const mention = await this.prisma.mention.findUnique({
+      where: { id },
+      select: { id: true, companyId: true }
+    })
+
+    if (!mention) throw new NotFoundException('Mention not found')
+
+    await this.assertCompanyAccess(userId, mention.companyId)
+
+    await this.prisma.$transaction([
+      this.prisma.aIReplyDraft.deleteMany({ where: { mentionId: id } }),
+      this.prisma.mention.delete({ where: { id } })
+    ])
+
+    return { ok: true }
+  }
 }

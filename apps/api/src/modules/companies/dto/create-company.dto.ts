@@ -19,4 +19,8 @@ export class CreateCompanyDto {
   @IsOptional()
   @IsString()
   industry?: string
+
+  @IsOptional()
+  @IsString()
+  yandexUrl?: string
 }

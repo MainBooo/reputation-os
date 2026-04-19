@@ -16,8 +16,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     try {
-      const hasToken =
-        document.cookie.includes('accessToken=') || !!localStorage.getItem('accessToken')
+      const hasToken = document.cookie.includes('accessToken=')
       if (hasToken) {
         router.replace('/dashboard')
       }
@@ -33,7 +32,6 @@ export default function LoginPage() {
       const result: any = await login({ email, password })
 
       if (typeof window !== 'undefined' && result?.accessToken) {
-        localStorage.setItem('accessToken', result.accessToken)
         document.cookie = `accessToken=${encodeURIComponent(result.accessToken)}; path=/; max-age=${60 * 60 * 24 * 7}; samesite=lax`
       }
 
