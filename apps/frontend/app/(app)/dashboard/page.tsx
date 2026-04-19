@@ -21,9 +21,52 @@ export default async function DashboardPage() {
   return (
     <div>
       <PageHeader
-        title="Дашборд"
-        subtitle="Сводный обзор репутации по отзывам, упоминаниям, рейтингам и активности ВКонтакте."
+        title="Панель управления"
+        subtitle="Краткий обзор системы мониторинга репутации, источников и входящих упоминаний."
       />
+
+      <Card className="mb-6 p-5">
+        <div className="space-y-4">
+          <div>
+            <div className="text-base font-semibold text-white">Как работает Reputation OS</div>
+            <div className="mt-2 text-sm text-muted">
+              Reputation OS помогает собирать отзывы, комментарии и упоминания компании в одном месте,
+              чтобы вы могли быстро просматривать их, переходить к источнику и обрабатывать входящий поток.
+            </div>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="rounded-2xl border border-line bg-white/[0.02] p-4">
+              <div className="text-sm font-medium text-white">Что можно сделать</div>
+              <ul className="mt-3 space-y-2 text-sm text-muted">
+                <li>• Добавить компанию и настроить источники мониторинга</li>
+                <li>• Подключить VK и запускать поиск комментариев и упоминаний</li>
+                <li>• Смотреть все найденные упоминания во Входящих</li>
+                <li>• Открывать оригинальный источник и удалять нерелевантные записи</li>
+              </ul>
+            </div>
+
+            <div className="rounded-2xl border border-line bg-white/[0.02] p-4">
+              <div className="text-sm font-medium text-white">С чего начать</div>
+              <ul className="mt-3 space-y-2 text-sm text-muted">
+                <li>1. Перейдите в раздел «Компании» и добавьте компанию</li>
+                <li>2. Откройте карточку компании и подключите нужные источники</li>
+                <li>3. Для VK запустите поиск постов и комментариев</li>
+                <li>4. Откройте Inbox, чтобы просматривать и обрабатывать найденные упоминания</li>
+              </ul>
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                <Link href="/companies">
+                  <Button type="button">Открыть компании</Button>
+                </Link>
+                <Link href="/dashboard">
+                  <Button type="button" variant="secondary">Обновить панель</Button>
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Card>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Компании" value={companies.length} />

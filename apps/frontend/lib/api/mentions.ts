@@ -22,3 +22,11 @@ export function updateMentionStatus(id: string, status: 'REVIEWED' | 'ARCHIVED')
     body: JSON.stringify({ status })
   })
 }
+
+export function deleteMention(id: string) {
+  return apiFetch(`/mentions/${id}`, {
+    method: 'DELETE'
+  }, {
+    ok: true
+  })
+}

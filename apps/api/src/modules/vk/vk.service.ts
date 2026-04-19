@@ -894,28 +894,28 @@ export class VkService {
       throw new BadRequestException('VK session is not connected')
     }
 
-    const job = await this.vkPostSearchQueue.add(
-      JOBS.VK_POST_SEARCH,
-      { companyId, triggeredByUserId: userId },
-      {
-        removeOnComplete: 100,
-        removeOnFail: 100,
-        jobId: `manual__vk-post-search__${companyId}__${Date.now()}`
-      }
-    )
-
-    await this.prisma.jobLog.create({
-      data: {
-        companyId,
-        triggeredByUserId: userId,
-        queueName: QUEUES.VK_POST_SEARCH,
-        jobName: JOBS.VK_POST_SEARCH,
-        jobStatus: 'PENDING',
-        payload: {
-          mode: 'VK_POST_SEARCH'
+      const jobLog = await this.prisma.jobLog.create({
+        data: {
+          companyId,
+          triggeredByUserId: userId,
+          queueName: QUEUES.VK_POST_SEARCH,
+          jobName: JOBS.VK_POST_SEARCH,
+          jobStatus: 'PENDING',
+          payload: {
+            mode: 'VK_POST_SEARCH'
+          }
         }
-      }
-    })
+      })
+
+      const job = await this.vkPostSearchQueue.add(
+        JOBS.VK_POST_SEARCH,
+        { companyId, triggeredByUserId: userId, jobLogId: jobLog.id },
+        {
+          removeOnComplete: 100,
+          removeOnFail: 100,
+          jobId: `manual__vk-post-search__${companyId}__${Date.now()}`
+        }
+      )
 
     return {
       ok: true,

@@ -6,7 +6,7 @@ import clsx from 'clsx'
 import { LayoutDashboard, Building2, Settings } from 'lucide-react'
 
 const items = [
-  { href: '/dashboard', label: 'Дашборд', icon: LayoutDashboard },
+  { href: '/dashboard', label: 'Панель', icon: LayoutDashboard },
   { href: '/companies', label: 'Компании', icon: Building2 },
   { href: '/settings', label: 'Настройки', icon: Settings }
 ]

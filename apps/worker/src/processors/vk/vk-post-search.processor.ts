@@ -19,6 +19,7 @@ export class VkPostSearchProcessor implements OnModuleInit, OnModuleDestroy {
       async (job: Job) => {
         const companyId = job.data?.companyId as string | undefined
         const triggeredByUserId = job.data?.triggeredByUserId as string | undefined
+        const jobLogId = job.data?.jobLogId as string | undefined
 
         if (!companyId) {
           return {
@@ -28,10 +29,16 @@ export class VkPostSearchProcessor implements OnModuleInit, OnModuleDestroy {
           }
         }
 
-        return this.service.processJob({
-          companyId,
-          triggeredByUserId
-        })
+        try {
+          return await this.service.processJob({
+            companyId,
+            triggeredByUserId,
+            jobLogId
+          })
+        } catch (err) {
+          await this.service.markJobFailed(jobLogId, err)
+          throw err
+        }
       },
       {
         connection: this.connection,

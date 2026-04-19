@@ -20,4 +20,8 @@ export class UpdateCompanyDto {
   @IsOptional()
   @IsString()
   description?: string
+
+  @IsOptional()
+  @IsString()
+  yandexUrl?: string
 }

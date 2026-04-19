@@ -55,7 +55,40 @@ export class VkPostSearchService {
     })
   }
 
-  async processJob(params: { companyId: string; triggeredByUserId?: string }) {
+  private async updateJobProgress(jobLogId: string | undefined, data: any) {
+    if (!jobLogId) return
+    try {
+      await this.prisma.jobLog.update({
+        where: { id: jobLogId },
+        data
+      })
+    } catch (e) {
+      this.logger.warn(`jobLog update failed: ${e instanceof Error ? e.message : e}`)
+    }
+  }
+
+  async markJobFailed(jobLogId: string | undefined, error: any) {
+    if (!jobLogId) return
+    try {
+      await this.prisma.jobLog.update({
+        where: { id: jobLogId },
+        data: {
+          jobStatus: 'FAILED',
+          errorMessage: error?.message || 'unknown error',
+          result: {
+            stage: 'failed',
+            progress: 100,
+            errorMessage: error?.message || 'unknown error'
+          } as any
+        }
+      })
+    } catch (e) {
+      this.logger.error(`failed to mark jobLog FAILED: ${e instanceof Error ? e.message : e}`)
+    }
+  }
+
+
+  async processJob(params: { companyId: string; triggeredByUserId?: string; jobLogId?: string }) {
     const company = await this.prisma.company.findUnique({
       where: { id: params.companyId },
       include: {
@@ -98,7 +131,63 @@ export class VkPostSearchService {
     }
 
     const source = await this.ensureSource(company.workspaceId)
-    const found = await this.searchService.searchPosts(aliases, company.workspaceId, company.id)
+
+      await this.updateJobProgress(params.jobLogId, {
+        sourceId: source.id,
+        jobStatus: 'RUNNING',
+        payload: {
+          mode: 'VK_POST_SEARCH',
+          stage: 'search_posts',
+          progress: 10
+        } as any,
+        result: {
+          stage: 'search_posts',
+          progress: 10,
+          postsFound: 0,
+          relevantPosts: 0,
+          relevantComments: 0
+        } as any
+      })
+    const found = await this.searchService.searchPosts(
+        aliases,
+        company.workspaceId,
+        company.id,
+        async (progress) => {
+          await this.updateJobProgress(params.jobLogId, {
+            jobStatus: 'RUNNING',
+            payload: {
+              mode: 'VK_POST_SEARCH',
+              stage: progress.stage,
+              progress: progress.progress,
+              aliases
+            } as any,
+            result: {
+              stage: progress.stage,
+              progress: progress.progress,
+              postsFound: progress.postsFound ?? 0,
+              relevantPosts: 0,
+              relevantComments: 0
+            } as any
+          })
+        }
+      )
+
+      await this.updateJobProgress(params.jobLogId, {
+        jobStatus: 'RUNNING',
+        itemsDiscovered: found.length,
+        payload: {
+          stage: 'search_posts',
+          progress: 45,
+          aliases
+        } as any,
+        result: {
+          stage: 'search_posts',
+          progress: 45,
+          postsFound: found.length,
+          relevantPosts: 0,
+          relevantComments: 0
+        } as any
+      })
 
     let relevantPosts = 0
     let relevantComments = 0
@@ -161,26 +250,69 @@ export class VkPostSearchService {
       }
     }
 
-    await this.prisma.jobLog.create({
-      data: {
-        companyId: company.id,
-        sourceId: source.id,
-        triggeredByUserId: params.triggeredByUserId || null,
-        queueName: 'vk_post_search',
-        jobName: 'vk.post-search',
-        jobStatus: 'SUCCESS',
+      await this.updateJobProgress(params.jobLogId, {
+        jobStatus: 'RUNNING',
         itemsDiscovered: found.length,
         itemsCreated: relevantPosts + relevantComments,
         payload: {
+          stage: 'persist_mentions',
+          progress: 80,
           aliases
         } as any,
         result: {
+          stage: 'persist_mentions',
+          progress: 80,
           postsFound: found.length,
           relevantPosts,
           relevantComments
         } as any
+      })
+
+        if (params.jobLogId) {
+        await this.prisma.jobLog.update({
+          where: { id: params.jobLogId },
+          data: {
+            sourceId: source.id,
+            jobStatus: 'SUCCESS',
+            itemsDiscovered: found.length,
+            itemsCreated: relevantPosts + relevantComments,
+            payload: {
+              aliases
+            } as any,
+            result: {
+              postsFound: found.length,
+              relevantPosts,
+              relevantComments,
+              stage: 'completed',
+              progress: 100
+            } as any
+          }
+        })
+      } else {
+        this.logger.warn('jobLogId missing, fallback create')
+        await this.prisma.jobLog.create({
+          data: {
+            companyId: company.id,
+            sourceId: source.id,
+            triggeredByUserId: params.triggeredByUserId || null,
+            queueName: 'vk_post_search',
+            jobName: 'vk.post-search',
+            jobStatus: 'SUCCESS',
+            itemsDiscovered: found.length,
+            itemsCreated: relevantPosts + relevantComments,
+            payload: {
+              aliases
+            } as any,
+            result: {
+              postsFound: found.length,
+              relevantPosts,
+              relevantComments,
+              stage: 'completed',
+              progress: 100
+            } as any
+          }
+        })
       }
-    })
 
     return {
       ok: true,

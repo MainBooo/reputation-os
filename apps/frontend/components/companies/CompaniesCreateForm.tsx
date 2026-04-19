@@ -25,6 +25,7 @@ export default function CompaniesCreateForm() {
   const [website, setWebsite] = useState('')
   const [city, setCity] = useState('')
   const [industry, setIndustry] = useState('')
+  const [yandexUrl, setYandexUrl] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -75,7 +76,8 @@ export default function CompaniesCreateForm() {
         name: name.trim(),
         website: website.trim() || undefined,
         city: city.trim() || undefined,
-        industry: industry.trim() || undefined
+        industry: industry.trim() || undefined,
+        yandexUrl: yandexUrl.trim() || undefined
       })) as CreatedCompany
 
       router.push(`/companies/${company.id}`)
@@ -120,6 +122,12 @@ export default function CompaniesCreateForm() {
           value={industry}
           onChange={(e) => setIndustry(e.target.value)}
           placeholder="Отрасль (необязательно)"
+        />
+
+        <Input
+          value={yandexUrl}
+          onChange={(e) => setYandexUrl(e.target.value)}
+          placeholder="Ссылка на Яндекс.Карты (необязательно)"
         />
 
         {workspaces.length > 1 ? (

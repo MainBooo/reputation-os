@@ -18,6 +18,7 @@ export function createCompany(payload: {
   website?: string
   city?: string
   industry?: string
+  yandexUrl?: string
 }) {
   return apiFetch('/companies', {
     method: 'POST',
