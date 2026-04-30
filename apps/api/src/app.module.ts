@@ -12,6 +12,7 @@ import { AnalyticsModule } from './modules/analytics/analytics.module'
 import { AiReplyDraftsModule } from './modules/ai-reply-drafts/ai-reply-drafts.module'
 import { VkModule } from './modules/vk/vk.module'
 import { SyncModule } from './modules/sync/sync.module'
+import { PushModule } from './modules/push/push.module'
 
 @Module({
   imports: [
@@ -27,7 +28,8 @@ import { SyncModule } from './modules/sync/sync.module'
     AnalyticsModule,
     AiReplyDraftsModule,
     VkModule,
-    SyncModule
+    SyncModule,
+    PushModule
   ]
 })
 export class AppModule {}

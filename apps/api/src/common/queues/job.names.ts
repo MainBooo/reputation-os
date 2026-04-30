@@ -5,6 +5,7 @@ export const JOBS = {
   RATING_REFRESH: 'rating.refresh',
   RECONCILE: 'reconcile.run',
   NOTIFICATIONS: 'notifications.evaluate',
+  ALERT_CHECK: 'alerts.check',
   VK_BRAND_SEARCH: 'vk.brand-search',
   VK_PRIORITY_COMMUNITIES: 'vk.priority-communities',
   VK_OWNED_COMMUNITY: 'vk.owned-community',

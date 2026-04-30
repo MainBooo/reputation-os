@@ -24,6 +24,46 @@ export class CompaniesService {
     return value?.trim().toLowerCase() || null
   }
 
+  private normalizeKeywords(values?: string[] | null) {
+    if (!Array.isArray(values)) return []
+
+    const seen = new Set<string>()
+
+    return values
+      .map((value) => value?.trim().replace(/\s+/g, ' '))
+      .filter((value): value is string => Boolean(value))
+      .filter((value) => {
+        const normalized = this.normalize(value)
+        if (!normalized || seen.has(normalized)) return false
+        seen.add(normalized)
+        return true
+      })
+      .slice(0, 20)
+  }
+
+  private async syncCompanyKeywords(companyId: string, keywords?: string[] | null) {
+    if (keywords === undefined) return
+
+    const normalizedKeywords = this.normalizeKeywords(keywords)
+
+    await this.prisma.companyAlias.deleteMany({
+      where: { companyId }
+    })
+
+    if (!normalizedKeywords.length) return
+
+    await this.prisma.companyAlias.createMany({
+      data: normalizedKeywords.map((value, index) => ({
+        companyId,
+        value,
+        normalizedValue: this.normalize(value) || value.toLowerCase(),
+        priority: 100 + index,
+        isPrimary: index === 0
+      })),
+      skipDuplicates: true
+    })
+  }
+
   private normalizeYandexUrl(value?: string | null) {
     const trimmed = value?.trim()
     if (!trimmed) return null
@@ -79,6 +119,43 @@ export class CompaniesService {
 
     this.logger.log(`[YandexInit] source created workspaceId=${workspaceId} sourceId=${yandexSource.id}`)
     return yandexSource
+  }
+
+  private getYandexReviewsRepeatOptions() {
+    return { every: 30 * 60 * 1000 }
+  }
+
+  private getYandexReviewsRepeatJobId(companyId: string) {
+    return `reviews-sync:${companyId}`
+  }
+
+  private async ensureYandexReviewsRepeat(companyId: string) {
+    await this.reviewsSyncQueue.add(
+      JOBS.REVIEWS_SYNC,
+      { companyId, autoCron: true },
+      {
+        repeat: this.getYandexReviewsRepeatOptions(),
+        jobId: this.getYandexReviewsRepeatJobId(companyId)
+      }
+    )
+
+    this.logger.log(`[YandexCron] repeat reviews.sync ensured companyId=${companyId}`)
+  }
+
+  private async removeYandexReviewsRepeat(companyId: string) {
+    const repeatables = await this.reviewsSyncQueue.getRepeatableJobs()
+    const jobId = this.getYandexReviewsRepeatJobId(companyId)
+
+    for (const job of repeatables) {
+      const isTargetJob =
+        job.name === JOBS.REVIEWS_SYNC &&
+        (job.id === jobId || job.key.includes(jobId) || job.key.includes(companyId))
+
+      if (isTargetJob) {
+        await this.reviewsSyncQueue.removeRepeatableByKey(job.key)
+        this.logger.log(`[YandexCron] repeat reviews.sync removed companyId=${companyId} key=${job.key}`)
+      }
+    }
   }
 
   private async enqueueAutoSyncJobs(params: {
@@ -168,41 +245,6 @@ export class CompaniesService {
       )
     }
 
-    try {
-      await this.reviewsSyncQueue.add(
-        JOBS.REVIEWS_SYNC,
-        { companyId },
-        {
-          repeat: { every: 6 * 60 * 60 * 1000 },
-          jobId: `reviews-sync:${companyId}`
-        }
-      )
-
-      this.logger.log(`[YandexInit] repeat reviews.sync ensured companyId=${companyId}`)
-    } catch (error) {
-      this.logger.error(
-        `[YandexInit] repeat reviews.sync failed companyId=${companyId}`,
-        error instanceof Error ? error.stack : String(error)
-      )
-    }
-
-    try {
-      await this.ratingRefreshQueue.add(
-        JOBS.RATING_REFRESH,
-        { companyId },
-        {
-          repeat: { every: 24 * 60 * 60 * 1000 },
-          jobId: `rating-refresh:${companyId}`
-        }
-      )
-
-      this.logger.log(`[YandexInit] repeat rating.refresh ensured companyId=${companyId}`)
-    } catch (error) {
-      this.logger.error(
-        `[YandexInit] repeat rating.refresh failed companyId=${companyId}`,
-        error instanceof Error ? error.stack : String(error)
-      )
-    }
   }
 
   async findAll(userId: string) {
@@ -236,6 +278,8 @@ export class CompaniesService {
         industry: dto.industry
       }
     })
+
+    await this.syncCompanyKeywords(company.id, dto.keywords)
 
     const normalizedYandexUrl = this.normalizeYandexUrl(dto.yandexUrl)
 
@@ -311,6 +355,8 @@ export class CompaniesService {
         ...(dto.industry !== undefined ? { industry: dto.industry } : {})
       }
     })
+
+    await this.syncCompanyKeywords(id, dto.keywords)
 
     if (dto.yandexUrl !== undefined) {
       const normalizedYandexUrl = this.normalizeYandexUrl(dto.yandexUrl)
@@ -504,19 +550,41 @@ export class CompaniesService {
 
     await this.assertWorkspaceAccess(userId, company.workspaceId)
 
-    return this.prisma.companySourceTarget.update({
+    const target = await this.prisma.companySourceTarget.findUnique({
+      where: { id: targetId },
+      include: { source: true }
+    })
+
+    if (!target || target.companyId !== companyId) {
+      throw new NotFoundException('Company source target not found')
+    }
+
+    const updatedTarget = await this.prisma.companySourceTarget.update({
       where: { id: targetId },
       data: {
         ...(dto.externalPlaceId !== undefined ? { externalPlaceId: dto.externalPlaceId } : {}),
-        ...(dto.externalUrl !== undefined ? { externalUrl: dto.externalUrl } : {}),
+        ...(dto.externalUrl !== undefined ? { externalUrl: this.normalizeYandexUrl(dto.externalUrl) } : {}),
         ...(dto.displayName !== undefined ? { displayName: dto.displayName } : {}),
         ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
         ...(dto.syncReviewsEnabled !== undefined ? { syncReviewsEnabled: dto.syncReviewsEnabled } : {}),
         ...(dto.syncRatingsEnabled !== undefined ? { syncRatingsEnabled: dto.syncRatingsEnabled } : {}),
         ...(dto.syncMentionsEnabled !== undefined ? { syncMentionsEnabled: dto.syncMentionsEnabled } : {}),
         ...(dto.config !== undefined ? { config: this.toInputJson(dto.config) } : {})
-      }
+      },
+      include: { source: true }
     })
+
+    if (updatedTarget.source?.platform === 'YANDEX' && dto.syncReviewsEnabled !== undefined) {
+      if (dto.syncReviewsEnabled && updatedTarget.isActive && updatedTarget.externalUrl) {
+        await this.ensureYandexReviewsRepeat(companyId)
+        this.logger.log(`[YandexCron] repeat ensured from source target update companyId=${companyId} targetId=${targetId}`)
+      } else {
+        await this.removeYandexReviewsRepeat(companyId)
+        this.logger.log(`[YandexCron] repeat removed from source target update companyId=${companyId} targetId=${targetId}`)
+      }
+    }
+
+    return updatedTarget
   }
 
   async deleteSourceTarget(userId: string, companyId: string, targetId: string) {

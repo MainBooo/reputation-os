@@ -1,0 +1,11 @@
+{
+  "name": "Reputation OS",
+  "short_name": "ReputationOS",
+  "description": "Reputation inbox, reviews and alerts",
+  "start_url": "/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#050b12",
+  "theme_color": "#050b12",
+  "icons": []
+}

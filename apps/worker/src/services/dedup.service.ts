@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common'
-import { MentionType, Platform } from '@prisma/client'
+import { MentionType, Platform, Sentiment } from '@prisma/client'
 import { PrismaService } from '../common/prisma/prisma.service'
 import { buildMentionHash } from '../common/utils/hash.util'
 import { normalizeText } from '../common/utils/normalize.util'
@@ -8,6 +8,20 @@ import { classifySentiment } from '../common/utils/sentiment.util'
 @Injectable()
 export class DedupService {
   constructor(private readonly prisma: PrismaService) {}
+
+  private classifyMentionSentiment(content: string, ratingValue?: number | null): Sentiment {
+    if (ratingValue !== null && ratingValue !== undefined) {
+      const rating = Number(ratingValue)
+
+      if (Number.isFinite(rating)) {
+        if (rating <= 2) return 'NEGATIVE'
+        if (rating >= 4) return 'POSITIVE'
+        return 'NEUTRAL'
+      }
+    }
+
+    return classifySentiment(content)
+  }
 
   async persistMention(params: {
     companyId: string
@@ -48,7 +62,7 @@ export class DedupService {
             url: params.url,
             publishedAt: params.publishedAt,
             ratingValue: params.ratingValue,
-            sentiment: classifySentiment(normalizedContent),
+            sentiment: this.classifyMentionSentiment(normalizedContent, params.ratingValue),
             rawPayload: params.rawPayload as any,
             metadata: params.metadata as any,
             vkTrackedPostId: params.vkTrackedPostId
@@ -84,7 +98,7 @@ export class DedupService {
         author: params.author || null,
         publishedAt: params.publishedAt,
         ratingValue: params.ratingValue ?? null,
-        sentiment: classifySentiment(normalizedContent),
+        sentiment: this.classifyMentionSentiment(normalizedContent, params.ratingValue),
         status: 'NEW',
         hash,
         rawPayload: params.rawPayload as any,

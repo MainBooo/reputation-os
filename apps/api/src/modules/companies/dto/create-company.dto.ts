@@ -1,4 +1,4 @@
-import { IsOptional, IsString, MinLength } from 'class-validator'
+import { IsArray, IsOptional, IsString, MinLength } from 'class-validator'
 
 export class CreateCompanyDto {
   @IsString()
@@ -23,4 +23,9 @@ export class CreateCompanyDto {
   @IsOptional()
   @IsString()
   yandexUrl?: string
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  keywords?: string[]
 }

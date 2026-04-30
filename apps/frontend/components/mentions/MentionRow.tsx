@@ -29,6 +29,13 @@ export default function MentionRow({
           : 'NEUTRAL'
       : mention.sentiment
 
+  const sourceUrl =
+    mention.url ||
+    mention.sourceUrl ||
+    mention.vkTrackedPost?.url ||
+    mention.vkTrackedPost?.postUrl ||
+    null
+
   const ratingBadgeClass =
     numericRating !== null && Number.isFinite(numericRating)
       ? numericRating >= 4
@@ -70,9 +77,9 @@ export default function MentionRow({
 
         <div className="mt-2 flex flex-col items-start gap-2 sm:mt-0 sm:items-end sm:text-right">
           <div className="flex flex-wrap items-center gap-2">
-            {mention.url ? (
+            {sourceUrl ? (
               <a
-                href={mention.url}
+                href={sourceUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 rounded-md border border-cyan-400/20 bg-cyan-400/10 px-2.5 py-1 text-xs text-cyan-300 transition-all hover:bg-cyan-400/20 hover:text-white"
