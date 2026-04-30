@@ -1,4 +1,4 @@
-import { IsDateString, IsEnum, IsInt, IsOptional, Min } from 'class-validator'
+import { IsDateString, IsEnum, IsInt, IsOptional, Max, Min } from 'class-validator'
 import { MentionStatus, MentionType, Platform, Sentiment } from '@prisma/client'
 import { Type } from 'class-transformer'
 
@@ -38,4 +38,11 @@ export class ListCompanyMentionsDto {
   @IsOptional()
   @IsEnum(MentionType)
   type?: MentionType
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(5)
+  rating?: number
 }

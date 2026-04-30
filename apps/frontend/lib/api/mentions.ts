@@ -1,9 +1,20 @@
 import { apiFetch } from './client'
 
-export function getCompanyMentions(id: string, query = '') {
+export type CompanyMentionsResponse = {
+  data: any[]
+  meta: {
+    total: number
+    page: number
+    limit: number
+    averageRating?: number | null
+    ratedCount?: number
+  }
+}
+
+export function getCompanyMentions(id: string, query = ''): Promise<CompanyMentionsResponse> {
   return apiFetch(`/companies/${id}/mentions${query}`, undefined, {
     data: [],
-    meta: { total: 0, page: 1, limit: 20 }
+    meta: { total: 0, page: 1, limit: 20, averageRating: null, ratedCount: 0 }
   })
 }
 

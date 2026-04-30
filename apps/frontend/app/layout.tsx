@@ -3,7 +3,8 @@ import type { Metadata, Viewport } from 'next'
 
 export const metadata: Metadata = {
   title: 'Reputation OS',
-  description: 'Reputation Inbox'
+  description: 'Reputation Inbox',
+  manifest: '/manifest.webmanifest'
 }
 
 export const viewport: Viewport = {

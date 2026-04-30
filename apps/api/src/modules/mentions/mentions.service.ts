@@ -29,9 +29,9 @@ export class MentionsService {
     const where: Prisma.MentionWhereInput = {
       companyId,
       ...(query.platform ? { platform: query.platform } : {}),
-      ...(query.sentiment ? { sentiment: query.sentiment } : {}),
       ...(query.status ? { status: query.status } : {}),
       ...(query.type ? { type: query.type } : {}),
+      ...(query.rating ? { ratingValue: query.rating } : {}),
       ...(query.from || query.to ? {
         publishedAt: {
           ...(query.from ? { gte: new Date(query.from) } : {}),
@@ -40,7 +40,26 @@ export class MentionsService {
       } : {})
     }
 
-    const [items, total] = await Promise.all([
+    if (query.sentiment === 'POSITIVE') {
+      where.ratingValue = { gte: 4 }
+    }
+
+    if (query.sentiment === 'NEGATIVE') {
+      where.ratingValue = { lte: 2 }
+    }
+
+    if (query.sentiment === 'NEUTRAL') {
+      where.ratingValue = { gt: 2, lt: 4 }
+    }
+
+    const ratingWhere: Prisma.MentionWhereInput = {
+      AND: [
+        where,
+        { ratingValue: { not: null } }
+      ]
+    }
+
+    const [items, total, ratingAggregate, ratedCount, sourceTargets] = await Promise.all([
       this.prisma.mention.findMany({
         where,
         include: { source: true, vkTrackedPost: true },
@@ -48,10 +67,33 @@ export class MentionsService {
         skip,
         take: limit
       }),
-      this.prisma.mention.count({ where })
+      this.prisma.mention.count({ where }),
+      this.prisma.mention.aggregate({
+        where: ratingWhere,
+        _avg: { ratingValue: true }
+      }),
+      this.prisma.mention.count({ where: ratingWhere }),
+      this.prisma.companySourceTarget.findMany({
+        where: { companyId, isActive: true },
+        include: { source: true }
+      })
     ])
 
-    return { data: items, meta: { total, page, limit } }
+    const averageRatingRaw = ratingAggregate._avg.ratingValue
+    const averageRating = averageRatingRaw === null ? null : Number(averageRatingRaw)
+
+    const sourceUrlByPlatform = new Map(
+      sourceTargets
+        .filter((target) => target.externalUrl && target.source?.platform)
+        .map((target) => [target.source.platform, target.externalUrl])
+    )
+
+    const data = items.map((item) => ({
+      ...item,
+      sourceUrl: item.url || sourceUrlByPlatform.get(item.platform) || item.source?.baseUrl || null
+    }))
+
+    return { data, meta: { total, page, limit, averageRating, ratedCount } }
   }
 
   async findOne(userId: string, id: string) {

@@ -17,10 +17,8 @@ export class ReviewsSyncProcessor implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   onModuleInit() {
-    console.log('[DEBUG] REVIEWS WORKER INIT queue=', 'reviews_sync')
 
-    console.log('[DEBUG] CREATING REVIEWS WORKER');
-      this.worker = new Worker(QUEUES.REVIEWS_SYNC, async (job: Job) => this.handle(job), {
+    this.worker = new Worker(QUEUES.REVIEWS_SYNC, async (job: Job) => this.handle(job), {
       connection: this.connection
     })
   }
@@ -30,52 +28,91 @@ export class ReviewsSyncProcessor implements OnModuleInit, OnModuleDestroy {
   }
 
   async handle(job: Job) {
-      console.log('[DEBUG] REVIEWS JOB START', job.data)
 
     const { companyId } = job.data
-    const targets = await this.prisma.companySourceTarget.findMany({
-      where: { companyId, syncReviewsEnabled: true },
-      include: { source: true }
-    })
 
-    for (const target of targets) {
-        console.log('[DEBUG] TARGET', target.source.platform, target.externalUrl)
+    try {
+      const targets = await this.prisma.companySourceTarget.findMany({
+        where: { companyId, syncReviewsEnabled: true },
+        include: { source: true }
+      })
 
-      if (target.source.platform === 'VK') continue
-      const adapter = SourceAdapterFactory.getAdapter(target.source.platform)
-      const mentions = await adapter.fetchMentions(target)
-        console.log('[DEBUG] YANDEX RESULT COUNT=', mentions?.length)
-        console.log('[DEBUG] YANDEX RESULT SAMPLE=', mentions?.[0])
+      let itemsDiscovered = 0
+      let itemsCreated = 0
 
-      for (const item of mentions) {
-        await this.mentionService.persistExternalMention({
+      for (const target of targets) {
+
+        if (target.source.platform === 'VK') continue
+
+        let mentions: any[] = []
+
+        try {
+          const adapter = SourceAdapterFactory.getAdapter(target.source.platform)
+          mentions = await adapter.fetchMentions(target)
+        } catch (targetError) {
+          const targetMessage = targetError instanceof Error ? targetError.message : String(targetError)
+
+          console.warn('[REVIEWS] Target failed', {
+            targetId: target.id,
+            platform: target.source.platform,
+            externalUrl: target.externalUrl,
+            error: targetMessage
+          })
+
+          continue
+        }
+
+
+        itemsDiscovered += mentions.length
+
+        for (const item of mentions) {
+          await this.mentionService.persistExternalMention({
+            companyId,
+            sourceId: target.sourceId,
+            platform: target.source.platform,
+            type: 'REVIEW',
+            externalMentionId: item.externalMentionId,
+            url: item.url,
+            title: item.title,
+            content: item.content,
+            author: item.author,
+            publishedAt: item.publishedAt,
+            ratingValue: item.ratingValue,
+            rawPayload: item,
+            metadata: { syncType: 'reviews' },
+            companySourceTargetId: target.id
+          })
+
+          itemsCreated += 1
+        }
+      }
+
+      await this.prisma.jobLog.create({
+        data: {
           companyId,
-          sourceId: target.sourceId,
-          platform: target.source.platform,
-          type: 'REVIEW',
-          externalMentionId: item.externalMentionId,
-          url: item.url,
-          title: item.title,
-          content: item.content,
-          author: item.author,
-          publishedAt: item.publishedAt,
-          ratingValue: item.ratingValue,
-          rawPayload: item,
-          metadata: { syncType: 'reviews' },
-            companySourceTargetId: target.id,
-        })
-      }
+          queueName: QUEUES.REVIEWS_SYNC,
+          jobName: 'reviews.sync',
+          jobStatus: 'SUCCESS',
+          itemsDiscovered,
+          itemsCreated
+        }
+      }).catch(() => null)
+
+      return { companyId, processedTargets: targets.length, itemsDiscovered, itemsCreated }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+
+      await this.prisma.jobLog.create({
+        data: {
+          companyId,
+          queueName: QUEUES.REVIEWS_SYNC,
+          jobName: 'reviews.sync',
+          jobStatus: 'FAILED',
+          errorMessage: message
+        }
+      }).catch(() => null)
+
+      throw error
     }
-
-    await this.prisma.jobLog.create({
-      data: {
-        companyId,
-        queueName: QUEUES.REVIEWS_SYNC,
-        jobName: 'reviews.sync',
-        jobStatus: 'SUCCESS'
-      }
-    }).catch(() => null)
-
-    return { companyId, processedTargets: targets.length }
   }
 }
