@@ -1,5 +1,4 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common'
-import { Platform } from '@prisma/client'
 import { PrismaService } from '../../common/prisma/prisma.service'
 
 @Injectable()
@@ -42,7 +41,7 @@ export class AnalyticsService {
       _count: { _all: true }
     })
     const data = grouped.map((item) => ({ platform: item.platform, count: item._count._all }))
-    const vkCount = data.find((item) => item.platform === Platform.VK)?.count ?? 0
-    return { platforms: data, vkCount }
+    const webCount = data.find((item) => item.platform === 'WEB')?.count ?? 0
+    return { platforms: data, webCount }
   }
 }

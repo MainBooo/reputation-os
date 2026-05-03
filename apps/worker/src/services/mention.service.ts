@@ -20,8 +20,7 @@ export class MentionService {
     ratingValue?: number | null
     rawPayload?: unknown
     metadata?: unknown
-    vkTrackedPostId?: string | null
-      companySourceTargetId?: string | null
+    companySourceTargetId?: string | null
   }) {
     return this.dedupService.persistMention(params)
   }

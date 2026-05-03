@@ -3,6 +3,7 @@ import * as webPush from 'web-push'
 import { PrismaService } from '../common/prisma/prisma.service'
 
 const ALLOWED_SENTIMENTS = ['NEGATIVE', 'POSITIVE', 'NEUTRAL'] as const
+const ALERT_MAX_PUBLISHED_AGE_MS = 48 * 60 * 60 * 1000
 
 function sentimentLabel(sentiment: string) {
   if (sentiment === 'NEGATIVE') return 'негативный'
@@ -52,10 +53,12 @@ export class AlertsService {
 
       const sentiments = this.normalizeSentiments(subscription.alertSentiments)
       const since = subscription.lastAlertCheckedAt || subscription.createdAt || new Date(Date.now() - 10 * 60 * 1000)
+      const minPublishedAt = new Date(now.getTime() - ALERT_MAX_PUBLISHED_AGE_MS)
 
       const mentions = await prismaAny.mention.findMany({
         where: {
           createdAt: { gt: since },
+          publishedAt: { gte: minPublishedAt },
           sentiment: { in: sentiments },
           company: {
             workspaceId: subscription.workspaceId,

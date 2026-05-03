@@ -263,8 +263,24 @@ export class YandexAdapter {
       }
 
       for (let i = 0; i < 6; i++) {
-        await page.mouse.wheel(0, 3000)
-        await page.waitForTimeout(1500)
+        if (page.isClosed()) {
+          console.warn('[YANDEX] page closed during initial scroll, stop target parse', {
+            url: normalizedUrl,
+            reason: 'YANDEX_PAGE_CLOSED_DURING_INITIAL_SCROLL'
+          })
+          break
+        }
+
+        try {
+          await page.mouse.wheel(0, 3000)
+          await page.waitForTimeout(1500)
+        } catch (error) {
+          console.warn('[YANDEX] initial scroll failed, stop target parse', {
+            url: normalizedUrl,
+            error: error instanceof Error ? error.message : String(error)
+          })
+          break
+        }
       }
 
       for (let i = 0; i < 8; i++) {

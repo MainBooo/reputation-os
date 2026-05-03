@@ -42,7 +42,7 @@ export default function CompanyYandexCronToggle({
       <div className="min-w-0">
         <div className="text-sm font-semibold text-white">Автообновление Яндекс Карт</div>
         <div className="mt-1 text-xs text-muted">
-          Cron-проверка новых отзывов каждые 30 минут.
+          Cron-проверка новых отзывов каждые 10 минут.
         </div>
       </div>
 

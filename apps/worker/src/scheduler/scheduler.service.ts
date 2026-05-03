@@ -15,7 +15,6 @@ export class SchedulerService implements OnModuleInit {
     @Inject(`QUEUE_${QUEUES.MENTIONS_SYNC}`) private readonly mentionsSyncQueue: Queue,
     @Inject(`QUEUE_${QUEUES.RATING_REFRESH}`) private readonly ratingRefreshQueue: Queue,
     @Inject(`QUEUE_${QUEUES.RECONCILE}`) private readonly reconcileQueue: Queue,
-    @Inject(`QUEUE_${QUEUES.VK_POST_SEARCH}`) private readonly vkPostSearchQueue: Queue,
     @Inject(`QUEUE_${QUEUES.ALERT_CHECK}`) private readonly alertCheckQueue: Queue
   ) {}
 
@@ -59,13 +58,13 @@ export class SchedulerService implements OnModuleInit {
       where: { isActive: true }
     }).catch(() => [])
 
-    const yandexTargets = await prismaAny.companySourceTarget.findMany({
+    const reviewTargets = await prismaAny.companySourceTarget.findMany({
       where: {
         isActive: true,
         syncReviewsEnabled: true,
         company: { isActive: true },
         source: {
-          platform: 'YANDEX',
+          platform: { in: ['YANDEX', 'TWOGIS'] },
           isEnabled: true
         }
       },
@@ -105,10 +104,9 @@ export class SchedulerService implements OnModuleInit {
         { repeat: { every: 24 * 60 * 60 * 1000 }, jobId: `reconcile:${company.id}` }
       ).catch(() => null)
 
-      // VK auto repeat disabled temporarily: manual запуска остаются через API/queue.
     }
 
-    for (const target of yandexTargets) {
+    for (const target of reviewTargets) {
       const companyId = target?.companyId
       if (!companyId) continue
 
@@ -120,10 +118,10 @@ export class SchedulerService implements OnModuleInit {
           jobId: this.getYandexReviewsRepeatJobId(companyId)
         }
       ).catch((error) => {
-        this.logger.warn(`Failed to ensure Yandex reviews cron companyId=${companyId}: ${error?.message || error}`)
+        this.logger.warn(`Failed to ensure reviews cron companyId=${companyId}: ${error?.message || error}`)
       })
     }
 
-    this.logger.log(`Scheduler initialized yandexReviewsCronTargets=${yandexTargets.length} alertCheckEveryMinutes=5`)
+    this.logger.log(`Scheduler initialized reviewCronTargets=${reviewTargets.length} alertCheckEveryMinutes=5`)
   }
 }

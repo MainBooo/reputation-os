@@ -37,12 +37,13 @@ function getReadinessScore(params: {
   name: string
   keywords: string[]
   yandexUrl: string
+  twoGisUrl?: string
   website: string
 }) {
   let score = 0
   if (params.name.trim()) score += 35
   if (params.keywords.length > 0) score += 30
-  if (params.yandexUrl.trim()) score += 25
+  if (params.yandexUrl.trim() || params.twoGisUrl?.trim()) score += 25
   if (params.website.trim()) score += 10
   return Math.min(score, 100)
 }
@@ -57,6 +58,7 @@ export default function CompaniesCreateForm() {
   const [city, setCity] = useState('')
   const [industry, setIndustry] = useState('')
   const [yandexUrl, setYandexUrl] = useState('')
+  const [twoGisUrl, setTwoGisUrl] = useState('')
   const [keywordInput, setKeywordInput] = useState('')
   const [keywords, setKeywords] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
@@ -109,8 +111,8 @@ export default function CompaniesCreateForm() {
   }, [name, website, city, industry, keywords])
 
   const readinessScore = useMemo(
-    () => getReadinessScore({ name, keywords, yandexUrl, website }),
-    [name, keywords, yandexUrl, website]
+    () => getReadinessScore({ name, keywords, yandexUrl, twoGisUrl, website }),
+    [name, keywords, yandexUrl, twoGisUrl, website]
   )
 
   const canSubmit = useMemo(() => {
@@ -223,6 +225,7 @@ export default function CompaniesCreateForm() {
             <Input value={city} onChange={(e) => setCity(e.target.value)} placeholder="Город" />
             <Input value={industry} onChange={(e) => setIndustry(e.target.value)} placeholder="Отрасль / ниша" />
             <Input value={yandexUrl} onChange={(e) => setYandexUrl(e.target.value)} placeholder="Ссылка на Яндекс.Карты" />
+              <Input value={twoGisUrl} onChange={(e) => setTwoGisUrl(e.target.value)} placeholder="Ссылка на 2GIS" />
           </div>
 
           <div className="rounded-2xl border border-white/10 bg-white/[0.025] p-4">
@@ -348,7 +351,7 @@ export default function CompaniesCreateForm() {
 
                 <div className="rounded-xl border border-white/10 bg-white/[0.035] p-3">
                   <div className="text-xs text-muted">Источники</div>
-                  <div className="mt-1 text-xl font-semibold text-brand">{yandexUrl.trim() ? 1 : 0}</div>
+                  <div className="mt-1 text-xl font-semibold text-brand">{[yandexUrl.trim(), twoGisUrl.trim()].filter(Boolean).length}</div>
                 </div>
               </div>
             </div>
@@ -366,6 +369,11 @@ export default function CompaniesCreateForm() {
               <div className="flex items-center justify-between gap-3">
                 <span className="text-muted">Yandex Maps</span>
                 <span className={yandexUrl.trim() ? 'text-emerald-300' : 'text-muted'}>{yandexUrl.trim() ? 'подключён' : 'не указан'}</span>
+              </div>
+
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-muted">2GIS</span>
+                <span className={twoGisUrl.trim() ? 'text-emerald-300' : 'text-muted'}>{twoGisUrl.trim() ? 'подключён' : 'не указан'}</span>
               </div>
 
               <div className="flex items-center justify-between gap-3">

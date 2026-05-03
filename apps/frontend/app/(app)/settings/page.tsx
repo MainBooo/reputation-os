@@ -16,7 +16,7 @@ export default function SettingsPage() {
         <Card className="p-5">
           <div className="text-base font-semibold text-brand">Правила уведомлений</div>
           <div className="mt-3 text-sm leading-6 text-muted">
-            Скоро здесь будут условия: негативные отзывы, падение рейтинга, новые VK-упоминания и ежедневные дайджесты.
+            Скоро здесь будут условия: негативные отзывы, падение рейтинга, новые упоминания и ежедневные дайджесты.
           </div>
         </Card>
 

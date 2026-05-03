@@ -21,7 +21,7 @@ export default function Sidebar() {
           <div className="text-[11px] uppercase tracking-[0.35em] text-cyan-200/70">Reputation OS</div>
           <div className="mt-2 text-xl font-semibold text-white">Reputation Inbox</div>
           <div className="mt-2 text-sm leading-6 text-slate-300">
-            Центр мониторинга отзывов, упоминаний, VK и репутационной аналитики.
+            Центр мониторинга отзывов, упоминаний и репутационной аналитики.
           </div>
         </div>
 
@@ -60,7 +60,7 @@ export default function Sidebar() {
             Быстрая навигация
           </div>
           <div className="mt-2 text-xs leading-6 text-slate-300">
-            Открой компанию и переходи между Обзором, Inbox, VK, Аналитикой и Рейтингами без ручного ввода адреса.
+            Открой компанию и переходи между Обзором, Inbox, Аналитикой и Рейтингами без ручного ввода адреса.
           </div>
         </div>
       </div>

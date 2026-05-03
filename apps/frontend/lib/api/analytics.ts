@@ -16,6 +16,6 @@ export function getAnalyticsSentiment(id: string) {
 export function getAnalyticsPlatforms(id: string) {
   return apiFetch(`/companies/${id}/analytics/platforms`, undefined, {
     platforms: [],
-    vkCount: 0
+    webCount: 0
   })
 }

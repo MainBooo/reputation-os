@@ -72,7 +72,7 @@ export default async function CompanyInboxPage({
     <div>
       <PageHeader
         title="Входящие"
-        subtitle="Отзывы, упоминания, посты VK и комментарии VK в одной очереди."
+        subtitle="Все отзывы и упоминания из подключённых источников в одной ленте."
       />
 
       {authRequired ? (

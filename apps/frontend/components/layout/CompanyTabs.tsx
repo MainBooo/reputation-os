@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import clsx from 'clsx'
-import { Building2, Inbox, Radio, BarChart3, Star } from 'lucide-react'
+import { Building2, Inbox, BarChart3, Star } from 'lucide-react'
 
 export default function CompanyTabs({ companyId }: { companyId: string }) {
   const pathname = usePathname()
@@ -11,7 +11,6 @@ export default function CompanyTabs({ companyId }: { companyId: string }) {
   const items = [
     { href: `/companies/${companyId}`, label: 'Обзор', icon: Building2 },
     { href: `/companies/${companyId}/inbox`, label: 'Inbox', icon: Inbox },
-    { href: `/companies/${companyId}/vk`, label: 'VK', icon: Radio },
     { href: `/companies/${companyId}/analytics`, label: 'Аналитика', icon: BarChart3 },
     { href: `/companies/${companyId}/ratings`, label: 'Рейтинги', icon: Star }
   ]
