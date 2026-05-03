@@ -19,6 +19,7 @@ export function createCompany(payload: {
   city?: string
   industry?: string
   yandexUrl?: string
+  twoGisUrl?: string
   keywords?: string[]
 }) {
   return apiFetch('/companies', {
@@ -59,6 +60,7 @@ export function updateCompany(id: string, payload: {
   city?: string
   industry?: string
   yandexUrl?: string
+  twoGisUrl?: string
   keywords?: string[]
 }) {
   return apiFetch(`/companies/${id}`, {

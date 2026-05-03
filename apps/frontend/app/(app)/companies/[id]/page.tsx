@@ -114,11 +114,16 @@ export default async function CompanyPage({ params }: { params: { id: string } }
   const yandexTarget = Array.isArray(company.sourceTargets)
     ? company.sourceTargets.find((target: any) => target?.source?.platform === 'YANDEX')
     : null
+  const twoGisTarget = Array.isArray(company.sourceTargets)
+    ? company.sourceTargets.find((target: any) => target?.source?.platform === 'TWOGIS')
+    : null
 
   const hasYandex = Boolean(yandexTarget?.externalUrl)
-  const connectedSources = [hasYandex].filter(Boolean).length
+  const hasTwoGis = Boolean(twoGisTarget?.externalUrl)
+  const connectedSources = [hasYandex, hasTwoGis].filter(Boolean).length
   const companyWebsite = company.website || ''
   const primarySourceUrl = yandexTarget?.externalUrl || ''
+  const twoGisSourceUrl = twoGisTarget?.externalUrl || ''
 
   return (
     <div>
@@ -221,7 +226,7 @@ export default async function CompanyPage({ params }: { params: { id: string } }
                 </div>
 
                 <div className="mt-1 text-sm text-muted">
-                  {mentionsTotal} отзывов · автообновление каждые 30 минут
+                  {mentionsTotal} отзывов · автообновление каждые 10 минут
                 </div>
 
                 {primarySourceUrl ? (
@@ -261,26 +266,54 @@ export default async function CompanyPage({ params }: { params: { id: string } }
             </div>
           </div>
 
-          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-              <div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <div className="text-base font-semibold text-brand">VK</div>
-                  <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-xs text-muted">
-                    Не подключено
-                  </span>
-                </div>
-                <div className="mt-1 text-sm text-muted">Подключите VK для отслеживания упоминаний и комментариев.</div>
-              </div>
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="text-base font-semibold text-brand">2GIS</div>
+                    <span
+                      className={
+                        hasTwoGis
+                          ? 'rounded-full border border-emerald-400/20 bg-emerald-500/10 px-2 py-0.5 text-xs text-emerald-200'
+                          : 'rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-xs text-muted'
+                      }
+                    >
+                      {hasTwoGis ? 'Подключено' : 'Не подключено'}
+                    </span>
+                  </div>
 
-              <Link
-                href={`/companies/${company.id}/vk`}
-                className="inline-flex h-10 items-center justify-center rounded-xl border border-white/10 px-3 text-sm text-brand transition hover:border-cyan-400/30 hover:bg-cyan-400/10"
-              >
-                Подключить VK
-              </Link>
+                  <div className="mt-1 text-sm text-muted">
+                    Отзывы 2GIS · автообновление каждые 10 минут
+                  </div>
+
+                  {twoGisSourceUrl ? (
+                    <a
+                      href={twoGisSourceUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-2 block truncate text-sm text-cyan-300 hover:text-cyan-200"
+                    >
+                      {twoGisSourceUrl}
+                    </a>
+                  ) : (
+                    <div className="mt-2 text-sm text-muted">Добавьте ссылку на 2GIS в данных компании.</div>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  {twoGisSourceUrl ? (
+                    <a
+                      href={twoGisSourceUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex h-10 items-center justify-center rounded-xl border border-white/10 px-3 text-sm text-brand transition hover:border-cyan-400/30 hover:bg-cyan-400/10"
+                    >
+                      Открыть источник ↗
+                    </a>
+                  ) : null}
+                </div>
+              </div>
             </div>
-          </div>
         </div>
       </Card>
 
@@ -320,7 +353,7 @@ export default async function CompanyPage({ params }: { params: { id: string } }
           </div>
 
           <div className="grid grid-cols-[120px_1fr] gap-3">
-            <span className="text-muted">Основная ссылка:</span>
+            <span className="text-muted">Yandex Maps:</span>
             {primarySourceUrl ? (
               <a href={primarySourceUrl} target="_blank" rel="noopener noreferrer" className="truncate text-cyan-300 hover:text-cyan-200">
                 {primarySourceUrl}
@@ -328,10 +361,21 @@ export default async function CompanyPage({ params }: { params: { id: string } }
             ) : (
               <span className="text-muted">Не заполнено</span>
             )}
+
+            <div className="grid grid-cols-[120px_1fr] gap-3">
+              <span className="text-muted">2GIS:</span>
+              {twoGisSourceUrl ? (
+                <a href={twoGisSourceUrl} target="_blank" rel="noopener noreferrer" className="truncate text-cyan-300 hover:text-cyan-200">
+                  {twoGisSourceUrl}
+                </a>
+              ) : (
+                <span className="text-muted">Не заполнено</span>
+              )}
+            </div>
           </div>
         </div>
 
-        <CompanyEditPanel company={company} yandexUrl={primarySourceUrl} />
+        <CompanyEditPanel company={company} yandexUrl={primarySourceUrl} twoGisUrl={twoGisSourceUrl} />
       </Card>
 
       <Card className="mt-6 p-5">

@@ -40,10 +40,6 @@ export function mentionTypeLabel(value?: string | null) {
       return 'Соцсети'
     case 'COMMENT':
       return 'Комментарий'
-    case 'VK_POST':
-      return 'Пост VK'
-    case 'VK_COMMENT':
-      return 'Комментарий VK'
     default:
       return value || 'Неизвестно'
   }

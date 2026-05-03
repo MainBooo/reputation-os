@@ -39,10 +39,10 @@ export class ReviewsSyncProcessor implements OnModuleInit, OnModuleDestroy {
 
       let itemsDiscovered = 0
       let itemsCreated = 0
+      let itemsUpdated = 0
 
       for (const target of targets) {
 
-        if (target.source.platform === 'VK') continue
 
         let mentions: any[] = []
 
@@ -66,6 +66,17 @@ export class ReviewsSyncProcessor implements OnModuleInit, OnModuleDestroy {
         itemsDiscovered += mentions.length
 
         for (const item of mentions) {
+          const existingMention = item.externalMentionId
+            ? await this.prisma.mention.findFirst({
+                where: {
+                  companyId,
+                  platform: target.source.platform,
+                  externalMentionId: item.externalMentionId
+                },
+                select: { id: true }
+              })
+            : null
+
           await this.mentionService.persistExternalMention({
             companyId,
             sourceId: target.sourceId,
@@ -83,7 +94,11 @@ export class ReviewsSyncProcessor implements OnModuleInit, OnModuleDestroy {
             companySourceTargetId: target.id
           })
 
-          itemsCreated += 1
+          if (existingMention) {
+            itemsUpdated += 1
+          } else {
+            itemsCreated += 1
+          }
         }
       }
 
@@ -94,11 +109,12 @@ export class ReviewsSyncProcessor implements OnModuleInit, OnModuleDestroy {
           jobName: 'reviews.sync',
           jobStatus: 'SUCCESS',
           itemsDiscovered,
-          itemsCreated
+          itemsCreated,
+          itemsUpdated
         }
       }).catch(() => null)
 
-      return { companyId, processedTargets: targets.length, itemsDiscovered, itemsCreated }
+      return { companyId, processedTargets: targets.length, itemsDiscovered, itemsCreated, itemsUpdated }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
 

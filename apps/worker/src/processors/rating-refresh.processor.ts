@@ -34,7 +34,6 @@ export class RatingRefreshProcessor implements OnModuleInit, OnModuleDestroy {
     })
 
     for (const target of targets) {
-      if (target.source.platform === 'VK') continue
       const adapter = SourceAdapterFactory.getAdapter(target.source.platform)
       const snapshot = await adapter.fetchRatingSnapshot(target)
       if (!snapshot) continue

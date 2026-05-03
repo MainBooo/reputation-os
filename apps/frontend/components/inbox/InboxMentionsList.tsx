@@ -10,12 +10,12 @@ import InboxPendingRefresh from '@/components/inbox/InboxPendingRefresh'
 import { deleteMention, getCompanyMentions } from '@/lib/api/mentions'
 
 const PAGE_LIMIT = 20
-const PLATFORM_FILTERS = ['YANDEX', 'VK', 'TWO_GIS']
+const PLATFORM_FILTERS = ['YANDEX', 'TWOGIS']
 const SENTIMENT_FILTERS = ['NEGATIVE', 'POSITIVE', 'NEUTRAL']
 const RATING_FILTERS = [1, 2, 3, 4, 5]
 
 function platformLabel(value: string) {
-  if (value === 'TWO_GIS') return '2GIS'
+  if (value === 'TWOGIS') return '2GIS'
   return value
 }
 

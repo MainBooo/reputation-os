@@ -77,6 +77,46 @@ export class CompaniesService {
     return trimmed
   }
 
+  private normalizeTwoGisUrl(value?: string | null) {
+    const trimmed = value?.trim()
+    if (!trimmed) return null
+
+    try {
+      const parsed = new URL(trimmed)
+      const host = parsed.hostname.toLowerCase()
+
+      if (!host.endsWith('2gis.ru')) {
+        return trimmed
+      }
+
+      const parts = parsed.pathname.split('/').filter(Boolean)
+      const city = parts[0] || 'moscow'
+      const firmIndex = parts.findIndex((part) => part === 'firm')
+      const firmId = firmIndex >= 0 ? parts[firmIndex + 1] : null
+
+      if (!firmId || !/^\d+$/.test(firmId)) {
+        return trimmed
+      }
+
+      const normalized = new URL(`https://2gis.ru/${city}/firm/${firmId}/tab/reviews`)
+      const mapPosition = parsed.searchParams.get('m')
+
+      if (mapPosition) {
+        normalized.searchParams.set('m', mapPosition)
+      }
+
+      return normalized.toString()
+    } catch {
+      const match = trimmed.match(/https?:\/\/2gis\.ru\/([^/?#]+).*?\/firm\/(\d+)/i)
+
+      if (match?.[1] && match?.[2]) {
+        return `https://2gis.ru/${match[1]}/firm/${match[2]}/tab/reviews`
+      }
+
+      return trimmed
+    }
+  }
+
   private toInputJson(value?: Record<string, unknown>) {
     return value as Prisma.InputJsonValue | undefined
   }
@@ -89,6 +129,36 @@ export class CompaniesService {
     if (!member) {
       throw new ForbiddenException('No access to workspace')
     }
+  }
+
+  private async ensureTwoGisSource(workspaceId: string) {
+    let twoGisSource = await this.prisma.source.findFirst({
+      where: {
+        workspaceId,
+        platform: 'TWOGIS',
+        isEnabled: true
+      },
+      orderBy: { createdAt: 'asc' }
+    })
+
+    if (twoGisSource) {
+      this.logger.log(`[TwoGisInit] existing source found workspaceId=${workspaceId} sourceId=${twoGisSource.id}`)
+      return twoGisSource
+    }
+
+    twoGisSource = await this.prisma.source.create({
+      data: {
+        workspaceId,
+        name: '2GIS',
+        platform: 'TWOGIS',
+        type: 'REVIEW_FEED',
+        baseUrl: 'https://2gis.ru/',
+        isEnabled: true
+      }
+    })
+
+    this.logger.log(`[TwoGisInit] source created workspaceId=${workspaceId} sourceId=${twoGisSource.id}`)
+    return twoGisSource
   }
 
   private async ensureYandexSource(workspaceId: string) {
@@ -122,7 +192,7 @@ export class CompaniesService {
   }
 
   private getYandexReviewsRepeatOptions() {
-    return { every: 30 * 60 * 1000 }
+    return { every: 10 * 60 * 1000 }
   }
 
   private getYandexReviewsRepeatJobId(companyId: string) {
@@ -282,6 +352,7 @@ export class CompaniesService {
     await this.syncCompanyKeywords(company.id, dto.keywords)
 
     const normalizedYandexUrl = this.normalizeYandexUrl(dto.yandexUrl)
+    const normalizedTwoGisUrl = this.normalizeTwoGisUrl(dto.twoGisUrl)
 
     if (normalizedYandexUrl) {
       const yandexSource = await this.ensureYandexSource(dto.workspaceId)
@@ -308,6 +379,35 @@ export class CompaniesService {
       })
     } else {
       this.logger.log(`[CompanyCreate] skip yandex init companyId=${company.id} reason=no_yandex_url`)
+    }
+
+    if (normalizedTwoGisUrl) {
+      const twoGisSource = await this.ensureTwoGisSource(dto.workspaceId)
+
+      const target = await this.prisma.companySourceTarget.create({
+        data: {
+          companyId: company.id,
+          sourceId: twoGisSource.id,
+          externalUrl: normalizedTwoGisUrl,
+          syncReviewsEnabled: true,
+          syncRatingsEnabled: true,
+          syncMentionsEnabled: true
+        }
+      })
+
+      this.logger.log(
+        `[TwoGisInit] target created companyId=${company.id} targetId=${target.id} sourceId=${twoGisSource.id} url="${normalizedTwoGisUrl}"`
+      )
+
+      await this.enqueueAutoSyncJobs({
+        companyId: company.id,
+        userId,
+        requestedAt: new Date().toISOString()
+      })
+
+      await this.ensureYandexReviewsRepeat(company.id)
+    } else {
+      this.logger.log(`[CompanyCreate] skip 2gis init companyId=${company.id} reason=no_two_gis_url`)
     }
 
     return company
@@ -357,6 +457,76 @@ export class CompaniesService {
     })
 
     await this.syncCompanyKeywords(id, dto.keywords)
+
+    if (dto.twoGisUrl !== undefined) {
+      const normalizedTwoGisUrl = this.normalizeTwoGisUrl(dto.twoGisUrl)
+
+      const twoGisSource = normalizedTwoGisUrl
+        ? await this.ensureTwoGisSource(company.workspaceId)
+        : await this.prisma.source.findFirst({
+            where: {
+              workspaceId: company.workspaceId,
+              platform: 'TWOGIS',
+              isEnabled: true
+            },
+            orderBy: { createdAt: 'asc' }
+          })
+
+      if (twoGisSource) {
+        const existingTarget = await this.prisma.companySourceTarget.findFirst({
+          where: {
+            companyId: id,
+            sourceId: twoGisSource.id
+          },
+          orderBy: { createdAt: 'asc' }
+        })
+
+        if (normalizedTwoGisUrl) {
+          if (existingTarget) {
+            await this.prisma.companySourceTarget.update({
+              where: { id: existingTarget.id },
+              data: {
+                externalUrl: normalizedTwoGisUrl,
+                isActive: true,
+                syncReviewsEnabled: true,
+                syncRatingsEnabled: true,
+                syncMentionsEnabled: true
+              }
+            })
+
+            this.logger.log(`[TwoGisInit] target updated companyId=${id} targetId=${existingTarget.id}`)
+          } else {
+            const target = await this.prisma.companySourceTarget.create({
+              data: {
+                companyId: id,
+                sourceId: twoGisSource.id,
+                externalUrl: normalizedTwoGisUrl,
+                syncReviewsEnabled: true,
+                syncRatingsEnabled: true,
+                syncMentionsEnabled: true
+              }
+            })
+
+            this.logger.log(`[TwoGisInit] target created via update companyId=${id} targetId=${target.id}`)
+          }
+
+          await this.enqueueAutoSyncJobs({
+            companyId: id,
+            userId,
+            requestedAt: new Date().toISOString()
+          })
+
+          await this.ensureYandexReviewsRepeat(id)
+        } else if (existingTarget) {
+          await this.prisma.companySourceTarget.update({
+            where: { id: existingTarget.id },
+            data: { externalUrl: null }
+          })
+
+          this.logger.log(`[TwoGisInit] target url cleared companyId=${id} targetId=${existingTarget.id}`)
+        }
+      }
+    }
 
     if (dto.yandexUrl !== undefined) {
       const normalizedYandexUrl = this.normalizeYandexUrl(dto.yandexUrl)
@@ -458,9 +628,6 @@ export class CompaniesService {
     await this.prisma.companySourceTarget.deleteMany({ where: { companyId: id } })
     await this.prisma.mention.deleteMany({ where: { companyId: id } })
     await this.prisma.ratingSnapshot.deleteMany({ where: { companyId: id } })
-    await this.prisma.vkSearchProfile.deleteMany({ where: { companyId: id } })
-    await this.prisma.vkTrackedCommunity.deleteMany({ where: { companyId: id } })
-    await this.prisma.vkTrackedPost.deleteMany({ where: { companyId: id } })
 
     return this.prisma.company.delete({
       where: { id }
@@ -563,7 +730,14 @@ export class CompaniesService {
       where: { id: targetId },
       data: {
         ...(dto.externalPlaceId !== undefined ? { externalPlaceId: dto.externalPlaceId } : {}),
-        ...(dto.externalUrl !== undefined ? { externalUrl: this.normalizeYandexUrl(dto.externalUrl) } : {}),
+        ...(dto.externalUrl !== undefined
+            ? {
+                externalUrl:
+                  target.source?.platform === 'YANDEX'
+                    ? this.normalizeYandexUrl(dto.externalUrl)
+                    : this.normalizeTwoGisUrl(dto.externalUrl)
+              }
+            : {}),
         ...(dto.displayName !== undefined ? { displayName: dto.displayName } : {}),
         ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
         ...(dto.syncReviewsEnabled !== undefined ? { syncReviewsEnabled: dto.syncReviewsEnabled } : {}),
@@ -574,7 +748,7 @@ export class CompaniesService {
       include: { source: true }
     })
 
-    if (updatedTarget.source?.platform === 'YANDEX' && dto.syncReviewsEnabled !== undefined) {
+    if ((updatedTarget.source?.platform === 'YANDEX' || updatedTarget.source?.platform === 'TWOGIS') && dto.syncReviewsEnabled !== undefined) {
       if (dto.syncReviewsEnabled && updatedTarget.isActive && updatedTarget.externalUrl) {
         await this.ensureYandexReviewsRepeat(companyId)
         this.logger.log(`[YandexCron] repeat ensured from source target update companyId=${companyId} targetId=${targetId}`)

@@ -316,13 +316,6 @@ export default async function DashboardPage() {
       href: firstCompany ? `/companies/${firstCompany.id}/inbox` : '/companies'
     },
     {
-      title: 'VK мониторинг',
-      description: 'Проверьте подключение VK и поиск комментариев.',
-      meta: 'Средний',
-      tone: 'blue',
-      href: firstCompany ? `/companies/${firstCompany.id}/vk` : '/companies'
-    },
-    {
       title: 'Синхронизация Yandex',
       description: totalSources > 0 ? 'Источник активен и готов к обновлениям.' : 'Добавьте источник для автоматического сбора.',
       meta: totalSources > 0 ? 'Низкий' : 'Высокий',
@@ -475,13 +468,6 @@ export default async function DashboardPage() {
             className="inline-flex min-h-16 items-center justify-center rounded-2xl border border-cyan-400/20 bg-cyan-500/10 px-4 text-sm font-semibold text-cyan-200 transition hover:bg-cyan-500/20"
           >
             Открыть Inbox
-          </Link>
-
-          <Link
-            href={firstCompany ? `/companies/${firstCompany.id}/vk` : '/companies'}
-            className="inline-flex min-h-16 items-center justify-center rounded-2xl border border-blue-400/20 bg-blue-500/10 px-4 text-sm font-semibold text-blue-200 transition hover:bg-blue-500/20"
-          >
-            Подключить VK
           </Link>
 
           <Link

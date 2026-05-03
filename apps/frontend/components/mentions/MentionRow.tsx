@@ -12,7 +12,19 @@ export default function MentionRow({
   const publishedAt = mention.publishedAt ? new Date(mention.publishedAt) : null
   const publishedAtLabel =
     publishedAt && !Number.isNaN(publishedAt.getTime())
-      ? publishedAt.toLocaleString()
+      ? mention.platform === 'TWOGIS'
+        ? publishedAt.toLocaleDateString('ru-RU', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric'
+          })
+        : publishedAt.toLocaleString('ru-RU', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+          })
       : 'Дата неизвестна'
 
   const numericRating =
@@ -32,8 +44,6 @@ export default function MentionRow({
   const sourceUrl =
     mention.url ||
     mention.sourceUrl ||
-    mention.vkTrackedPost?.url ||
-    mention.vkTrackedPost?.postUrl ||
     null
 
   const ratingBadgeClass =

@@ -25,6 +25,10 @@ export class CreateCompanyDto {
   yandexUrl?: string
 
   @IsOptional()
+  @IsString()
+  twoGisUrl?: string
+
+  @IsOptional()
   @IsArray()
   @IsString({ each: true })
   keywords?: string[]

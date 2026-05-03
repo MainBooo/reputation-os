@@ -1,9 +1,7 @@
-export type Platform = 'YANDEX' | 'GOOGLE' | 'TWOGIS' | 'WEB' | 'CUSTOM' | 'VK'
+export type Platform = 'YANDEX' | 'GOOGLE' | 'TWOGIS' | 'WEB' | 'CUSTOM'
 export type Sentiment = 'POSITIVE' | 'NEGATIVE' | 'NEUTRAL' | 'UNKNOWN'
 export type MentionStatus = 'NEW' | 'REVIEWED' | 'HIDDEN' | 'ARCHIVED'
-export type MentionType = 'REVIEW' | 'ARTICLE' | 'WEB_MENTION' | 'SOCIAL_MENTION' | 'COMMENT' | 'VK_POST' | 'VK_COMMENT'
-export type VkMonitoringMode = 'BRAND_SEARCH' | 'PRIORITY_COMMUNITIES' | 'OWNED_COMMUNITY'
-export type VkTrackedCommunityMode = 'PRIORITY_COMMUNITY' | 'OWNED_COMMUNITY'
+export type MentionType = 'REVIEW' | 'ARTICLE' | 'WEB_MENTION' | 'SOCIAL_MENTION' | 'COMMENT'
 
 export interface Company {
   id: string
@@ -29,11 +27,3 @@ export interface Mention {
   url?: string | null
 }
 
-export interface VkOverviewResponse {
-  trackedCommunitiesCount: number
-  activeSearchProfilesCount: number
-  discoveredVkPostsCount: number
-  relevantVkMentionsCount: number
-  recentPosts: any[]
-  recentMentions: any[]
-}

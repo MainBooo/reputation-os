@@ -62,7 +62,7 @@ export class MentionsService {
     const [items, total, ratingAggregate, ratedCount, sourceTargets] = await Promise.all([
       this.prisma.mention.findMany({
         where,
-        include: { source: true, vkTrackedPost: true },
+        include: { source: true },
         orderBy: { publishedAt: 'desc' },
         skip,
         take: limit
@@ -99,7 +99,7 @@ export class MentionsService {
   async findOne(userId: string, id: string) {
     const mention = await this.prisma.mention.findUnique({
       where: { id },
-      include: { source: true, company: true, vkTrackedPost: true, aiReplyDrafts: true }
+      include: { source: true, company: true, aiReplyDrafts: true }
     })
     if (!mention) throw new NotFoundException('Mention not found')
     await this.assertCompanyAccess(userId, mention.companyId)

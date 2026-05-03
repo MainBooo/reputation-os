@@ -28,10 +28,12 @@ function getInitialKeywords(company: any) {
 
 export default function CompanyEditPanel({
   company,
-  yandexUrl
+  yandexUrl,
+  twoGisUrl
 }: {
   company: any
   yandexUrl?: string | null
+  twoGisUrl?: string | null
 }) {
   const router = useRouter()
   const [isOpen, setIsOpen] = useState(false)
@@ -44,7 +46,8 @@ export default function CompanyEditPanel({
     website: company?.website || '',
     city: company?.city || '',
     industry: company?.industry || '',
-    yandexUrl: yandexUrl || ''
+    yandexUrl: yandexUrl || '',
+    twoGisUrl: twoGisUrl || ''
   })
 
   function setField(field: keyof typeof form, value: string) {
@@ -88,6 +91,7 @@ export default function CompanyEditPanel({
         city: form.city.trim() || undefined,
         industry: form.industry.trim() || undefined,
         yandexUrl: form.yandexUrl.trim() || undefined,
+        twoGisUrl: form.twoGisUrl.trim() || undefined,
         keywords
       })
 
@@ -106,7 +110,7 @@ export default function CompanyEditPanel({
         <div>
           <div className="text-sm font-semibold text-brand">Редактирование компании</div>
           <div className="mt-1 text-xs text-muted">
-            Название, сайт, город, сфера, Яндекс Карты и ключевые слова мониторинга.
+            Название, сайт, город, сфера, Яндекс Карты, 2GIS и ключевые слова мониторинга.
           </div>
         </div>
 
@@ -168,6 +172,16 @@ export default function CompanyEditPanel({
               placeholder="https://yandex.ru/maps/org/..."
             />
           </label>
+
+            <label className="block">
+              <span className="mb-1 block text-xs uppercase tracking-[0.16em] text-muted">2GIS URL</span>
+              <input
+                value={form.twoGisUrl}
+                onChange={(event) => setField('twoGisUrl', event.target.value)}
+                className="h-11 w-full rounded-xl border border-line bg-panel px-4 text-sm text-brand outline-none transition focus:border-cyan-400/50"
+                placeholder="https://2gis.ru/..."
+              />
+            </label>
 
           <div className="rounded-2xl border border-white/10 bg-white/[0.025] p-4">
             <div className="flex items-start justify-between gap-3">

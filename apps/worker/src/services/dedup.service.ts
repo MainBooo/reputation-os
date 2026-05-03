@@ -35,8 +35,7 @@ export class DedupService {
     author?: string | null
     publishedAt: Date
     ratingValue?: number | null
-    vkTrackedPostId?: string | null
-      companySourceTargetId?: string | null
+    companySourceTargetId?: string | null
     rawPayload?: unknown
     metadata?: unknown
   }) {
@@ -65,7 +64,6 @@ export class DedupService {
             sentiment: this.classifyMentionSentiment(normalizedContent, params.ratingValue),
             rawPayload: params.rawPayload as any,
             metadata: params.metadata as any,
-            vkTrackedPostId: params.vkTrackedPostId
           }
         })
       }
@@ -103,7 +101,6 @@ export class DedupService {
         hash,
         rawPayload: params.rawPayload as any,
         metadata: params.metadata as any,
-        vkTrackedPostId: params.vkTrackedPostId || null,
           companySourceTargetId: params.companySourceTargetId || null
       }
     })
