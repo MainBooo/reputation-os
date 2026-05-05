@@ -17,7 +17,8 @@ export class CompaniesService {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(`QUEUE_${QUEUES.REVIEWS_SYNC}`) private readonly reviewsSyncQueue: Queue,
-    @Inject(`QUEUE_${QUEUES.RATING_REFRESH}`) private readonly ratingRefreshQueue: Queue
+    @Inject(`QUEUE_${QUEUES.RATING_REFRESH}`) private readonly ratingRefreshQueue: Queue,
+      @Inject(`QUEUE_${QUEUES.MENTIONS_SYNC}`) private readonly mentionsSyncQueue: Queue
   ) {}
 
   private normalize(value?: string | null) {
@@ -161,6 +162,36 @@ export class CompaniesService {
     return twoGisSource
   }
 
+  private async ensureWebSource(workspaceId: string) {
+    let webSource = await this.prisma.source.findFirst({
+      where: {
+        workspaceId,
+        platform: 'WEB',
+        isEnabled: true
+      },
+      orderBy: { createdAt: 'asc' }
+    })
+
+    if (webSource) {
+      this.logger.log(`[WebInit] existing source found workspaceId=${workspaceId} sourceId=${webSource.id}`)
+      return webSource
+    }
+
+    webSource = await this.prisma.source.create({
+      data: {
+        workspaceId,
+        name: 'Web mentions',
+        platform: 'WEB',
+        type: 'WEB_MENTION_FEED',
+        baseUrl: 'https://duckduckgo.com/',
+        isEnabled: true
+      }
+    })
+
+    this.logger.log(`[WebInit] source created workspaceId=${workspaceId} sourceId=${webSource.id}`)
+    return webSource
+  }
+
   private async ensureYandexSource(workspaceId: string) {
     let yandexSource = await this.prisma.source.findFirst({
       where: {
@@ -226,6 +257,89 @@ export class CompaniesService {
         this.logger.log(`[YandexCron] repeat reviews.sync removed companyId=${companyId} key=${job.key}`)
       }
     }
+  }
+
+  private getWebMentionsRepeatJobId(companyId: string) {
+    return `web-mentions-sync:${companyId}`
+  }
+
+  private normalizeWebScanIntervalMinutes(value: unknown) {
+    const minutes = Number(value)
+
+    if (minutes === 240 || minutes === 720 || minutes === 1440) {
+      return minutes
+    }
+
+    return 1440
+  }
+
+  private async getWebMentionsRepeatEveryMs(companyId: string) {
+    const targets = await this.prisma.companySourceTarget.findMany({
+      where: {
+        companyId,
+        isActive: true,
+        syncMentionsEnabled: true,
+        AND: [
+          { externalUrl: { not: null } },
+          { externalUrl: { not: '' } }
+        ],
+        source: {
+          platform: 'WEB',
+          isEnabled: true
+        }
+      },
+      select: {
+        config: true
+      }
+    })
+
+    if (!targets.length) return null
+
+    const minutes = targets
+      .map((target) => {
+        const config = target.config as Record<string, unknown> | null
+        return this.normalizeWebScanIntervalMinutes(
+          config?.scanIntervalMinutes || Number(config?.scanIntervalHours || 24) * 60
+        )
+      })
+      .sort((a, b) => a - b)[0]
+
+    return minutes * 60 * 1000
+  }
+
+  private async removeWebMentionsRepeat(companyId: string) {
+    const repeatables = await this.mentionsSyncQueue.getRepeatableJobs()
+
+    for (const job of repeatables) {
+      if (job.name !== JOBS.MENTIONS_SYNC) continue
+
+      await this.mentionsSyncQueue.removeRepeatableByKey(job.key)
+      this.logger.log(
+        `[WebCron] repeat mentions.sync removed companyId=${companyId} key=${job.key} every=${job.every || 'unknown'}`
+      )
+    }
+  }
+
+  private async refreshWebMentionsRepeat(companyId: string) {
+    const every = await this.getWebMentionsRepeatEveryMs(companyId)
+
+    await this.removeWebMentionsRepeat(companyId)
+
+    if (!every) {
+      this.logger.log(`[WebCron] repeat mentions.sync skipped companyId=${companyId} reason=no_enabled_web_targets`)
+      return
+    }
+
+    await this.mentionsSyncQueue.add(
+      JOBS.MENTIONS_SYNC,
+      { companyId, autoCron: true, scope: 'WEB' },
+      {
+        repeat: { every },
+        jobId: this.getWebMentionsRepeatJobId(companyId)
+      }
+    )
+
+    this.logger.log(`[WebCron] repeat mentions.sync ensured companyId=${companyId} everyMinutes=${Math.round(every / 60000)}`)
   }
 
   private async enqueueAutoSyncJobs(params: {
@@ -683,7 +797,6 @@ export class CompaniesService {
       orderBy: { createdAt: 'desc' }
     })
   }
-
   async createSourceTarget(userId: string, companyId: string, dto: CreateCompanySourceTargetDto) {
     const company = await this.prisma.company.findUnique({ where: { id: companyId } })
 
@@ -693,19 +806,62 @@ export class CompaniesService {
 
     await this.assertWorkspaceAccess(userId, company.workspaceId)
 
-    return this.prisma.companySourceTarget.create({
+    let sourceId: string | null = dto.sourceId || null
+
+    if (!sourceId && dto.platform) {
+      const sourceType = dto.platform === 'WEB' ? 'WEB_MENTION_FEED' : 'CUSTOM_FEED'
+
+      const source = await this.prisma.source.findFirst({
+        where: {
+          workspaceId: company.workspaceId,
+          platform: dto.platform,
+          type: sourceType
+        },
+        orderBy: { createdAt: 'asc' }
+      })
+
+      if (source) {
+        sourceId = source.id
+      } else {
+        const createdSource = await this.prisma.source.create({
+          data: {
+            workspaceId: company.workspaceId,
+            name: dto.platform === 'WEB' ? 'WEB mentions' : 'Custom mentions',
+            platform: dto.platform,
+            type: sourceType,
+            baseUrl: dto.externalUrl || null,
+            isEnabled: true
+          }
+        })
+
+        sourceId = createdSource.id
+      }
+    }
+
+    if (!sourceId) {
+      throw new NotFoundException('Source not found')
+    }
+
+    const createdTarget = await this.prisma.companySourceTarget.create({
       data: {
         companyId,
-        sourceId: dto.sourceId,
+        sourceId,
         externalPlaceId: dto.externalPlaceId,
         externalUrl: dto.externalUrl,
         displayName: dto.displayName,
-        syncReviewsEnabled: dto.syncReviewsEnabled ?? true,
-        syncRatingsEnabled: dto.syncRatingsEnabled ?? true,
+        syncReviewsEnabled: dto.syncReviewsEnabled ?? false,
+        syncRatingsEnabled: dto.syncRatingsEnabled ?? false,
         syncMentionsEnabled: dto.syncMentionsEnabled ?? true,
         ...(dto.config !== undefined ? { config: this.toInputJson(dto.config) } : {})
-      }
+      },
+      include: { source: true }
     })
+
+    if (createdTarget.source?.platform === 'WEB') {
+      await this.refreshWebMentionsRepeat(companyId)
+    }
+
+    return createdTarget
   }
 
   async updateSourceTarget(userId: string, companyId: string, targetId: string, dto: UpdateCompanySourceTargetDto) {
@@ -731,13 +887,15 @@ export class CompaniesService {
       data: {
         ...(dto.externalPlaceId !== undefined ? { externalPlaceId: dto.externalPlaceId } : {}),
         ...(dto.externalUrl !== undefined
-            ? {
-                externalUrl:
-                  target.source?.platform === 'YANDEX'
-                    ? this.normalizeYandexUrl(dto.externalUrl)
-                    : this.normalizeTwoGisUrl(dto.externalUrl)
-              }
-            : {}),
+          ? {
+              externalUrl:
+                target.source?.platform === 'YANDEX'
+                  ? this.normalizeYandexUrl(dto.externalUrl)
+                  : target.source?.platform === 'TWOGIS'
+                    ? this.normalizeTwoGisUrl(dto.externalUrl)
+                    : dto.externalUrl
+            }
+          : {}),
         ...(dto.displayName !== undefined ? { displayName: dto.displayName } : {}),
         ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
         ...(dto.syncReviewsEnabled !== undefined ? { syncReviewsEnabled: dto.syncReviewsEnabled } : {}),
@@ -758,6 +916,10 @@ export class CompaniesService {
       }
     }
 
+    if (updatedTarget.source?.platform === 'WEB') {
+      await this.refreshWebMentionsRepeat(companyId)
+    }
+
     return updatedTarget
   }
 
@@ -770,8 +932,23 @@ export class CompaniesService {
 
     await this.assertWorkspaceAccess(userId, company.workspaceId)
 
-    return this.prisma.companySourceTarget.delete({
+    const target = await this.prisma.companySourceTarget.findUnique({
+      where: { id: targetId },
+      include: { source: true }
+    })
+
+    if (!target || target.companyId !== companyId) {
+      throw new NotFoundException('Company source target not found')
+    }
+
+    const deletedTarget = await this.prisma.companySourceTarget.delete({
       where: { id: targetId }
     })
+
+    if (target.source?.platform === 'WEB') {
+      await this.refreshWebMentionsRepeat(companyId)
+    }
+
+    return deletedTarget
   }
 }

@@ -40,6 +40,14 @@ export class MentionsService {
       } : {})
     }
 
+      if (query.platform === 'WEB') {
+        where.NOT = [
+          { url: { contains: '2gis.ru' } },
+          { url: { contains: 'yandex.ru/maps' } },
+          { url: { contains: 'yandex.com/maps' } }
+        ]
+      }
+
     if (query.sentiment === 'POSITIVE') {
       where.ratingValue = { gte: 4 }
     }

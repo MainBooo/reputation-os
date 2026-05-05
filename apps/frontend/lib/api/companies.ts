@@ -34,6 +34,38 @@ export function deleteCompany(id: string) {
   })
 }
 
+
+export function getCompanySourceTargets(companyId: string) {
+  return apiFetch(`/companies/${companyId}/sources`, undefined, [])
+}
+
+export function createCompanySourceTarget(
+  companyId: string,
+  payload: {
+    sourceId?: string
+    platform?: 'WEB' | 'CUSTOM'
+    externalUrl?: string
+    externalPlaceId?: string
+    displayName?: string
+    syncReviewsEnabled?: boolean
+    syncRatingsEnabled?: boolean
+    syncMentionsEnabled?: boolean
+    config?: Record<string, unknown>
+  }
+) {
+  return apiFetch(`/companies/${companyId}/sources`, {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  })
+}
+
+export function startCompanySync(companyId: string) {
+  return apiFetch(`/companies/${companyId}/start-sync`, {
+    method: 'POST',
+    body: JSON.stringify({})
+  })
+}
+
 export function updateCompanySourceTarget(
   companyId: string,
   targetId: string,
@@ -66,5 +98,12 @@ export function updateCompany(id: string, payload: {
   return apiFetch(`/companies/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(payload)
+  })
+}
+
+
+export function deleteCompanySourceTarget(companyId: string, targetId: string) {
+  return apiFetch(`/companies/${companyId}/sources/${targetId}`, {
+    method: 'DELETE'
   })
 }

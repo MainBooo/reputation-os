@@ -1,8 +1,13 @@
-import { IsBoolean, IsObject, IsOptional, IsString } from 'class-validator'
+import { IsBoolean, IsIn, IsObject, IsOptional, IsString } from 'class-validator'
 
 export class CreateCompanySourceTargetDto {
+  @IsOptional()
   @IsString()
-  sourceId!: string
+  sourceId?: string
+
+  @IsOptional()
+  @IsIn(['WEB', 'CUSTOM'])
+  platform?: 'WEB' | 'CUSTOM'
 
   @IsOptional()
   @IsString()
