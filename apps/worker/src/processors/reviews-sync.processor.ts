@@ -4,6 +4,7 @@ import { PrismaService } from '../common/prisma/prisma.service'
 import { SourceAdapterFactory } from '../adapters/source-adapter.factory'
 import { MentionService } from '../services/mention.service'
 import { QUEUES } from '../queues/queue.names'
+import { WORKER_OPTIONS } from '../queues/job-options'
 
 @Injectable()
 export class ReviewsSyncProcessor implements OnModuleInit, OnModuleDestroy {
@@ -19,8 +20,9 @@ export class ReviewsSyncProcessor implements OnModuleInit, OnModuleDestroy {
   onModuleInit() {
 
     this.worker = new Worker(QUEUES.REVIEWS_SYNC, async (job: Job) => this.handle(job), {
-      connection: this.connection
-    })
+        connection: this.connection,
+        ...WORKER_OPTIONS.reviewsSync
+      })
   }
 
   async onModuleDestroy() {

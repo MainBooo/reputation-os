@@ -3,6 +3,7 @@ import { Queue } from 'bullmq'
 import { PrismaService } from '../common/prisma/prisma.service'
 import { QUEUES } from '../queues/queue.names'
 import { JOBS } from '../queues/job.names'
+import { CRON_JOB_OPTIONS } from '../queues/job-options'
 
 @Injectable()
 export class SchedulerService implements OnModuleInit {
@@ -70,9 +71,10 @@ export class SchedulerService implements OnModuleInit {
       JOBS.ALERT_CHECK,
       { autoCron: true },
       {
-        repeat: this.getAlertCheckRepeatOptions(),
-        jobId: this.getAlertCheckRepeatJobId()
-      }
+          ...CRON_JOB_OPTIONS,
+          repeat: this.getAlertCheckRepeatOptions(),
+          jobId: this.getAlertCheckRepeatJobId()
+        }
     ).catch((error) => {
       this.logger.warn(`Failed to ensure alerts check cron: ${error?.message || error}`)
     })
@@ -123,19 +125,19 @@ export class SchedulerService implements OnModuleInit {
       await this.sourceDiscoveryQueue.add(
         JOBS.SOURCE_DISCOVERY,
         { companyId: company.id },
-        { repeat: { every: 12 * 60 * 60 * 1000 }, jobId: `source-discovery:${company.id}` }
+        { ...CRON_JOB_OPTIONS, repeat: { every: 12 * 60 * 60 * 1000 }, jobId: `source-discovery:${company.id}` }
       ).catch(() => null)
 
       await this.ratingRefreshQueue.add(
         JOBS.RATING_REFRESH,
         { companyId: company.id },
-        { repeat: { every: 24 * 60 * 60 * 1000 }, jobId: `rating-refresh:${company.id}` }
+        { ...CRON_JOB_OPTIONS, repeat: { every: 24 * 60 * 60 * 1000 }, jobId: `rating-refresh:${company.id}` }
       ).catch(() => null)
 
       await this.reconcileQueue.add(
         JOBS.RECONCILE,
         { companyId: company.id },
-        { repeat: { every: 24 * 60 * 60 * 1000 }, jobId: `reconcile:${company.id}` }
+        { ...CRON_JOB_OPTIONS, repeat: { every: 24 * 60 * 60 * 1000 }, jobId: `reconcile:${company.id}` }
       ).catch(() => null)
     }
 
@@ -157,9 +159,10 @@ export class SchedulerService implements OnModuleInit {
         JOBS.MENTIONS_SYNC,
         { companyId, autoCron: true, scope: 'WEB' },
         {
-          repeat: { every },
-          jobId: this.getWebMentionsRepeatJobId(companyId)
-        }
+            ...CRON_JOB_OPTIONS,
+            repeat: { every },
+            jobId: this.getWebMentionsRepeatJobId(companyId)
+          }
       ).catch((error) => {
         this.logger.warn(`Failed to ensure web mentions cron companyId=${companyId}: ${error?.message || error}`)
       })
@@ -173,9 +176,10 @@ export class SchedulerService implements OnModuleInit {
         JOBS.REVIEWS_SYNC,
         { companyId, autoCron: true },
         {
-          repeat: this.getYandexReviewsRepeatOptions(),
-          jobId: this.getYandexReviewsRepeatJobId(companyId)
-        }
+            ...CRON_JOB_OPTIONS,
+            repeat: this.getYandexReviewsRepeatOptions(),
+            jobId: this.getYandexReviewsRepeatJobId(companyId)
+          }
       ).catch((error) => {
         this.logger.warn(`Failed to ensure reviews cron companyId=${companyId}: ${error?.message || error}`)
       })

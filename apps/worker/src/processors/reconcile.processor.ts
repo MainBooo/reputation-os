@@ -2,6 +2,7 @@ import { Injectable, OnModuleDestroy, OnModuleInit, Inject } from '@nestjs/commo
 import { Job, Queue, Worker } from 'bullmq'
 import { PrismaService } from '../common/prisma/prisma.service'
 import { QUEUES } from '../queues/queue.names'
+import { WORKER_OPTIONS } from '../queues/job-options'
 
 @Injectable()
 export class ReconcileProcessor implements OnModuleInit, OnModuleDestroy {
@@ -15,8 +16,9 @@ export class ReconcileProcessor implements OnModuleInit, OnModuleDestroy {
 
   onModuleInit() {
     this.worker = new Worker(QUEUES.RECONCILE, async (job: Job) => this.handle(job), {
-      connection: this.connection
-    })
+        connection: this.connection,
+        ...WORKER_OPTIONS.reconcile
+      })
   }
 
   async onModuleDestroy() {

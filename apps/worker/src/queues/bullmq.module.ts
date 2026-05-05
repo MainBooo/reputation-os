@@ -2,6 +2,7 @@ import { Global, Module } from '@nestjs/common'
 import IORedis from 'ioredis'
 import { Queue } from 'bullmq'
 import { QUEUES } from './queue.names'
+import { DEFAULT_JOB_OPTIONS } from './job-options'
 
 const queueNames = Object.values(QUEUES)
 
@@ -23,8 +24,9 @@ const queueNames = Object.values(QUEUES)
       provide: `QUEUE_${queueName}`,
       useFactory: (connection: IORedis) =>
         new Queue(queueName, {
-          connection
-        }),
+            connection,
+            defaultJobOptions: DEFAULT_JOB_OPTIONS
+          }),
       inject: ['BULLMQ_CONNECTION']
     }))
   ],

@@ -1,6 +1,7 @@
 import { ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common'
 import { Queue } from 'bullmq'
 import { PrismaService } from '../../common/prisma/prisma.service'
+import { SYNC_JOB_OPTIONS } from '../../common/queues/job-options'
 
 @Injectable()
 export class SyncService {
@@ -49,10 +50,7 @@ export class SyncService {
         triggeredByUserId: userId,
         requestedAt: new Date().toISOString()
       },
-      {
-        removeOnComplete: 1000,
-        removeOnFail: false
-      }
+      SYNC_JOB_OPTIONS
     )
 
     const log = await this.prisma.jobLog.create({
@@ -94,10 +92,7 @@ export class SyncService {
           triggeredByUserId: userId,
           requestedAt
         },
-        {
-          removeOnComplete: 1000,
-          removeOnFail: false
-        }
+        SYNC_JOB_OPTIONS
       ),
       this.reviewsSyncQueue.add(
         'reviews.sync',
@@ -106,10 +101,7 @@ export class SyncService {
           triggeredByUserId: userId,
           requestedAt
         },
-        {
-          removeOnComplete: 1000,
-          removeOnFail: false
-        }
+        SYNC_JOB_OPTIONS
       ),
       this.ratingRefreshQueue.add(
         'rating.refresh',
@@ -118,10 +110,7 @@ export class SyncService {
           triggeredByUserId: userId,
           requestedAt
         },
-        {
-          removeOnComplete: 1000,
-          removeOnFail: false
-        }
+        SYNC_JOB_OPTIONS
       )
     ])
 
@@ -204,10 +193,7 @@ export class SyncService {
       {
         requestedAt: new Date().toISOString()
       },
-      {
-        removeOnComplete: 1000,
-        removeOnFail: false
-      }
+      SYNC_JOB_OPTIONS
     )
 
     const log = await this.prisma.jobLog.create({

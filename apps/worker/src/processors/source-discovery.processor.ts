@@ -4,6 +4,7 @@ import { PrismaService } from '../common/prisma/prisma.service'
 import { SourceAdapterFactory } from '../adapters/source-adapter.factory'
 import { WorkerLogger } from '../common/logging/logger'
 import { QUEUES } from '../queues/queue.names'
+import { WORKER_OPTIONS } from '../queues/job-options'
 
 @Injectable()
 export class SourceDiscoveryProcessor implements OnModuleInit, OnModuleDestroy {
@@ -17,8 +18,9 @@ export class SourceDiscoveryProcessor implements OnModuleInit, OnModuleDestroy {
 
   onModuleInit() {
     this.worker = new Worker(QUEUES.SOURCE_DISCOVERY, async (job: Job) => this.handle(job), {
-      connection: this.connection
-    })
+        connection: this.connection,
+        ...WORKER_OPTIONS.sourceDiscovery
+      })
   }
 
   async onModuleDestroy() {

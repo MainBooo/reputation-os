@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client'
 import { PrismaService } from '../../common/prisma/prisma.service'
 import { QUEUES } from '../../common/queues/queue.names'
 import { JOBS } from '../../common/queues/job.names'
+import { SYNC_JOB_OPTIONS, CRON_JOB_OPTIONS } from '../../common/queues/job-options'
 import { CreateCompanyDto } from './dto/create-company.dto'
 import { UpdateCompanyDto } from './dto/update-company.dto'
 import { CreateCompanyAliasDto } from './dto/create-company-alias.dto'
@@ -235,9 +236,10 @@ export class CompaniesService {
       JOBS.REVIEWS_SYNC,
       { companyId, autoCron: true },
       {
-        repeat: this.getYandexReviewsRepeatOptions(),
-        jobId: this.getYandexReviewsRepeatJobId(companyId)
-      }
+          ...CRON_JOB_OPTIONS,
+          repeat: this.getYandexReviewsRepeatOptions(),
+          jobId: this.getYandexReviewsRepeatJobId(companyId)
+        }
     )
 
     this.logger.log(`[YandexCron] repeat reviews.sync ensured companyId=${companyId}`)
@@ -334,9 +336,10 @@ export class CompaniesService {
       JOBS.MENTIONS_SYNC,
       { companyId, autoCron: true, scope: 'WEB' },
       {
-        repeat: { every },
-        jobId: this.getWebMentionsRepeatJobId(companyId)
-      }
+          ...CRON_JOB_OPTIONS,
+          repeat: { every },
+          jobId: this.getWebMentionsRepeatJobId(companyId)
+        }
     )
 
     this.logger.log(`[WebCron] repeat mentions.sync ensured companyId=${companyId} everyMinutes=${Math.round(every / 60000)}`)
@@ -360,10 +363,7 @@ export class CompaniesService {
           requestedAt,
           autoStart: true
         },
-        {
-          removeOnComplete: 1000,
-          removeOnFail: false
-        }
+        SYNC_JOB_OPTIONS
       )
 
       await this.prisma.jobLog.create({
@@ -400,10 +400,7 @@ export class CompaniesService {
           requestedAt,
           autoStart: true
         },
-        {
-          removeOnComplete: 1000,
-          removeOnFail: false
-        }
+        SYNC_JOB_OPTIONS
       )
 
       await this.prisma.jobLog.create({

@@ -2,6 +2,7 @@ import { Global, Module } from '@nestjs/common'
 import { Queue } from 'bullmq'
 import IORedis from 'ioredis'
 import { QUEUES } from './queue.names'
+import { DEFAULT_JOB_OPTIONS } from './job-options'
 
 const redisUrl = process.env.REDIS_URL || 'redis://127.0.0.1:6380'
 
@@ -12,7 +13,7 @@ const connection = new IORedis(redisUrl, {
 
 const queueProviders = Object.values(QUEUES).map((name) => ({
   provide: `QUEUE_${name}`,
-  useFactory: () => new Queue(name, { connection })
+  useFactory: () => new Queue(name, { connection, defaultJobOptions: DEFAULT_JOB_OPTIONS })
 }))
 
 @Global()
