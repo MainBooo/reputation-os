@@ -48,3 +48,40 @@ coverage/
 
 # misc
 *.swp
+
+# turbo/cache
+.turbo/
+**/.turbo/
+
+# local backups
+.backup*/
+_backup*/
+*_backup*/
+backup/
+backups/
+
+# debug / scraped artifacts
+storage/
+storage/**
+cookies.txt
+*.cookies.txt
+*.har
+*.trace
+*.webm
+*.png
+*.jpg
+*.jpeg
+*.html
+
+# accidental CLI output files
+api@*
+frontend@*
+worker@*
+next
+nest
+ts-node
+[0-9]*.[0-9]*.[0-9]*
+
+# PM2/local runtime
+dump.pm2
+.pm2/

@@ -6,16 +6,8 @@ module.exports = {
       script: 'dist/main.js',
       env: {
         NODE_ENV: 'production',
-        PORT: 3000
-      }
-    },
-    {
-      name: 'reputation-frontend',
-      cwd: '/opt/reputation-os/apps/frontend',
-      script: 'node_modules/next/dist/bin/next',
-      args: 'start -p 3001',
-      env: {
-        NODE_ENV: 'production'
+        PORT: 4010,
+        REDIS_URL: 'redis://127.0.0.1:6380'
       }
     },
     {
@@ -23,7 +15,17 @@ module.exports = {
       cwd: '/opt/reputation-os/apps/worker',
       script: 'dist/main.js',
       env: {
-        NODE_ENV: 'production'
+        NODE_ENV: 'production',
+        REDIS_URL: 'redis://127.0.0.1:6380'
+      }
+    },
+    {
+      name: 'reputation-frontend',
+      cwd: '/opt/reputation-os/apps/frontend',
+      script: '.next/standalone/server.js',
+      env: {
+        NODE_ENV: 'production',
+        PORT: 4011
       }
     }
   ]
