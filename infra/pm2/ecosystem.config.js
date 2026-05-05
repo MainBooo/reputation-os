@@ -22,10 +22,11 @@ module.exports = {
     {
       name: 'reputation-frontend',
       cwd: '/opt/reputation-os/apps/frontend',
-      script: '.next/standalone/server.js',
+      script: '.next/standalone/apps/frontend/server.js',
       env: {
         NODE_ENV: 'production',
-        PORT: 4011
+        PORT: 4011,
+        HOSTNAME: '0.0.0.0'
       }
     }
   ]
