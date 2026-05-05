@@ -311,9 +311,14 @@ export class CompaniesService {
 
   private async removeWebMentionsRepeat(companyId: string) {
     const repeatables = await this.mentionsSyncQueue.getRepeatableJobs()
+    const jobId = this.getWebMentionsRepeatJobId(companyId)
 
     for (const job of repeatables) {
-      if (job.name !== JOBS.MENTIONS_SYNC) continue
+      const isTargetJob =
+        job.name === JOBS.MENTIONS_SYNC &&
+        (job.id === jobId || job.key.includes(jobId) || job.key.includes(companyId))
+
+      if (!isTargetJob) continue
 
       await this.mentionsSyncQueue.removeRepeatableByKey(job.key)
       this.logger.log(

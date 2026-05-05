@@ -3,6 +3,7 @@ import IORedis from 'ioredis'
 import { Queue } from 'bullmq'
 import { SyncController } from './sync.controller'
 import { SyncService } from './sync.service'
+import { DEFAULT_JOB_OPTIONS } from '../../common/queues/job-options'
 
 @Global()
 @Module({
@@ -22,31 +23,31 @@ import { SyncService } from './sync.service'
     {
       provide: 'SYNC_QUEUE_SOURCE_DISCOVERY',
       useFactory: (connection: IORedis) =>
-        new Queue('source_discovery', { connection }),
+        new Queue('source_discovery', { connection, defaultJobOptions: DEFAULT_JOB_OPTIONS }),
       inject: ['SYNC_BULLMQ_CONNECTION']
     },
     {
       provide: 'SYNC_QUEUE_MENTIONS_SYNC',
       useFactory: (connection: IORedis) =>
-        new Queue('mentions_sync', { connection }),
+        new Queue('mentions_sync', { connection, defaultJobOptions: DEFAULT_JOB_OPTIONS }),
       inject: ['SYNC_BULLMQ_CONNECTION']
     },
     {
       provide: 'SYNC_QUEUE_REVIEWS_SYNC',
       useFactory: (connection: IORedis) =>
-        new Queue('reviews_sync', { connection }),
+        new Queue('reviews_sync', { connection, defaultJobOptions: DEFAULT_JOB_OPTIONS }),
       inject: ['SYNC_BULLMQ_CONNECTION']
     },
     {
       provide: 'SYNC_QUEUE_RATING_REFRESH',
       useFactory: (connection: IORedis) =>
-        new Queue('rating_refresh', { connection }),
+        new Queue('rating_refresh', { connection, defaultJobOptions: DEFAULT_JOB_OPTIONS }),
       inject: ['SYNC_BULLMQ_CONNECTION']
     },
     {
       provide: 'SYNC_QUEUE_RECONCILE',
       useFactory: (connection: IORedis) =>
-        new Queue('reconcile', { connection }),
+        new Queue('reconcile', { connection, defaultJobOptions: DEFAULT_JOB_OPTIONS }),
       inject: ['SYNC_BULLMQ_CONNECTION']
     },
     SyncService
