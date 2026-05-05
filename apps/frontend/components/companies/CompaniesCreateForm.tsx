@@ -165,6 +165,7 @@ export default function CompaniesCreateForm() {
         city: city.trim() || undefined,
         industry: industry.trim() || undefined,
         yandexUrl: yandexUrl.trim() || undefined,
+        twoGisUrl: twoGisUrl.trim() || undefined,
         keywords
       })) as CreatedCompany
 

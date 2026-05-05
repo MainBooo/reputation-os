@@ -325,42 +325,43 @@ export default async function CompanyPage({ params }: { params: { id: string } }
           </a>
         </div>
 
-        <div className="space-y-2 text-sm">
-          <div className="grid grid-cols-[120px_1fr] gap-3">
-            <span className="text-muted">Название:</span>
-            <span className="text-brand">{company.name || 'Не указано'}</span>
-          </div>
+          <div className="space-y-2 text-sm">
+            <div className="grid grid-cols-[120px_1fr] gap-3">
+              <span className="text-muted">Название:</span>
+              <span className="text-brand">{company.name || 'Не указано'}</span>
+            </div>
 
-          <div className="grid grid-cols-[120px_1fr] gap-3">
-            <span className="text-muted">Сайт:</span>
-            {companyWebsite ? (
-              <a href={companyWebsite} target="_blank" rel="noopener noreferrer" className="truncate text-cyan-300 hover:text-cyan-200">
-                {companyWebsite}
-              </a>
-            ) : (
-              <span className="text-muted">Не заполнено</span>
-            )}
-          </div>
+            <div className="grid grid-cols-[120px_1fr] gap-3">
+              <span className="text-muted">Сайт:</span>
+              {companyWebsite ? (
+                <a href={companyWebsite} target="_blank" rel="noopener noreferrer" className="truncate text-cyan-300 hover:text-cyan-200">
+                  {companyWebsite}
+                </a>
+              ) : (
+                <span className="text-muted">Не заполнено</span>
+              )}
+            </div>
 
-          <div className="grid grid-cols-[120px_1fr] gap-3">
-            <span className="text-muted">Город:</span>
-            <span className={company.city ? 'text-brand' : 'text-muted'}>{company.city || 'Не заполнено'}</span>
-          </div>
+            <div className="grid grid-cols-[120px_1fr] gap-3">
+              <span className="text-muted">Город:</span>
+              <span className={company.city ? 'text-brand' : 'text-muted'}>{company.city || 'Не заполнено'}</span>
+            </div>
 
-          <div className="grid grid-cols-[120px_1fr] gap-3">
-            <span className="text-muted">Сфера:</span>
-            <span className={company.industry ? 'text-brand' : 'text-muted'}>{company.industry || 'Не заполнено'}</span>
-          </div>
+            <div className="grid grid-cols-[120px_1fr] gap-3">
+              <span className="text-muted">Сфера:</span>
+              <span className={company.industry ? 'text-brand' : 'text-muted'}>{company.industry || 'Не заполнено'}</span>
+            </div>
 
-          <div className="grid grid-cols-[120px_1fr] gap-3">
-            <span className="text-muted">Yandex Maps:</span>
-            {primarySourceUrl ? (
-              <a href={primarySourceUrl} target="_blank" rel="noopener noreferrer" className="truncate text-cyan-300 hover:text-cyan-200">
-                {primarySourceUrl}
-              </a>
-            ) : (
-              <span className="text-muted">Не заполнено</span>
-            )}
+            <div className="grid grid-cols-[120px_1fr] gap-3">
+              <span className="text-muted">Yandex Maps:</span>
+              {primarySourceUrl ? (
+                <a href={primarySourceUrl} target="_blank" rel="noopener noreferrer" className="truncate text-cyan-300 hover:text-cyan-200">
+                  {primarySourceUrl}
+                </a>
+              ) : (
+                <span className="text-muted">Не заполнено</span>
+              )}
+            </div>
 
             <div className="grid grid-cols-[120px_1fr] gap-3">
               <span className="text-muted">2GIS:</span>
@@ -373,7 +374,6 @@ export default async function CompanyPage({ params }: { params: { id: string } }
               )}
             </div>
           </div>
-        </div>
 
         <CompanyEditPanel company={company} yandexUrl={primarySourceUrl} twoGisUrl={twoGisSourceUrl} />
       </Card>
