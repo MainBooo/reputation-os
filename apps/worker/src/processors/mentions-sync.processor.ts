@@ -9,6 +9,28 @@ import { QUEUES } from '../queues/queue.names'
 export class MentionsSyncProcessor implements OnModuleInit, OnModuleDestroy {
   private worker!: Worker
 
+  private isMapReviewUrl(value?: string | null) {
+    if (!value) return false
+
+    try {
+      const parsed = new URL(value.startsWith('http') ? value : `https://${value}`)
+      const host = parsed.hostname.toLowerCase().replace(/^www\./, '')
+      const path = parsed.pathname.toLowerCase()
+
+      return (
+        host === '2gis.ru' ||
+        host.endsWith('.2gis.ru') ||
+        (
+          (host === 'yandex.ru' || host.endsWith('.yandex.ru') || host === 'yandex.com' || host.endsWith('.yandex.com')) &&
+          path.startsWith('/maps')
+        )
+      )
+    } catch {
+      const lower = value.toLowerCase()
+      return lower.includes('2gis.ru') || lower.includes('yandex.ru/maps') || lower.includes('yandex.com/maps')
+    }
+  }
+
   constructor(
     @Inject('BULLMQ_CONNECTION') private readonly connection: any,
     @Inject(`QUEUE_${QUEUES.MENTIONS_SYNC}`) private readonly queue: Queue,
@@ -28,6 +50,11 @@ export class MentionsSyncProcessor implements OnModuleInit, OnModuleDestroy {
 
   async handle(job: Job) {
     const { companyId } = job.data
+
+    const company = await this.prisma.company.findUnique({
+      where: { id: companyId }
+    })
+
     const targets = await this.prisma.companySourceTarget.findMany({
       where: { companyId, syncMentionsEnabled: true },
       include: { source: true }
@@ -35,9 +62,62 @@ export class MentionsSyncProcessor implements OnModuleInit, OnModuleDestroy {
 
     for (const target of targets) {
       if (!['WEB', 'CUSTOM'].includes(target.source.platform)) continue
+
       const adapter = SourceAdapterFactory.getAdapter(target.source.platform)
-      const mentions = await adapter.fetchMentions(target)
+      const mentions = await adapter.fetchMentions({
+        ...target,
+        searchContext: {
+          companyName: company?.name || null,
+          website: company?.website || target.externalUrl || null,
+          city: company?.city || null,
+          industry: company?.industry || null,
+          aliases: []
+        }
+      })
+
       for (const item of mentions) {
+          if (target.source.platform === 'WEB' && this.isMapReviewUrl(item.url)) {
+            console.log('[WEB] skip map/review platform mention', { companyId, url: item.url })
+            continue
+          }
+
+        let companySourceTargetId = target.id
+
+        if (target.source.platform === 'WEB' && item.url) {
+          const existingAutoTarget = await this.prisma.companySourceTarget.findFirst({
+            where: {
+              companyId,
+              sourceId: target.sourceId,
+              externalUrl: item.url
+            }
+          })
+
+          if (existingAutoTarget) {
+            companySourceTargetId = existingAutoTarget.id
+          } else {
+            const createdAutoTarget = await this.prisma.companySourceTarget.create({
+              data: {
+                companyId,
+                sourceId: target.sourceId,
+                externalUrl: item.url,
+                displayName: item.title || item.url,
+                isActive: false,
+                syncReviewsEnabled: false,
+                syncRatingsEnabled: false,
+                syncMentionsEnabled: false,
+                config: {
+                  origin: 'auto',
+                  scanIntervalHours: 24,
+                  discoveredBy: 'yandex_search',
+                  discoveredFromTargetId: target.id
+                }
+              }
+            })
+
+            companySourceTargetId = createdAutoTarget.id
+          }
+        }
+
         await this.mentionService.persistExternalMention({
           companyId,
           sourceId: target.sourceId,
@@ -50,7 +130,8 @@ export class MentionsSyncProcessor implements OnModuleInit, OnModuleDestroy {
           author: item.author,
           publishedAt: item.publishedAt,
           rawPayload: item,
-          metadata: { syncType: 'mentions' }
+          metadata: { syncType: 'mentions' },
+          companySourceTargetId
         })
       }
     }

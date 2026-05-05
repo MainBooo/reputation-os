@@ -40,6 +40,29 @@ export class SchedulerService implements OnModuleInit {
     return 'alerts-check:global'
   }
 
+  private getWebMentionsRepeatJobId(companyId: string) {
+    return `web-mentions-sync:${companyId}`
+  }
+
+  private normalizeWebScanIntervalMinutes(value: unknown) {
+    const minutes = Number(value)
+
+    if (minutes === 240 || minutes === 720 || minutes === 1440) {
+      return minutes
+    }
+
+    return 1440
+  }
+
+  private getWebTargetIntervalMs(target: any) {
+    const config = target?.config || {}
+    const minutes = this.normalizeWebScanIntervalMinutes(
+      config.scanIntervalMinutes || Number(config.scanIntervalHours || 24) * 60
+    )
+
+    return minutes * 60 * 1000
+  }
+
   async scheduleAll() {
     const prismaAny = this.prisma as any
 
@@ -74,6 +97,23 @@ export class SchedulerService implements OnModuleInit {
       }
     }).catch(() => [])
 
+    const webTargets = await prismaAny.companySourceTarget.findMany({
+      where: {
+        isActive: true,
+        syncMentionsEnabled: true,
+        externalUrl: { not: null },
+        company: { isActive: true },
+        source: {
+          platform: 'WEB',
+          isEnabled: true
+        }
+      },
+      include: {
+        company: true,
+        source: true
+      }
+    }).catch(() => [])
+
     for (const company of companies) {
       if (!company?.id) {
         this.logger.log('Skipping scheduler company without id')
@@ -84,12 +124,6 @@ export class SchedulerService implements OnModuleInit {
         JOBS.SOURCE_DISCOVERY,
         { companyId: company.id },
         { repeat: { every: 12 * 60 * 60 * 1000 }, jobId: `source-discovery:${company.id}` }
-      ).catch(() => null)
-
-      await this.mentionsSyncQueue.add(
-        JOBS.MENTIONS_SYNC,
-        { companyId: company.id },
-        { repeat: { every: 3 * 60 * 60 * 1000 }, jobId: `mentions-sync:${company.id}` }
       ).catch(() => null)
 
       await this.ratingRefreshQueue.add(
@@ -103,7 +137,32 @@ export class SchedulerService implements OnModuleInit {
         { companyId: company.id },
         { repeat: { every: 24 * 60 * 60 * 1000 }, jobId: `reconcile:${company.id}` }
       ).catch(() => null)
+    }
 
+    const webTargetsByCompany = new Map<string, any[]>()
+
+    for (const target of webTargets) {
+      if (!target?.companyId) continue
+      const items = webTargetsByCompany.get(target.companyId) || []
+      items.push(target)
+      webTargetsByCompany.set(target.companyId, items)
+    }
+
+    for (const [companyId, targets] of webTargetsByCompany.entries()) {
+      const every = targets
+        .map((target) => this.getWebTargetIntervalMs(target))
+        .sort((a, b) => a - b)[0]
+
+      await this.mentionsSyncQueue.add(
+        JOBS.MENTIONS_SYNC,
+        { companyId, autoCron: true, scope: 'WEB' },
+        {
+          repeat: { every },
+          jobId: this.getWebMentionsRepeatJobId(companyId)
+        }
+      ).catch((error) => {
+        this.logger.warn(`Failed to ensure web mentions cron companyId=${companyId}: ${error?.message || error}`)
+      })
     }
 
     for (const target of reviewTargets) {
@@ -122,6 +181,8 @@ export class SchedulerService implements OnModuleInit {
       })
     }
 
-    this.logger.log(`Scheduler initialized reviewCronTargets=${reviewTargets.length} alertCheckEveryMinutes=5`)
+    this.logger.log(
+      `Scheduler initialized reviewCronTargets=${reviewTargets.length} webCronCompanies=${webTargetsByCompany.size} alertCheckEveryMinutes=5`
+    )
   }
 }
