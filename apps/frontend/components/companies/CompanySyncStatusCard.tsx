@@ -49,11 +49,12 @@ function logSummary(log: any) {
 }
 
 export default function CompanySyncStatusCard({ status }: { status: any }) {
-  const queues = Array.isArray(status?.queues) ? status.queues : []
-  const logs = Array.isArray(status?.logs) ? status.logs : []
+  const safeStatus = status || { status: 'PENDING', queues: [], logs: [], lastFailedLog: null, lastSuccessLog: null }
+  const queues = Array.isArray(safeStatus?.queues) ? safeStatus.queues : []
+  const logs = Array.isArray(safeStatus?.logs) ? safeStatus.logs : []
   const latestLog = logs[0] || null
-  const failedLog = status?.lastFailedLog || null
-  const successLog = status?.lastSuccessLog || null
+  const failedLog = safeStatus?.lastFailedLog || null
+  const successLog = safeStatus?.lastSuccessLog || null
 
   return (
     <Card className="mt-6 border-cyan-400/15 bg-cyan-500/[0.03] p-5">
@@ -65,8 +66,8 @@ export default function CompanySyncStatusCard({ status }: { status: any }) {
           </div>
         </div>
 
-        <div className={`inline-flex rounded-full border px-3 py-1 text-sm font-semibold ${statusClass(status?.status)}`}>
-          {statusLabel(status?.status)}
+        <div className={`inline-flex rounded-full border px-3 py-1 text-sm font-semibold ${statusClass(safeStatus?.status)}`}>
+          {statusLabel(safeStatus?.status)}
         </div>
       </div>
 

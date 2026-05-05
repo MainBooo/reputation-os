@@ -4,7 +4,9 @@ import EmptyState from '@/components/ui/EmptyState'
 import Card from '@/components/ui/Card'
 import CompanyYandexCronToggle from '@/components/companies/CompanyYandexCronToggle'
 import CompanyEditPanel from '@/components/companies/CompanyEditPanel'
-import { getCompany } from '@/lib/api/companies'
+import CompanySyncStatusCard from '@/components/companies/CompanySyncStatusCard'
+import CompanyManualSyncButton from '@/components/companies/CompanyManualSyncButton'
+import { getCompany, getCompanySyncStatus } from '@/lib/api/companies'
 import { getCompanyMentions } from '@/lib/api/mentions'
 
 function formatShortDate(value?: string | Date | null) {
@@ -60,6 +62,7 @@ export default async function CompanyPage({ params }: { params: { id: string } }
   let latestMentionsResponse: any = { data: [], meta: { total: 0 } }
   let negativeResponse: any = { data: [], meta: { total: 0 } }
   let recentNegativeResponse: any = { data: [], meta: { total: 0 } }
+  let syncStatus: any = null
   let authRequired = false
 
   const sevenDaysAgo = new Date()
@@ -67,12 +70,13 @@ export default async function CompanyPage({ params }: { params: { id: string } }
   const sevenDaysAgoParam = sevenDaysAgo.toISOString().slice(0, 10)
 
   try {
-    const [companyData, mentionsData, latestData, negativeData, recentNegativeData] = await Promise.all([
+    const [companyData, mentionsData, latestData, negativeData, recentNegativeData, syncStatusData] = await Promise.all([
       getCompany(params.id),
       getCompanyMentions(params.id, '?page=1&limit=1'),
       getCompanyMentions(params.id, '?page=1&limit=3'),
       getCompanyMentions(params.id, '?page=1&limit=1&sentiment=NEGATIVE'),
-      getCompanyMentions(params.id, `?page=1&limit=1&sentiment=NEGATIVE&from=${sevenDaysAgoParam}`)
+      getCompanyMentions(params.id, `?page=1&limit=1&sentiment=NEGATIVE&from=${sevenDaysAgoParam}`),
+      getCompanySyncStatus(params.id)
     ])
 
     company = companyData
@@ -80,6 +84,7 @@ export default async function CompanyPage({ params }: { params: { id: string } }
     latestMentionsResponse = latestData
     negativeResponse = negativeData
     recentNegativeResponse = recentNegativeData
+    syncStatus = syncStatusData
   } catch {
     authRequired = true
   }
@@ -176,6 +181,21 @@ export default async function CompanyPage({ params }: { params: { id: string } }
           Репутация отслеживается по {connectedSources || 0} источнику.
         </div>
       </Card>
+
+        <CompanySyncStatusCard status={syncStatus} />
+
+        <Card className="mt-6 border-white/10 bg-white/[0.03] p-5">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <div className="text-lg font-semibold text-brand">Ручное обновление</div>
+              <div className="mt-2 text-sm leading-6 text-muted">
+                Запустит сбор упоминаний, отзывов и рейтинга по подключенным источникам.
+              </div>
+            </div>
+
+            <CompanyManualSyncButton companyId={company.id} />
+          </div>
+        </Card>
 
       <Card className="mt-6 border-orange-400/20 bg-orange-500/[0.04] p-5 shadow-[0_0_40px_rgba(249,115,22,0.08)]">
         <div className="mb-4 text-lg font-semibold text-brand">⚠ Что требует внимания</div>
