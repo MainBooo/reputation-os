@@ -107,3 +107,16 @@ export function deleteCompanySourceTarget(companyId: string, targetId: string) {
     method: 'DELETE'
   })
 }
+
+
+export function getCompanySyncStatus(companyId: string) {
+  return apiFetch(`/companies/${companyId}/sync-status`, undefined, {
+    companyId,
+    status: 'PENDING',
+    hasActiveJob: false,
+    lastFailedLog: null,
+    lastSuccessLog: null,
+    queues: [],
+    logs: []
+  })
+}

@@ -176,6 +176,89 @@ export class SyncService {
     }
   }
 
+
+  private getBullJobIdFromLog(log: { result?: unknown } | null) {
+    const result = log?.result as Record<string, unknown> | null
+    const bullJobId = result?.bullJobId
+    return bullJobId === undefined || bullJobId === null ? null : String(bullJobId)
+  }
+
+  private async getQueueJobState(queue: Queue, bullJobId: string | null) {
+    if (!bullJobId) return null
+
+    try {
+      const job = await queue.getJob(bullJobId)
+      if (!job) return null
+
+      return {
+        id: String(job.id),
+        state: await job.getState(),
+        attemptsMade: job.attemptsMade,
+        failedReason: job.failedReason || null,
+        timestamp: job.timestamp,
+        processedOn: job.processedOn || null,
+        finishedOn: job.finishedOn || null
+      }
+    } catch {
+      return null
+    }
+  }
+
+  async getSyncStatus(userId: string, companyId: string) {
+    await this.assertCompanyAccess(userId, companyId)
+
+    const logs = await this.prisma.jobLog.findMany({
+      where: { companyId },
+      orderBy: { createdAt: 'desc' },
+      take: 20
+    })
+
+    const latestByQueue = new Map<string, (typeof logs)[number]>()
+
+    for (const log of logs) {
+      if (!latestByQueue.has(log.queueName)) {
+        latestByQueue.set(log.queueName, log)
+      }
+    }
+
+    const queueEntries = [
+      { queueName: 'source_discovery', queue: this.sourceDiscoveryQueue },
+      { queueName: 'mentions_sync', queue: this.mentionsSyncQueue },
+      { queueName: 'reviews_sync', queue: this.reviewsSyncQueue },
+      { queueName: 'rating_refresh', queue: this.ratingRefreshQueue },
+      { queueName: 'reconcile', queue: this.reconcileQueue }
+    ]
+
+    const queues = await Promise.all(
+      queueEntries.map(async ({ queueName, queue }) => {
+        const latestLog = latestByQueue.get(queueName) || null
+        const bullJob = await this.getQueueJobState(queue, this.getBullJobIdFromLog(latestLog))
+
+        return {
+          queueName,
+          latestLog,
+          bullJob
+        }
+      })
+    )
+
+    const lastFailedLog = logs.find((log) => log.jobStatus === 'FAILED') || null
+    const lastSuccessLog = logs.find((log) => log.jobStatus === 'SUCCESS') || null
+    const hasActiveJob = queues.some((item) =>
+      ['active', 'waiting', 'delayed', 'prioritized', 'waiting-children'].includes(item.bullJob?.state || '')
+    )
+
+    return {
+      companyId,
+      status: hasActiveJob ? 'RUNNING' : lastFailedLog ? 'FAILED' : lastSuccessLog ? 'SUCCESS' : 'PENDING',
+      hasActiveJob,
+      lastFailedLog,
+      lastSuccessLog,
+      queues,
+      logs
+    }
+  }
+
   async tick() {
     return this.prisma.jobLog.create({
       data: {

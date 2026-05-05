@@ -4,7 +4,8 @@ import EmptyState from '@/components/ui/EmptyState'
 import Card from '@/components/ui/Card'
 import CompanyYandexCronToggle from '@/components/companies/CompanyYandexCronToggle'
 import CompanyEditPanel from '@/components/companies/CompanyEditPanel'
-import { getCompany } from '@/lib/api/companies'
+import CompanySyncStatusCard from '@/components/companies/CompanySyncStatusCard'
+import { getCompany, getCompanySyncStatus } from '@/lib/api/companies'
 import { getCompanyMentions } from '@/lib/api/mentions'
 
 function formatShortDate(value?: string | Date | null) {
@@ -60,6 +61,7 @@ export default async function CompanyPage({ params }: { params: { id: string } }
   let latestMentionsResponse: any = { data: [], meta: { total: 0 } }
   let negativeResponse: any = { data: [], meta: { total: 0 } }
   let recentNegativeResponse: any = { data: [], meta: { total: 0 } }
+  let syncStatus: any = null
   let authRequired = false
 
   const sevenDaysAgo = new Date()

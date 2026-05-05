@@ -1,4 +1,4 @@
-import { Controller, Param, Post, UseGuards } from '@nestjs/common'
+import { Controller, Get, Param, Post, UseGuards } from '@nestjs/common'
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard'
 import { CurrentUser } from '../../common/decorators/current-user.decorator'
 import { AuthUser } from '../../common/auth/auth-user.type'
@@ -18,6 +18,12 @@ export class SyncController {
   @Post('companies/:id/start-sync')
   startSync(@CurrentUser() user: AuthUser, @Param('id') companyId: string) {
     return this.syncService.startSync(user.id, companyId)
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('companies/:id/sync-status')
+  getSyncStatus(@CurrentUser() user: AuthUser, @Param('id') companyId: string) {
+    return this.syncService.getSyncStatus(user.id, companyId)
   }
 
   @Post('internal/jobs/tick')
