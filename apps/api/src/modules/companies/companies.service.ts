@@ -793,10 +793,139 @@ export class CompaniesService {
 
     await this.assertWorkspaceAccess(userId, company.workspaceId)
 
-    return this.prisma.companySourceTarget.findMany({
+    const targets = await this.prisma.companySourceTarget.findMany({
       where: { companyId },
-      include: { source: true },
+      include: {
+        source: true,
+        _count: {
+          select: { mentions: true }
+        },
+        mentions: {
+          orderBy: { publishedAt: 'desc' },
+          take: 1,
+          select: {
+            id: true,
+            title: true,
+            url: true,
+            publishedAt: true,
+            createdAt: true
+          }
+        }
+      },
       orderBy: { createdAt: 'desc' }
+    })
+
+    const getConfig = (value: unknown) => {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) return {} as Record<string, unknown>
+      return value as Record<string, unknown>
+    }
+
+    const hostFromUrl = (value?: string | null) => {
+      if (!value) return ''
+      try {
+        return new URL(value.startsWith('http') ? value : `https://${value}`).hostname.replace(/^www\./, '').toLowerCase()
+      } catch {
+        return value.toLowerCase()
+      }
+    }
+
+    const sourceKind = (target: (typeof targets)[number]) => {
+      const haystack = `${target.displayName || ''} ${target.externalUrl || ''}`.toLowerCase()
+      const host = hostFromUrl(target.externalUrl)
+
+      if (haystack.includes('otzovik') || haystack.includes('irecommend') || haystack.includes('отзов')) return 'Отзовик'
+      if (haystack.includes('catalog') || haystack.includes('справочник') || haystack.includes('каталог') || haystack.includes('yell') || haystack.includes('zoon')) return 'Каталог'
+      if (haystack.includes('article') || haystack.includes('news') || haystack.includes('blog') || haystack.includes('статья')) return 'Статья'
+      if (company.normalizedWebsite && host.includes(company.normalizedWebsite)) return 'Сайт'
+      if (company.website && host === hostFromUrl(company.website)) return 'Сайт'
+
+      return 'Другое'
+    }
+
+    const relevanceReasons = (target: (typeof targets)[number]) => {
+      const config = getConfig(target.config)
+      const reasons: string[] = []
+      const haystack = `${target.displayName || ''} ${target.externalUrl || ''}`.toLowerCase()
+      const host = hostFromUrl(target.externalUrl)
+      const brand = company.normalizedName || company.name.toLowerCase()
+      const city = company.normalizedCity || company.city?.toLowerCase() || ''
+      const websiteHost = hostFromUrl(company.website)
+
+      const hasBrand = Boolean(brand && brand.length >= 3 && haystack.includes(brand))
+      const hasCity = Boolean(city && haystack.includes(city))
+      const hasReviewIntent = haystack.includes('отзывы') || haystack.includes('review') || haystack.includes('reviews')
+      const hasWebsiteMatch = Boolean(websiteHost && host.includes(websiteHost))
+      const hasStrongConfigSignal =
+        Array.isArray(config.relevanceReasons) &&
+        config.relevanceReasons.some((item) => {
+          if (typeof item !== 'string') return false
+          const normalized = item.toLowerCase()
+          return (
+            normalized.includes('название') ||
+            normalized.includes('домен') ||
+            normalized.includes('сайт') ||
+            normalized.includes('телефон') ||
+            normalized.includes('адрес') ||
+            normalized.includes('точное')
+          )
+        })
+
+      if (hasWebsiteMatch) reasons.push('совпал домен/бренд')
+      if (hasBrand) reasons.push('совпало название компании')
+      if (hasBrand && hasCity) reasons.push('найден город')
+      if ((hasBrand || hasWebsiteMatch) && hasReviewIntent) reasons.push('найдено слово “отзывы”')
+      if (!hasBrand && !hasWebsiteMatch && hasStrongConfigSignal) reasons.push('есть сильный сигнал релевантности')
+
+      return Array.from(new Set(reasons))
+    }
+
+    const statusForTarget = (target: (typeof targets)[number]) => {
+      const config = getConfig(target.config)
+
+      if (config.lastError) return 'ERROR'
+      if (config.status === 'EXCLUDED' || config.excluded === true) return 'EXCLUDED'
+      if (target.isActive && target.syncMentionsEnabled) return 'MONITORED'
+      if (config.status === 'NEEDS_REVIEW') return 'NEEDS_REVIEW'
+      if (config.origin === 'auto' && !target.isActive) return 'DISCOVERED'
+
+      return target.isActive ? 'MONITORED' : 'NEEDS_REVIEW'
+    }
+
+    const relevanceForTarget = (target: (typeof targets)[number]) => {
+      const config = getConfig(target.config)
+      const explicitScore = Number(config.relevanceScore)
+      const reasons = relevanceReasons(target)
+      const hasStrongReason = reasons.some((reason) =>
+        reason.includes('название') || reason.includes('домен') || reason.includes('сайт') || reason.includes('сильный')
+      )
+
+      const computedScore = hasStrongReason ? Math.min(100, 45 + reasons.length * 18) : 25
+      const score = Number.isFinite(explicitScore)
+        ? hasStrongReason
+          ? Math.max(computedScore, Math.min(explicitScore, 85))
+          : Math.min(explicitScore, 35)
+        : computedScore
+
+      if (score >= 75) return { score, label: 'высокая' }
+      if (score >= 50) return { score, label: 'средняя' }
+      return { score, label: 'низкая' }
+    }
+
+    return targets.map((target) => {
+      const relevance = relevanceForTarget(target)
+      const lastMention = target.mentions[0] || null
+
+      return {
+        ...target,
+        status: statusForTarget(target),
+        sourceKind: sourceKind(target),
+        mentionsCount: target._count.mentions,
+        lastMention,
+        lastMentionAt: lastMention?.publishedAt || null,
+        relevanceScore: relevance.score,
+        relevanceLabel: relevance.label,
+        relevanceReasons: relevanceReasons(target)
+      }
     })
   }
   async createSourceTarget(userId: string, companyId: string, dto: CreateCompanySourceTargetDto) {

@@ -11,8 +11,13 @@ export type CompanyMentionsResponse = {
   }
 }
 
+function normalizeQuery(query = '') {
+  if (!query) return ''
+  return query.startsWith('?') ? query : `?${query}`
+}
+
 export function getCompanyMentions(id: string, query = ''): Promise<CompanyMentionsResponse> {
-  return apiFetch(`/companies/${id}/mentions${query}`, undefined, {
+  return apiFetch(`/companies/${id}/mentions${normalizeQuery(query)}`, undefined, {
     data: [],
     meta: { total: 0, page: 1, limit: 20, averageRating: null, ratedCount: 0 }
   })

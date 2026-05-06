@@ -1,8 +1,9 @@
-import { Injectable, OnModuleDestroy, OnModuleInit, Inject } from '@nestjs/common'
+import { Inject, Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common'
 import { Job, Queue, Worker } from 'bullmq'
 import { PrismaService } from '../common/prisma/prisma.service'
 import { SourceAdapterFactory } from '../adapters/source-adapter.factory'
 import { MentionService } from '../services/mention.service'
+import { JobLogService } from '../services/job-log.service'
 import { QUEUES } from '../queues/queue.names'
 import { WORKER_OPTIONS } from '../queues/job-options'
 
@@ -14,15 +15,15 @@ export class ReviewsSyncProcessor implements OnModuleInit, OnModuleDestroy {
     @Inject('BULLMQ_CONNECTION') private readonly connection: any,
     @Inject(`QUEUE_${QUEUES.REVIEWS_SYNC}`) private readonly queue: Queue,
     private readonly prisma: PrismaService,
-    private readonly mentionService: MentionService
+    private readonly mentionService: MentionService,
+    private readonly jobLogService: JobLogService
   ) {}
 
   onModuleInit() {
-
     this.worker = new Worker(QUEUES.REVIEWS_SYNC, async (job: Job) => this.handle(job), {
-        connection: this.connection,
-        ...WORKER_OPTIONS.reviewsSync
-      })
+      connection: this.connection,
+      ...WORKER_OPTIONS.reviewsSync
+    })
   }
 
   async onModuleDestroy() {
@@ -30,7 +31,6 @@ export class ReviewsSyncProcessor implements OnModuleInit, OnModuleDestroy {
   }
 
   async handle(job: Job) {
-
     const { companyId } = job.data
 
     try {
@@ -44,8 +44,6 @@ export class ReviewsSyncProcessor implements OnModuleInit, OnModuleDestroy {
       let itemsUpdated = 0
 
       for (const target of targets) {
-
-
         let mentions: any[] = []
 
         try {
@@ -63,7 +61,6 @@ export class ReviewsSyncProcessor implements OnModuleInit, OnModuleDestroy {
 
           continue
         }
-
 
         itemsDiscovered += mentions.length
 
@@ -104,15 +101,17 @@ export class ReviewsSyncProcessor implements OnModuleInit, OnModuleDestroy {
         }
       }
 
-      await this.prisma.jobLog.create({
-        data: {
-          companyId,
-          queueName: QUEUES.REVIEWS_SYNC,
-          jobName: 'reviews.sync',
-          jobStatus: 'SUCCESS',
-          itemsDiscovered,
-          itemsCreated,
-          itemsUpdated
+      await this.jobLogService.finish({
+        companyId,
+        queueName: QUEUES.REVIEWS_SYNC,
+        jobName: 'reviews.sync',
+        bullJobId: job.id,
+        status: 'SUCCESS',
+        itemsDiscovered,
+        itemsCreated,
+        itemsUpdated,
+        result: {
+          processedTargets: targets.length
         }
       }).catch(() => null)
 
@@ -120,14 +119,13 @@ export class ReviewsSyncProcessor implements OnModuleInit, OnModuleDestroy {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
 
-      await this.prisma.jobLog.create({
-        data: {
-          companyId,
-          queueName: QUEUES.REVIEWS_SYNC,
-          jobName: 'reviews.sync',
-          jobStatus: 'FAILED',
-          errorMessage: message
-        }
+      await this.jobLogService.finish({
+        companyId,
+        queueName: QUEUES.REVIEWS_SYNC,
+        jobName: 'reviews.sync',
+        bullJobId: job.id,
+        status: 'FAILED',
+        errorMessage: message
       }).catch(() => null)
 
       throw error

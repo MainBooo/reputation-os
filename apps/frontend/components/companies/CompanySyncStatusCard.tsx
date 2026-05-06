@@ -14,9 +14,9 @@ function formatDateTime(value?: string | Date | null) {
 }
 
 function statusLabel(value?: string | null) {
-  if (value === 'RUNNING') return 'Синхронизация идёт'
-  if (value === 'SUCCESS') return 'Последняя синхронизация успешна'
-  if (value === 'FAILED') return 'Есть ошибка синхронизации'
+  if (value === 'RUNNING') return 'Выполняется'
+  if (value === 'SUCCESS') return 'Успешно'
+  if (value === 'FAILED') return 'Ошибка'
   return 'Ожидает запуска'
 }
 
@@ -27,13 +27,11 @@ function statusClass(value?: string | null) {
   return 'border-white/10 bg-white/[0.04] text-muted'
 }
 
-function queueLabel(value?: string | null) {
-  if (value === 'reviews_sync') return 'Отзывы'
-  if (value === 'mentions_sync') return 'Упоминания'
-  if (value === 'rating_refresh') return 'Рейтинг'
-  if (value === 'source_discovery') return 'Источники'
-  if (value === 'reconcile') return 'Сверка'
-  return value || 'Очередь'
+function mainStatusLabel(value?: string | null) {
+  if (value === 'RUNNING') return 'Синхронизация идёт'
+  if (value === 'SUCCESS') return 'Последний сбор успешен'
+  if (value === 'FAILED') return 'Есть ошибка сбора'
+  return 'Ожидает первого запуска'
 }
 
 function logSummary(log: any) {
@@ -45,16 +43,58 @@ function logSummary(log: any) {
     typeof log.itemsUpdated === 'number' ? `обновлено ${log.itemsUpdated}` : null
   ].filter(Boolean)
 
-  return parts.length ? parts.join(' · ') : log.jobStatus
+  return parts.length ? parts.join(' · ') : 'Последний сбор завершён'
+}
+
+function queueByName(status: any, queueName: string) {
+  const queues = Array.isArray(status?.queues) ? status.queues : []
+  return queues.find((item: any) => item?.queueName === queueName) || null
+}
+
+function effectiveStatus(item: any) {
+  if (!item) return 'PENDING'
+  if (item.effectiveStatus) return item.effectiveStatus
+
+  const state = item?.bullJob?.state || ''
+  if (['active', 'waiting', 'delayed', 'prioritized', 'waiting-children'].includes(state)) return 'RUNNING'
+  if (state === 'completed' && item?.latestLog?.jobStatus === 'PENDING') return 'SUCCESS'
+  if (state === 'failed' && item?.latestLog?.jobStatus === 'PENDING') return 'FAILED'
+
+  return item?.latestLog?.jobStatus || 'PENDING'
 }
 
 export default function CompanySyncStatusCard({ status }: { status: any }) {
   const safeStatus = status || { status: 'PENDING', queues: [], logs: [], lastFailedLog: null, lastSuccessLog: null }
-  const queues = Array.isArray(safeStatus?.queues) ? safeStatus.queues : []
-  const logs = Array.isArray(safeStatus?.logs) ? safeStatus.logs : []
-  const latestLog = logs[0] || null
-  const failedLog = safeStatus?.lastFailedLog || null
-  const successLog = safeStatus?.lastSuccessLog || null
+  const reviews = queueByName(safeStatus, 'reviews_sync')
+  const web = queueByName(safeStatus, 'mentions_sync')
+  const rating = queueByName(safeStatus, 'rating_refresh')
+
+  const rows = [
+    {
+      title: 'Яндекс Карты',
+      description: 'Отзывы и новые оценки',
+      item: reviews,
+      successLabel: 'успешно'
+    },
+    {
+      title: '2ГИС',
+      description: 'Отзывы и новые оценки',
+      item: reviews,
+      successLabel: 'успешно'
+    },
+    {
+      title: 'WEB',
+      description: 'Новые источники и упоминания в сети',
+      item: web,
+      successLabel: 'успешно'
+    },
+    {
+      title: 'Рейтинг',
+      description: 'Последнее обновление рейтингов',
+      item: rating,
+      successLabel: 'обновлён'
+    }
+  ]
 
   return (
     <Card className="mt-6 border-cyan-400/15 bg-cyan-500/[0.03] p-5">
@@ -62,54 +102,40 @@ export default function CompanySyncStatusCard({ status }: { status: any }) {
         <div>
           <div className="text-lg font-semibold text-brand">Статус синхронизации</div>
           <div className="mt-2 text-sm leading-6 text-muted">
-            Последние фоновые задачи по отзывам, рейтингу и WEB-упоминаниям.
+            Последний сбор отзывов, рейтингов и упоминаний без технических деталей.
           </div>
         </div>
 
         <div className={`inline-flex rounded-full border px-3 py-1 text-sm font-semibold ${statusClass(safeStatus?.status)}`}>
-          {statusLabel(safeStatus?.status)}
+          {mainStatusLabel(safeStatus?.status)}
         </div>
       </div>
 
-      <div className="mt-5 grid gap-3 md:grid-cols-3">
-        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-          <div className="text-xs uppercase tracking-[0.2em] text-muted">Последний запуск</div>
-          <div className="mt-2 text-base font-semibold text-brand">{formatDateTime(latestLog?.createdAt)}</div>
-          <div className="mt-1 text-sm text-muted">{latestLog ? queueLabel(latestLog.queueName) : '—'}</div>
-        </div>
-
-        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-          <div className="text-xs uppercase tracking-[0.2em] text-muted">Последний успех</div>
-          <div className="mt-2 text-base font-semibold text-brand">{formatDateTime(successLog?.createdAt)}</div>
-          <div className="mt-1 text-sm text-muted">{logSummary(successLog)}</div>
-        </div>
-
-        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-          <div className="text-xs uppercase tracking-[0.2em] text-muted">Последняя ошибка</div>
-          <div className="mt-2 text-base font-semibold text-brand">{formatDateTime(failedLog?.createdAt)}</div>
-          <div className="mt-1 line-clamp-2 text-sm text-muted">{failedLog?.errorMessage || 'Ошибок не найдено'}</div>
-        </div>
-      </div>
-
-      <div className="mt-5 grid gap-2">
-        {queues.map((item: any) => {
-          const state = item?.bullJob?.state || item?.latestLog?.jobStatus || 'NO_DATA'
+      <div className="mt-5 grid gap-3 md:grid-cols-2">
+        {rows.map((row) => {
+          const state = effectiveStatus(row.item)
+          const latestLog = row.item?.latestLog || null
+          const label = state === 'SUCCESS' ? row.successLabel : statusLabel(state)
 
           return (
             <div
-              key={item.queueName}
-              className="flex flex-col gap-2 rounded-2xl border border-white/10 bg-white/[0.025] px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+              key={row.title}
+              className="rounded-2xl border border-white/10 bg-white/[0.025] px-4 py-3"
             >
-              <div>
-                <div className="text-sm font-semibold text-brand">{queueLabel(item.queueName)}</div>
-                <div className="mt-1 text-xs text-muted">{logSummary(item.latestLog)}</div>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold text-brand">{row.title}</div>
+                  <div className="mt-1 text-xs text-muted">{row.description}</div>
+                </div>
+
+                <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${statusClass(state)}`}>
+                  {label}
+                </span>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
-                <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-1">
-                  {state}
-                </span>
-                <span>{formatDateTime(item.latestLog?.createdAt)}</span>
+              <div className="mt-3 text-xs text-muted">
+                <div>Последний сбор: {formatDateTime(latestLog?.createdAt || latestLog?.finishedAt)}</div>
+                <div className="mt-1">{state === 'FAILED' ? 'Источник временно недоступен. Повторим позже.' : logSummary(latestLog)}</div>
               </div>
             </div>
           )

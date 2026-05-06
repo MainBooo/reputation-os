@@ -16,6 +16,7 @@ const RATING_FILTERS = [1, 2, 3, 4, 5]
 
 function platformLabel(value: string) {
   if (value === 'TWOGIS') return '2GIS'
+  if (value === 'WEB') return 'Сеть'
   return value
 }
 

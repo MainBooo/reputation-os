@@ -207,10 +207,15 @@ export class SyncService {
   async getSyncStatus(userId: string, companyId: string) {
     await this.assertCompanyAccess(userId, companyId)
 
+    const relevantQueues = ['mentions_sync', 'reviews_sync', 'rating_refresh']
+
     const logs = await this.prisma.jobLog.findMany({
-      where: { companyId },
+      where: {
+        companyId,
+        queueName: { in: relevantQueues }
+      },
       orderBy: { createdAt: 'desc' },
-      take: 20
+      take: 30
     })
 
     const latestByQueue = new Map<string, (typeof logs)[number]>()
@@ -222,35 +227,47 @@ export class SyncService {
     }
 
     const queueEntries = [
-      { queueName: 'source_discovery', queue: this.sourceDiscoveryQueue },
       { queueName: 'mentions_sync', queue: this.mentionsSyncQueue },
       { queueName: 'reviews_sync', queue: this.reviewsSyncQueue },
-      { queueName: 'rating_refresh', queue: this.ratingRefreshQueue },
-      { queueName: 'reconcile', queue: this.reconcileQueue }
+      { queueName: 'rating_refresh', queue: this.ratingRefreshQueue }
     ]
+
+    const resolveEffectiveStatus = (log: (typeof logs)[number] | null, bullJob: Awaited<ReturnType<typeof this.getQueueJobState>>) => {
+      const state = bullJob?.state || null
+
+      if (['active', 'waiting', 'delayed', 'prioritized', 'waiting-children'].includes(state || '')) return 'RUNNING'
+      if (state === 'completed' && log?.jobStatus === 'PENDING') return 'SUCCESS'
+      if (state === 'failed' && log?.jobStatus === 'PENDING') return 'FAILED'
+
+      return log?.jobStatus || 'PENDING'
+    }
 
     const queues = await Promise.all(
       queueEntries.map(async ({ queueName, queue }) => {
         const latestLog = latestByQueue.get(queueName) || null
         const bullJob = await this.getQueueJobState(queue, this.getBullJobIdFromLog(latestLog))
+        const effectiveStatus = resolveEffectiveStatus(latestLog, bullJob)
 
         return {
           queueName,
           latestLog,
-          bullJob
+          bullJob,
+          effectiveStatus
         }
       })
     )
 
-    const lastFailedLog = logs.find((log) => log.jobStatus === 'FAILED') || null
-    const lastSuccessLog = logs.find((log) => log.jobStatus === 'SUCCESS') || null
-    const hasActiveJob = queues.some((item) =>
-      ['active', 'waiting', 'delayed', 'prioritized', 'waiting-children'].includes(item.bullJob?.state || '')
-    )
+    const hasActiveJob = queues.some((item) => item.effectiveStatus === 'RUNNING')
+    const latestRelevantLogs = queues.map((item) => item.latestLog).filter(Boolean) as typeof logs
+    const lastFailedLog = latestRelevantLogs.find((log) => log.jobStatus === 'FAILED') || null
+    const lastSuccessLog = latestRelevantLogs.find((log) => log.jobStatus === 'SUCCESS') || null
+    const hasFailedLatest = queues.some((item) => item.effectiveStatus === 'FAILED')
+    const hasSuccessLatest = queues.some((item) => item.effectiveStatus === 'SUCCESS')
+    const hasAnyLatest = queues.some((item) => item.latestLog)
 
     return {
       companyId,
-      status: hasActiveJob ? 'RUNNING' : lastFailedLog ? 'FAILED' : lastSuccessLog ? 'SUCCESS' : 'PENDING',
+      status: hasActiveJob ? 'RUNNING' : hasFailedLatest ? 'FAILED' : hasSuccessLatest ? 'SUCCESS' : hasAnyLatest ? 'PENDING' : 'PENDING',
       hasActiveJob,
       lastFailedLog,
       lastSuccessLog,

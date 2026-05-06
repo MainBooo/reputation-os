@@ -6,6 +6,7 @@ import { SchedulerService } from './scheduler/scheduler.service'
 import { DedupService } from './services/dedup.service'
 import { MentionService } from './services/mention.service'
 import { RatingService } from './services/rating.service'
+import { JobLogService } from './services/job-log.service'
 import { AlertsService } from './services/alerts.service'
 import { SourceDiscoveryProcessor } from './processors/source-discovery.processor'
 import { ReviewsSyncProcessor } from './processors/reviews-sync.processor'
@@ -22,6 +23,7 @@ import { AlertsCheckProcessor } from './processors/alerts-check.processor'
     DedupService,
     MentionService,
     RatingService,
+    JobLogService,
     AlertsService,
     SourceDiscoveryProcessor,
     ReviewsSyncProcessor,
