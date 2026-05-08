@@ -30,6 +30,12 @@ function getMentionsCount(company: any) {
   return toNumber(company?._count?.mentions)
 }
 
+function getDashboardCompany(companies: any[]) {
+  return companies
+    .slice()
+    .sort((a, b) => getMentionsCount(b) - getMentionsCount(a))[0] || null
+}
+
 function getAliases(company: any) {
   return Array.isArray(company?.aliases) ? company.aliases.filter(Boolean) : []
 }
@@ -228,9 +234,9 @@ export default async function DashboardPage() {
     const companiesResult = await getCompanies()
     companies = Array.isArray(companiesResult) ? companiesResult : []
 
-    const firstCompany = companies[0]
-    if (firstCompany?.id) {
-      const mentionsResult = await getCompanyMentions(firstCompany.id, '?page=1&limit=50')
+    const dashboardCompany = getDashboardCompany(companies)
+    if (dashboardCompany?.id) {
+      const mentionsResult = await getCompanyMentions(dashboardCompany.id, '?page=1&limit=250')
       dashboardMentions = Array.isArray(mentionsResult?.data) ? mentionsResult.data : []
       dashboardMeta = mentionsResult?.meta || dashboardMeta
     }
@@ -253,7 +259,7 @@ export default async function DashboardPage() {
     )
   }
 
-  const firstCompany = companies[0] || null
+  const firstCompany = getDashboardCompany(companies)
   const totalCompanies = companies.length
   const totalSources = companies.reduce((sum, company) => sum + getActiveSourceTargets(company).length, 0)
   const totalMentions = toNumber(
