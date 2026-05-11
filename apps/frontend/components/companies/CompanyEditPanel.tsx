@@ -36,8 +36,8 @@ export default function CompanyEditPanel({
   twoGisUrl?: string | null
 }) {
   const router = useRouter()
-  const [isOpen, setIsOpen] = useState(false)
-  const [saving, setSaving] = useState(false)
+  const [isOpen, setIsOpen] = useState(true)
+  const [saving, setSaving] = useState(true)
   const [error, setError] = useState('')
   const [keywordInput, setKeywordInput] = useState('')
   const [keywords, setKeywords] = useState<string[]>(() => getInitialKeywords(company))

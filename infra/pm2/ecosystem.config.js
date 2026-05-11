@@ -28,6 +28,16 @@ module.exports = {
         PORT: 4011,
         HOSTNAME: '0.0.0.0'
       }
+    },
+    {
+      name: 'reputation-landing',
+      cwd: '/opt/reputation-os/apps/landing',
+      script: '.next/standalone/apps/landing/server.js',
+      env: {
+        NODE_ENV: 'production',
+        PORT: 4012,
+        HOSTNAME: '0.0.0.0'
+      }
     }
   ]
 }

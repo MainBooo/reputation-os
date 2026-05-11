@@ -49,6 +49,24 @@ export class ReviewsSyncProcessor implements OnModuleInit, OnModuleDestroy {
         try {
           const adapter = SourceAdapterFactory.getAdapter(target.source.platform)
           mentions = await adapter.fetchMentions(target)
+
+          const logoUrl = mentions
+            .map((item: any) => item?.sourceMetadata?.logoUrl)
+            .find((value: unknown) => typeof value === 'string' && value.trim().length > 0)
+
+          if (logoUrl) {
+            await this.prisma.$executeRawUnsafe(
+              'update "Company" set "logoUrl" = $1 where "id" = $2 and "logoUrl" is null',
+              String(logoUrl),
+              companyId
+            )
+
+            console.log('[REVIEWS] Company logoUrl saved', {
+              companyId,
+              platform: target.source.platform,
+              logoUrl
+            })
+          }
         } catch (targetError) {
           const targetMessage = targetError instanceof Error ? targetError.message : String(targetError)
 

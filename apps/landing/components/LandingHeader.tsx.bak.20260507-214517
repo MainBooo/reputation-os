@@ -1,0 +1,43 @@
+import ButtonLink from './ui/ButtonLink'
+import Container from './ui/Container'
+
+const navItems = [
+  { href: '#features', label: 'Возможности' },
+  { href: '#how-it-works', label: 'Как работает' },
+  { href: '#pricing', label: 'Тарифы' },
+  { href: '#faq', label: 'FAQ' }
+]
+
+export default function LandingHeader() {
+  return (
+    <header className="sticky top-0 z-50 border-b border-white/10 bg-slate-950/60 backdrop-blur-xl">
+      <Container className="flex min-h-[72px] items-center justify-between gap-4">
+        <a href="#" className="focus-ring flex items-center gap-3 rounded-xl">
+          <span className="flex h-9 w-9 items-center justify-center rounded-2xl bg-cyan-300 text-sm font-black text-slate-950">
+            OS
+          </span>
+          <span className="text-base font-semibold tracking-tight text-white">
+            Reputation OS
+          </span>
+        </a>
+
+        <nav aria-label="Основная навигация" className="hidden items-center gap-6 md:flex">
+          {navItems.map((item) => (
+            <a key={item.href} href={item.href} className="focus-ring rounded-lg text-sm text-slate-300 transition hover:text-cyan-200">
+              {item.label}
+            </a>
+          ))}
+        </nav>
+
+        <div className="flex items-center gap-2">
+          <ButtonLink href="https://reputation.generationweb.ru/login" variant="ghost" className="hidden sm:inline-flex">
+            Войти
+          </ButtonLink>
+          <ButtonLink href="https://t.me/max92pole" external>
+            Запросить демо
+          </ButtonLink>
+        </div>
+      </Container>
+    </header>
+  )
+}

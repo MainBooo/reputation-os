@@ -51,15 +51,24 @@ export class MentionsService {
       }
 
     if (query.sentiment === 'POSITIVE') {
-      where.ratingValue = { gte: 4 }
+      where.OR = [
+        { ratingValue: { gte: 4 } },
+        { AND: [{ ratingValue: null }, { sentiment: 'POSITIVE' }] }
+      ]
     }
 
     if (query.sentiment === 'NEGATIVE') {
-      where.ratingValue = { lte: 2 }
+      where.OR = [
+        { ratingValue: { lte: 2 } },
+        { AND: [{ ratingValue: null }, { sentiment: 'NEGATIVE' }] }
+      ]
     }
 
     if (query.sentiment === 'NEUTRAL') {
-      where.ratingValue = { gt: 2, lt: 4 }
+      where.OR = [
+        { ratingValue: { gt: 2, lt: 4 } },
+        { AND: [{ ratingValue: null }, { sentiment: 'NEUTRAL' }] }
+      ]
     }
 
     const ratingWhere: Prisma.MentionWhereInput = {

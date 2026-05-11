@@ -10,7 +10,7 @@ import InboxPendingRefresh from '@/components/inbox/InboxPendingRefresh'
 import { deleteMention, getCompanyMentions } from '@/lib/api/mentions'
 
 const PAGE_LIMIT = 20
-const PLATFORM_FILTERS = ['YANDEX', 'TWOGIS']
+const PLATFORM_FILTERS = ['YANDEX', 'TWOGIS', 'WEB']
 const SENTIMENT_FILTERS = ['NEGATIVE', 'POSITIVE', 'NEUTRAL']
 const RATING_FILTERS = [1, 2, 3, 4, 5]
 
@@ -147,6 +147,13 @@ export default function InboxMentionsList({
   const [rating, setRating] = useState<number | null>(initialFilters?.rating || null)
   const [from, setFrom] = useState(initialFilters?.from || '')
   const [to, setTo] = useState(initialFilters?.to || '')
+  const [filtersOpen, setFiltersOpen] = useState(Boolean(
+    initialFilters?.platform ||
+    initialFilters?.sentiment ||
+    initialFilters?.rating ||
+    initialFilters?.from ||
+    initialFilters?.to
+  ))
   const [averageRating, setAverageRating] = useState<number | null>(
     initialAverageRating === null || initialAverageRating === undefined ? null : Number(initialAverageRating)
   )
@@ -166,6 +173,7 @@ export default function InboxMentionsList({
   }, [platform, sentiment, rating, from, to])
 
   const hasActiveFilters = Boolean(platform || sentiment || rating || from || to)
+  const activeFilterCount = [platform, sentiment, rating, from || to].filter(Boolean).length
   const visibleMentions = useMemo(
     () => mentions.filter((mention) => mentionMatchesFilters(mention, { platform, sentiment, rating, from, to })),
     [mentions, platform, sentiment, rating, from, to]
@@ -290,113 +298,129 @@ export default function InboxMentionsList({
 
   return (
     <div>
-      <Card className="mb-4 p-5">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <div className="text-sm text-muted">Средний рейтинг по отзывам</div>
-            <div className="mt-1 text-3xl font-semibold text-brand">{ratingLabel}</div>
-            <div className="mt-1 text-xs text-muted">На основе {ratedCount} отзывов с оценкой</div>
+      <Card className="mb-4 overflow-hidden p-0">
+        <div className="grid grid-cols-3 divide-x divide-white/10">
+          <div className="px-3 py-4 text-center">
+            <div className="text-2xl font-semibold text-brand">{ratingLabel}</div>
+            <div className="mt-1 text-[11px] leading-4 text-muted">Средний рейтинг</div>
           </div>
-
-          <div className="text-sm text-muted">
-            Найдено: <span className="text-brand">{totalCount}</span>
+          <div className="px-3 py-4 text-center">
+            <div className="text-2xl font-semibold text-brand">{ratedCount}</div>
+            <div className="mt-1 text-[11px] leading-4 text-muted">отзывов с оценкой</div>
+          </div>
+          <div className="px-3 py-4 text-center">
+            <div className="text-2xl font-semibold text-brand">{totalCount}</div>
+            <div className="mt-1 text-[11px] leading-4 text-muted">найдено</div>
           </div>
         </div>
       </Card>
 
-      <Card className="mb-6 p-5">
-        <div className="space-y-4">
-          <div>
-            <div className="mb-2 text-xs uppercase tracking-[0.18em] text-muted">Площадка</div>
-            <div className="flex flex-wrap gap-2">
-              {PLATFORM_FILTERS.map((item) => (
-                <button
-                  key={item}
-                  type="button"
-                  onClick={() => setPlatform(platform === item ? '' : item)}
-                  className={clsx(
-                    'rounded-full border px-3 py-1.5 text-xs font-semibold transition-all',
-                    platform === item
-                      ? 'border-amber-400/40 bg-amber-500/20 text-amber-100'
-                      : 'border-white/10 bg-white/[0.04] text-muted hover:text-brand'
-                  )}
-                >
-                  {platformLabel(item)}
-                </button>
-              ))}
-            </div>
-          </div>
+      <Card className="mb-4 p-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setFiltersOpen((value) => !value)}
+            className={clsx(
+              'inline-flex items-center gap-2 rounded-full border px-3 py-2 text-sm font-semibold transition-all',
+              filtersOpen
+                ? 'border-cyan-400/30 bg-cyan-500/15 text-cyan-100'
+                : 'border-white/10 bg-white/[0.04] text-muted hover:text-brand'
+            )}
+          >
+            Фильтры
+            {activeFilterCount > 0 ? (
+              <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-cyan-400/20 px-1.5 text-xs text-cyan-100">
+                {activeFilterCount}
+              </span>
+            ) : null}
+          </button>
 
-          <div>
-            <div className="mb-2 text-xs uppercase tracking-[0.18em] text-muted">Тональность</div>
-            <div className="flex flex-wrap gap-2">
-              {SENTIMENT_FILTERS.map((item) => (
-                <button
-                  key={item}
-                  type="button"
-                  onClick={() => setSentiment(sentiment === item ? '' : item)}
-                  className={clsx(
-                    'rounded-full border px-3 py-1.5 text-xs font-semibold transition-all',
-                    sentiment === item
-                      ? item === 'NEGATIVE'
-                        ? 'border-red-400/30 bg-red-500/15 text-red-200'
-                        : item === 'POSITIVE'
-                          ? 'border-emerald-400/30 bg-emerald-500/15 text-emerald-200'
-                          : 'border-amber-400/30 bg-amber-500/15 text-amber-100'
-                      : 'border-white/10 bg-white/[0.04] text-muted hover:text-brand'
-                  )}
-                >
-                  {sentimentLabel(item)}
-                </button>
-              ))}
-            </div>
-          </div>
+          {platform ? (
+            <button type="button" onClick={() => setPlatform('')} className="rounded-full border border-purple-400/30 bg-purple-500/15 px-3 py-2 text-sm font-semibold text-purple-200">
+              {platformLabel(platform)} ×
+            </button>
+          ) : null}
 
-          <div>
-            <div className="mb-2 text-xs uppercase tracking-[0.18em] text-muted">Оценка</div>
-            <div className="flex flex-wrap gap-2">
-              {RATING_FILTERS.map((item) => (
-                <button
-                  key={item}
-                  type="button"
-                  onClick={() => setRating(rating === item ? null : item)}
-                  className={clsx(
-                    'rounded-full border px-3 py-1.5 text-xs font-semibold transition-all',
-                    rating === item
-                      ? 'border-cyan-400/30 bg-cyan-500/15 text-cyan-100'
-                      : 'border-white/10 bg-white/[0.04] text-muted hover:text-brand'
-                  )}
-                >
-                  {item} ★
-                </button>
-              ))}
-            </div>
-          </div>
+          {sentiment ? (
+              <button
+                type="button"
+                onClick={() => setSentiment('')}
+                className={clsx(
+                  'rounded-full border px-3 py-2 text-sm font-semibold',
+                  sentiment === 'NEGATIVE'
+                    ? 'border-red-400/30 bg-red-500/15 text-red-200'
+                    : sentiment === 'POSITIVE'
+                      ? 'border-emerald-400/30 bg-emerald-500/15 text-emerald-200'
+                      : 'border-amber-400/30 bg-amber-500/15 text-amber-100'
+                )}
+              >
+                {sentimentLabel(sentiment)} ×
+              </button>
+            ) : null}
 
-          <div>
-            <div className="mb-2 text-xs uppercase tracking-[0.18em] text-muted">Дата публикации</div>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <input
-                type="date"
-                value={from}
-                onChange={(event) => setFrom(event.target.value)}
-                className="h-12 rounded-xl border border-line bg-panel px-4 text-sm text-brand outline-none transition focus:border-cyan-400/50"
-              />
-              <input
-                type="date"
-                value={to}
-                onChange={(event) => setTo(event.target.value)}
-                className="h-12 rounded-xl border border-line bg-panel px-4 text-sm text-brand outline-none transition focus:border-cyan-400/50"
-              />
-            </div>
-          </div>
+          {rating ? (
+            <button type="button" onClick={() => setRating(null)} className="rounded-full border border-cyan-400/30 bg-cyan-500/15 px-3 py-2 text-sm font-semibold text-cyan-100">
+              {rating} ★ ×
+            </button>
+          ) : null}
 
           {hasActiveFilters ? (
-            <Button type="button" variant="secondary" onClick={resetFilters}>
-              Сбросить фильтры
-            </Button>
+            <button type="button" onClick={resetFilters} className="ml-auto text-sm font-medium text-cyan-300 hover:text-white">
+              Сбросить все
+            </button>
           ) : null}
         </div>
+
+        {filtersOpen ? (
+          <div className="mt-3 space-y-2 rounded-2xl border border-white/10 bg-black/10 p-3">
+            <div>
+              <div className="mb-2 text-xs text-muted">Площадка</div>
+              <div className="flex flex-wrap gap-2">
+                {PLATFORM_FILTERS.map((item) => (
+                  <button key={item} type="button" onClick={() => setPlatform(platform === item ? '' : item)} className={clsx('rounded-full border px-3 py-1.5 text-xs font-semibold transition-all', platform === item ? 'border-cyan-400/30 bg-cyan-500/15 text-cyan-100' : 'border-white/10 bg-white/[0.04] text-muted hover:text-brand')}>
+                    {platformLabel(item)}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <div className="mb-2 text-xs text-muted">Тональность</div>
+              <div className="flex flex-wrap gap-2">
+                {SENTIMENT_FILTERS.map((item) => (
+                  <button key={item} type="button" onClick={() => setSentiment(sentiment === item ? '' : item)} className={clsx('rounded-full border px-3 py-1.5 text-xs font-semibold transition-all', sentiment === item
+                        ? item === 'NEGATIVE'
+                          ? 'border-red-400/30 bg-red-500/15 text-red-200'
+                          : item === 'POSITIVE'
+                            ? 'border-emerald-400/30 bg-emerald-500/15 text-emerald-200'
+                            : 'border-amber-400/30 bg-amber-500/15 text-amber-100'
+                        : 'border-white/10 bg-white/[0.04] text-muted hover:text-brand')}>
+                    {sentimentLabel(item)}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <div className="mb-2 text-xs text-muted">Оценка</div>
+              <div className="flex flex-wrap gap-2">
+                {RATING_FILTERS.map((item) => (
+                  <button key={item} type="button" onClick={() => setRating(rating === item ? null : item)} className={clsx('rounded-full border px-3 py-1.5 text-xs font-semibold transition-all', rating === item ? 'border-cyan-400/30 bg-cyan-500/15 text-cyan-100' : 'border-white/10 bg-white/[0.04] text-muted hover:text-brand')}>
+                    {item} ★
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <div className="mb-2 text-xs text-muted">Дата публикации</div>
+              <div className="grid grid-cols-2 gap-2">
+                <input type="date" value={from} onChange={(event) => setFrom(event.target.value)} className="h-10 rounded-xl border border-line bg-panel px-3 text-xs text-brand outline-none transition focus:border-cyan-400/50" />
+                <input type="date" value={to} onChange={(event) => setTo(event.target.value)} className="h-10 rounded-xl border border-line bg-panel px-3 text-xs text-brand outline-none transition focus:border-cyan-400/50" />
+              </div>
+            </div>
+          </div>
+        ) : null}
       </Card>
 
       {!mentions.length && (isAwaitingInitialYandexData || totalCount > 0) && (!initialLoadTimedOut || totalCount > 0) ? (

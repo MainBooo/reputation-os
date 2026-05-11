@@ -15,9 +15,9 @@ export default function Sidebar() {
   const pathname = usePathname()
 
   return (
-    <aside className="hidden w-80 border-r border-white/10 bg-[#071019]/90 backdrop-blur-2xl lg:block">
+    <aside className="hidden w-80 border-r border-cyan-300/10 bg-[#06101b]/95 shadow-[inset_-1px_0_0_rgba(255,255,255,0.04),0_0_80px_rgba(34,211,238,0.05)] backdrop-blur-2xl lg:block">
       <div className="flex h-full flex-col p-5">
-        <div className="rounded-[28px] border border-cyan-400/15 bg-white/[0.03] p-5 shadow-[0_0_40px_rgba(34,211,238,0.08)]">
+        <div className="rounded-[30px] border border-cyan-400/15 bg-[radial-gradient(circle_at_15%_0%,rgba(34,211,238,0.12),transparent_38%),rgba(255,255,255,0.035)] p-6 shadow-[0_0_52px_rgba(34,211,238,0.10)]">
           <div className="text-[11px] uppercase tracking-[0.35em] text-cyan-200/70">Reputation OS</div>
           <div className="mt-2 text-xl font-semibold text-white">Reputation Inbox</div>
           <div className="mt-2 text-sm leading-6 text-slate-300">
@@ -25,7 +25,7 @@ export default function Sidebar() {
           </div>
         </div>
 
-        <nav className="mt-6 space-y-2">
+        <nav className="mt-7 space-y-3">
           {items.map((item) => {
             const Icon = item.icon
             const active = pathname === item.href || pathname.startsWith(item.href + '/')
@@ -34,9 +34,9 @@ export default function Sidebar() {
                 key={item.href}
                 href={item.href}
                 className={clsx(
-                  'group flex items-center gap-3 rounded-2xl border px-4 py-3 text-sm transition-all duration-200',
+                  'group flex items-center gap-3 rounded-[20px] border px-4 py-3.5 text-sm transition-all duration-200',
                   active
-                    ? 'border-cyan-400/30 bg-cyan-400/[0.12] text-white shadow-[0_0_24px_rgba(34,211,238,0.18)]'
+                    ? 'border-cyan-400/40 bg-cyan-400/[0.14] text-white shadow-[0_0_34px_rgba(34,211,238,0.24)]'
                     : 'border-white/8 bg-white/[0.025] text-slate-300 hover:border-cyan-400/20 hover:bg-white/[0.05] hover:text-white'
                 )}
               >
@@ -54,7 +54,7 @@ export default function Sidebar() {
           })}
         </nav>
 
-        <div className="mt-6 rounded-[28px] border border-fuchsia-400/15 bg-gradient-to-br from-cyan-400/[0.08] via-white/[0.03] to-fuchsia-400/[0.08] p-5 shadow-[0_0_34px_rgba(168,85,247,0.12)]">
+        <div className="mt-7 rounded-[30px] border border-fuchsia-400/20 bg-gradient-to-br from-cyan-400/[0.10] via-white/[0.035] to-fuchsia-400/[0.10] p-6 shadow-[0_0_44px_rgba(168,85,247,0.16)]">
           <div className="flex items-center gap-2 text-sm font-medium text-white">
             <Sparkles size={16} className="text-cyan-200" />
             Быстрая навигация

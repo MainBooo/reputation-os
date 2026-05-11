@@ -70,31 +70,26 @@ export default function CompanySyncStatusCard({ status }: { status: any }) {
   const rating = queueByName(safeStatus, 'rating_refresh')
 
   const rows = [
-    {
-      title: 'Яндекс Карты',
-      description: 'Отзывы и новые оценки',
-      item: reviews,
-      successLabel: 'успешно'
-    },
-    {
-      title: '2ГИС',
-      description: 'Отзывы и новые оценки',
-      item: reviews,
-      successLabel: 'успешно'
-    },
-    {
-      title: 'WEB',
-      description: 'Новые источники и упоминания в сети',
-      item: web,
-      successLabel: 'успешно'
-    },
-    {
-      title: 'Рейтинг',
-      description: 'Последнее обновление рейтингов',
-      item: rating,
-      successLabel: 'обновлён'
-    }
-  ]
+      {
+        title: 'Яндекс Карты',
+        description: 'Отзывы и новые оценки',
+        item: reviews,
+        successLabel: 'успешно'
+      },
+      {
+        title: '2ГИС',
+        description: 'Отзывы и новые оценки',
+        item: reviews,
+        successLabel: 'успешно'
+      },
+      {
+        title: 'WEB',
+        description: 'Новые источники и упоминания в сети',
+        item: web,
+        successLabel: 'успешно',
+        href: safeStatus?.companyId ? `/companies/${safeStatus.companyId}/web` : null
+      }
+    ]
 
   return (
     <Card className="mt-6 border-cyan-400/15 bg-cyan-500/[0.03] p-5">
@@ -102,7 +97,7 @@ export default function CompanySyncStatusCard({ status }: { status: any }) {
         <div>
           <div className="text-lg font-semibold text-brand">Статус синхронизации</div>
           <div className="mt-2 text-sm leading-6 text-muted">
-            Последний сбор отзывов, рейтингов и упоминаний без технических деталей.
+            Последний сбор отзывов и WEB-упоминаний без технических деталей.
           </div>
         </div>
 
@@ -136,6 +131,11 @@ export default function CompanySyncStatusCard({ status }: { status: any }) {
               <div className="mt-3 text-xs text-muted">
                 <div>Последний сбор: {formatDateTime(latestLog?.createdAt || latestLog?.finishedAt)}</div>
                 <div className="mt-1">{state === 'FAILED' ? 'Источник временно недоступен. Повторим позже.' : logSummary(latestLog)}</div>
+                  {row.href ? (
+                    <a href={row.href} className="mt-3 inline-flex text-xs font-semibold text-cyan-200 hover:text-cyan-100">
+                      Открыть вкладку Сеть →
+                    </a>
+                  ) : null}
               </div>
             </div>
           )

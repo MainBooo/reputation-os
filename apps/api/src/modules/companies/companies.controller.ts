@@ -54,6 +54,11 @@ export class CompaniesController {
     return this.companiesService.getSources(user.id, id)
   }
 
+  @Get(':id/web-sources')
+  getWebSourcesOverview(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.companiesService.getWebSourcesOverview(user.id, id)
+  }
+
   @Post(':id/sources')
   createSourceTarget(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: CreateCompanySourceTargetDto) {
     return this.companiesService.createSourceTarget(user.id, id, dto)

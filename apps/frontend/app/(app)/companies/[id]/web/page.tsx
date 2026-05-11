@@ -1,19 +1,20 @@
 import EmptyState from '@/components/ui/EmptyState'
 import PageHeader from '@/components/ui/PageHeader'
 import DiscoveryCenter from '@/components/web/DiscoveryCenter'
-import LatestWebMentions from '@/components/web/LatestWebMentions'
-import { getCompany, getCompanySourceTargets } from '@/lib/api/companies'
+import { getCompany, getCompanySourceTargets, getCompanyWebSourcesOverview } from '@/lib/api/companies'
 
 export const dynamic = 'force-dynamic'
 
 export default async function CompanyWebPage({ params }: { params: { id: string } }) {
-  const [companyResult, targetsResult] = await Promise.allSettled([
+  const [companyResult, targetsResult, webOverviewResult] = await Promise.allSettled([
     getCompany(params.id),
-    getCompanySourceTargets(params.id)
+    getCompanySourceTargets(params.id),
+    getCompanyWebSourcesOverview(params.id)
   ])
 
   const company = companyResult.status === 'fulfilled' ? companyResult.value : null
   const targets = targetsResult.status === 'fulfilled' && Array.isArray(targetsResult.value) ? targetsResult.value : []
+  const webOverview = webOverviewResult.status === 'fulfilled' ? webOverviewResult.value : null
 
   if (!company) {
     return (
@@ -25,14 +26,13 @@ export default async function CompanyWebPage({ params }: { params: { id: string 
   }
 
   return (
-    <div>
+    <div className="space-y-5 pb-28">
       <PageHeader
         title="Сеть"
-        subtitle="Внешние площадки и страницы, где система находит упоминания компании."
+        subtitle="Управляйте внешними источниками мониторинга. Упоминания и сигналы попадают в Inbox."
       />
 
-      <DiscoveryCenter companyId={params.id} initialTargets={targets} />
-      <LatestWebMentions companyId={params.id} />
+      <DiscoveryCenter companyId={params.id} initialTargets={targets} initialOverview={webOverview} />
     </div>
   )
 }

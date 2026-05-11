@@ -1,14 +1,14 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import Card from '@/components/ui/Card'
-import EmptyState from '@/components/ui/EmptyState'
 import {
   deleteCompanySourceTarget,
-  getCompanySourceTargets,
-  startCompanySync,
+  startCompanyWebSync,
   updateCompanySourceTarget
 } from '@/lib/api/companies'
+import { getCompanyMentions } from '@/lib/api/mentions'
 
 const SCAN_INTERVALS = [
   { label: '4 часа', hours: 4, minutes: 240 },
@@ -30,12 +30,9 @@ type SourceTarget = {
     type?: string
     name?: string
   }
-  status?: 'MONITORED' | 'DISCOVERED' | 'NEEDS_REVIEW' | 'EXCLUDED' | 'ERROR' | string
-  sourceKind?: string
   mentionsCount?: number
   lastMentionAt?: string | null
   lastMention?: {
-    id?: string
     title?: string | null
     url?: string | null
     publishedAt?: string | null
@@ -46,24 +43,33 @@ type SourceTarget = {
   relevanceReasons?: string[]
 }
 
-function Spinner({ dark = false }: { dark?: boolean }) {
-  return (
-    <span
-      className={[
-        'inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent',
-        dark ? 'text-slate-950' : 'text-cyan-200'
-      ].join(' ')}
-    />
-  )
-}
-
-function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
+function Spinner() {
+  return <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
 }
 
 function getConfig(target: SourceTarget) {
   if (!target.config || typeof target.config !== 'object' || Array.isArray(target.config)) return {}
   return target.config
+}
+
+function normalizeUrl(value?: string | null) {
+  if (!value) return null
+  try {
+    const parsed = new URL(value.startsWith('http') ? value : `https://${value}`)
+    parsed.hash = ''
+    return parsed.toString().replace(/\/$/, '')
+  } catch {
+    return value.trim().replace(/\/$/, '')
+  }
+}
+
+function hostOf(value?: string | null) {
+  if (!value) return 'Домен не определён'
+  try {
+    return new URL(value.startsWith('http') ? value : `https://${value}`).hostname.replace(/^www\./, '')
+  } catch {
+    return 'Домен не определён'
+  }
 }
 
 function isMapOrReviewPlatformUrl(value?: string | null) {
@@ -86,27 +92,48 @@ function isMapOrReviewPlatformUrl(value?: string | null) {
   }
 }
 
-function sourceHost(value?: string | null) {
-  if (!value) return null
-
-  try {
-    return new URL(value.startsWith('http') ? value : `https://${value}`).hostname.replace(/^www\./, '')
-  } catch {
-    return null
-  }
+function isWebTarget(target: SourceTarget) {
+  if (target.source?.platform !== 'WEB') return false
+  if (isMapOrReviewPlatformUrl(target.externalUrl)) return false
+  return true
 }
 
-function normalizeUrl(value?: string | null) {
-  if (!value) return null
-  return value.startsWith('http') ? value : `https://${value}`
+function isActiveTarget(target: SourceTarget) {
+  return target.isActive !== false && target.syncMentionsEnabled !== false
+}
+
+function isDiscoveredTarget(target: SourceTarget) {
+  const config = getConfig(target)
+  if (isActiveTarget(target)) return false
+  if (config.status === 'EXCLUDED' || config.excluded === true) return false
+  return config.origin === 'auto' || config.origin === 'auto-bootstrap' || config.origin === 'auto-bootstrap-backfill' || !target.isActive
+}
+
+function sourceTitle(target: SourceTarget) {
+  return target.displayName || hostOf(target.externalUrl) || target.externalUrl || 'WEB-источник'
+}
+
+function relevanceLabel(target: SourceTarget) {
+  const score = Number(target.relevanceScore || getConfig(target).relevanceScore || 0)
+  const label = String(target.relevanceLabel || getConfig(target).relevanceLabel || '')
+
+  if (label) return label
+  if (score >= 75) return 'высокая'
+  if (score >= 50) return 'средняя'
+  if (score > 0) return 'низкая'
+  return 'средняя'
+}
+
+function relevanceClass(label: string) {
+  if (label.includes('высок')) return 'border-emerald-400/25 bg-emerald-500/10 text-emerald-100'
+  if (label.includes('низ')) return 'border-slate-400/20 bg-white/[0.04] text-muted'
+  return 'border-amber-400/25 bg-amber-500/10 text-amber-100'
 }
 
 function formatDate(value?: string | null) {
   if (!value) return '—'
-
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return '—'
-
   return date.toLocaleString('ru-RU', {
     day: '2-digit',
     month: '2-digit',
@@ -115,740 +142,501 @@ function formatDate(value?: string | null) {
   })
 }
 
-function getStatus(target: SourceTarget) {
-  const config = getConfig(target)
-
-  if (target.status) return target.status
-  if (config.lastError) return 'ERROR'
-  if (config.status === 'EXCLUDED' || config.excluded === true) return 'EXCLUDED'
-  if (target.isActive && target.syncMentionsEnabled) return 'MONITORED'
-  if (config.status === 'NEEDS_REVIEW') return 'NEEDS_REVIEW'
-  if (config.origin === 'auto' && !target.isActive) return 'DISCOVERED'
-
-  return target.isActive ? 'MONITORED' : 'NEEDS_REVIEW'
+function faviconUrl(host: string) {
+  if (!host || host === 'Домен не определён') return null
+  return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=64`
 }
 
-function statusLabel(status: string) {
-  if (status === 'MONITORED') return 'Мониторится'
-  if (status === 'DISCOVERED') return 'Найден'
-  if (status === 'NEEDS_REVIEW') return 'Нужно проверить'
-  if (status === 'EXCLUDED') return 'Исключён'
-  if (status === 'ERROR') return 'Ошибка'
-  return status
-}
-
-function statusClass(status: string) {
-  if (status === 'MONITORED') return 'border-emerald-400/25 bg-emerald-500/10 text-emerald-100'
-  if (status === 'DISCOVERED') return 'border-cyan-400/25 bg-cyan-500/10 text-cyan-100'
-  if (status === 'NEEDS_REVIEW') return 'border-amber-400/25 bg-amber-500/10 text-amber-100'
-  if (status === 'ERROR') return 'border-red-400/25 bg-red-500/10 text-red-100'
-  return 'border-white/10 bg-white/[0.04] text-muted'
-}
-
-function sourceTitle(target: SourceTarget) {
-  return target.displayName || sourceHost(target.externalUrl) || target.externalUrl || 'Источник'
-}
-
-function relevanceText(target: SourceTarget) {
-  const score = Number(target.relevanceScore || 0)
-
-  if (target.relevanceLabel) return target.relevanceLabel
-  if (score >= 75) return 'высокая'
-  if (score >= 50) return 'средняя'
-  return 'низкая'
-}
-
-function getRelevanceReasons(target: SourceTarget) {
-  const config = getConfig(target)
-
-  if (Array.isArray(target.relevanceReasons) && target.relevanceReasons.length > 0) return target.relevanceReasons
-  if (Array.isArray(config.relevanceReasons)) return config.relevanceReasons.filter((item) => typeof item === 'string') as string[]
-
-  return []
-}
-
-function getIntervalHours(target: SourceTarget, fallbackHours: number) {
-  const config = getConfig(target)
-  const minutes = Number(config.scanIntervalMinutes || config.autoScanEveryMinutes || config.everyMinutes)
-
-  if (minutes === 240) return 4
-  if (minutes === 720) return 12
-  if (minutes === 1440) return 24
-
-  return fallbackHours
-}
-
-function LastMentionBlock({ target }: { target: SourceTarget }) {
-  const title = target.lastMention?.title || target.lastMention?.url || null
-  const url = target.lastMention?.url || target.externalUrl || null
-  const href = normalizeUrl(url)
-  const date = target.lastMentionAt || target.lastMention?.publishedAt || target.lastMention?.createdAt || null
+function SourceIcon({ host }: { host: string }) {
+  const url = faviconUrl(host)
+  const fallback = host.replace(/\.(ru|com|net|org|ph)$/i, '').slice(0, 2).toUpperCase()
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.025] p-3">
-      <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-muted">
-        Последнее упоминание
-      </div>
-
-      {title ? (
-        <div className="mt-2 space-y-1">
-          {href ? (
-            <a
-              href={href}
-              target="_blank"
-              rel="noreferrer"
-              className="line-clamp-2 text-sm font-medium leading-5 text-cyan-100 hover:text-cyan-50"
-            >
-              {title}
-            </a>
-          ) : (
-            <div className="line-clamp-2 text-sm font-medium leading-5 text-brand">{title}</div>
-          )}
-
-          <div className="text-xs text-muted">
-            {date ? `Найдено: ${formatDate(date)}` : 'Дата не определена'}
-          </div>
-        </div>
-      ) : (
-        <div className="mt-2 text-sm leading-5 text-muted">
-          Пока нет найденных упоминаний. Ссылка появится после первого успешного сбора.
-        </div>
-      )}
-    </div>
-  )
-}
-
-function SourceActions({
-  isBusy,
-  onDelete,
-  onDisable
-}: {
-  isBusy: boolean
-  onDelete: () => void
-  onDisable?: () => void
-}) {
-  return (
-    <div className="mt-4 grid grid-cols-2 gap-2">
-      {onDisable ? (
-        <button
-          type="button"
-          disabled={isBusy}
-          onClick={onDisable}
-          className="rounded-2xl border border-white/10 bg-white/[0.02] px-2.5 py-2.5 text-xs font-semibold text-muted transition hover:border-amber-400/30 hover:bg-amber-500/10 hover:text-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {isBusy ? 'Сохраняем…' : 'Отключить'}
-        </button>
-      ) : null}
-
-      <button
-        type="button"
-        disabled={isBusy}
-        onClick={onDelete}
-        className="rounded-2xl border border-red-400/20 bg-red-500/10 px-2.5 py-2.5 text-xs font-semibold text-red-100 transition hover:border-red-300/40 hover:bg-red-500/15 disabled:cursor-not-allowed disabled:opacity-60"
-      >
-        {isBusy ? 'Удаляем…' : 'Удалить'}
-      </button>
-    </div>
-  )
-}
-
-function MonitoredSourceCard({
-  target,
-  busyId,
-  onDisable,
-  onDelete
-}: {
-  target: SourceTarget
-  busyId: string | null
-  onDisable: (target: SourceTarget) => Promise<void>
-  onDelete: (target: SourceTarget) => Promise<void>
-}) {
-  const status = getStatus(target)
-  const host = sourceHost(target.externalUrl)
-  const href = normalizeUrl(target.externalUrl)
-  const isBusy = busyId === target.id
-
-  return (
-    <div className="rounded-3xl border border-white/10 bg-white/[0.025] p-4 transition hover:border-white/15 hover:bg-white/[0.04]">
-      <div className="min-w-0">
-        <div className="flex flex-wrap items-center gap-2">
-          {href ? (
-            <a
-              href={href}
-              target="_blank"
-              rel="noreferrer"
-              className="truncate text-base font-semibold text-brand hover:text-cyan-100"
-            >
-              {sourceTitle(target)}
-            </a>
-          ) : (
-            <div className="truncate text-base font-semibold text-brand">{sourceTitle(target)}</div>
-          )}
-
-          <span className={`shrink-0 rounded-full border px-2.5 py-1 text-xs font-semibold ${statusClass(status)}`}>
-            {statusLabel(status)}
-          </span>
-        </div>
-
-        <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted">
-          {host ? (
-            <a href={href || '#'} target="_blank" rel="noreferrer" className="text-cyan-100/80 hover:text-cyan-50">
-              {host}
-            </a>
-          ) : (
-            <span>Домен не определён</span>
-          )}
-
-          {typeof target.mentionsCount === 'number' ? (
-            <span className="text-muted">· {target.mentionsCount} упоминаний</span>
-          ) : null}
-        </div>
-      </div>
-
-      <div className="mt-4">
-        <LastMentionBlock target={target} />
-      </div>
-
-      <SourceActions
-        isBusy={isBusy}
-        onDisable={() => onDisable(target)}
-        onDelete={() => onDelete(target)}
-      />
-    </div>
-  )
-}
-
-function CandidateSourceCard({
-  target,
-  busyId,
-  onApprove,
-  onExclude,
-  onDelete
-}: {
-  target: SourceTarget
-  busyId: string | null
-  onApprove: (target: SourceTarget) => Promise<void>
-  onExclude: (target: SourceTarget) => Promise<void>
-  onDelete: (target: SourceTarget) => Promise<void>
-}) {
-  const status = getStatus(target)
-  const host = sourceHost(target.externalUrl)
-  const href = normalizeUrl(target.externalUrl)
-  const reasons = getRelevanceReasons(target)
-  const isBusy = busyId === target.id
-
-  return (
-    <div className="rounded-3xl border border-white/10 bg-white/[0.025] p-4 transition hover:border-white/15 hover:bg-white/[0.04]">
-      <div className="min-w-0">
-        <div className="flex flex-wrap items-center gap-2">
-          {href ? (
-            <a
-              href={href}
-              target="_blank"
-              rel="noreferrer"
-              className="truncate text-base font-semibold text-brand hover:text-cyan-100"
-            >
-              {sourceTitle(target)}
-            </a>
-          ) : (
-            <div className="truncate text-base font-semibold text-brand">{sourceTitle(target)}</div>
-          )}
-
-          <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${statusClass(status)}`}>
-            {statusLabel(status)}
-          </span>
-        </div>
-
-        <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted">
-          {host ? (
-            <a href={href || '#'} target="_blank" rel="noreferrer" className="text-cyan-100/80 hover:text-cyan-50">
-              {host}
-            </a>
-          ) : (
-            <span>Домен не определён</span>
-          )}
-
-          <span>· релевантность: {relevanceText(target)}</span>
-        </div>
-
-        {reasons.length > 0 ? (
-          <div className="mt-3 flex flex-wrap gap-2">
-            {reasons.slice(0, 3).map((reason) => (
-              <span
-                key={reason}
-                className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-xs text-muted"
-              >
-                {reason}
-              </span>
-            ))}
-          </div>
-        ) : null}
-      </div>
-
-      <div className="mt-4 grid grid-cols-3 gap-2">
-        <button
-          type="button"
-          disabled={isBusy}
-          onClick={() => onApprove(target)}
-          className="rounded-2xl bg-cyan-300 px-2.5 py-2.5 text-xs font-bold text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {isBusy ? (
-            <span className="inline-flex items-center gap-2">
-              <Spinner dark />
-              Включаем…
-            </span>
-          ) : (
-            'Включить'
-          )}
-        </button>
-
-        <button
-          type="button"
-          disabled={isBusy}
-          onClick={() => onExclude(target)}
-          className="rounded-2xl border border-white/10 bg-white/[0.02] px-2.5 py-2.5 text-xs font-semibold text-muted transition hover:border-white/20 hover:bg-white/[0.05] hover:text-brand disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {isBusy ? 'Сохраняем…' : 'Скрыть'}
-        </button>
-
-        <button
-          type="button"
-          disabled={isBusy}
-          onClick={() => onDelete(target)}
-          className="rounded-2xl border border-red-400/20 bg-red-500/10 px-2.5 py-2.5 text-xs font-semibold text-red-100 transition hover:border-red-300/40 hover:bg-red-500/15 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {isBusy ? 'Удаляем…' : 'Удалить'}
-        </button>
-      </div>
+    <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-cyan-300/15 bg-cyan-400/10 text-xs font-black text-cyan-100 shadow-[0_0_22px_rgba(34,211,238,0.10)]">
+      {url ? <img src={url} alt="" className="h-6 w-6 rounded-md" /> : fallback}
     </div>
   )
 }
 
 export default function DiscoveryCenter({
   companyId,
-  initialTargets
+  initialTargets,
+  initialOverview
 }: {
   companyId: string
   initialTargets: SourceTarget[]
+  initialOverview?: any
 }) {
-  const [targets, setTargets] = useState<SourceTarget[]>(initialTargets || [])
+  const router = useRouter()
+  const [targets, setTargets] = useState<SourceTarget[]>(
+    Array.isArray(initialTargets) ? initialTargets : []
+  )
+  const serverActiveGroups = Array.isArray(initialOverview?.activeGroups) ? initialOverview.activeGroups : []
+  const serverDiscovered = Array.isArray(initialOverview?.discovered) ? initialOverview.discovered : []
+  const serverSignals = Array.isArray(initialOverview?.latestSignals) ? initialOverview.latestSignals : []
+  const [syncing, setSyncing] = useState(false)
   const [busyId, setBusyId] = useState<string | null>(null)
-  const [isScanning, setIsScanning] = useState(false)
-  const [scanState, setScanState] = useState<'idle' | 'running' | 'done' | 'error'>('idle')
-  const [scanMessage, setScanMessage] = useState('Сканирование не запущено')
-  const [isSavingInterval, setIsSavingInterval] = useState(false)
+  const [showAllActive, setShowAllActive] = useState(false)
+  const [showAllDiscovered, setShowAllDiscovered] = useState(false)
+  const [intervalMinutes, setIntervalMinutes] = useState(1440)
+  const [message, setMessage] = useState<string | null>(null)
+  const [signals, setSignals] = useState<any[]>(serverSignals)
 
-  const webTargets = useMemo(() => {
-    return targets.filter((target) => {
-      if (target.source?.platform !== 'WEB') return false
-      if (isMapOrReviewPlatformUrl(target.externalUrl)) return false
-      return true
-    })
-  }, [targets])
+  const webTargets = useMemo(() => targets.filter(isWebTarget), [targets])
 
-  const visibleTargets = useMemo(() => {
-    return webTargets.filter((target) => getStatus(target) !== 'EXCLUDED')
-  }, [webTargets])
+  useEffect(() => {
+    let mounted = true
 
-  const monitoredTargets = useMemo(() => {
-    return visibleTargets.filter((target) => getStatus(target) === 'MONITORED')
-  }, [visibleTargets])
+    getCompanyMentions(companyId, '?page=1&limit=3&platform=WEB')
+      .then((response) => {
+        if (!mounted) return
+        setSignals(Array.isArray(response?.data) ? response.data : [])
+      })
+      .catch(() => {
+        if (mounted) setSignals([])
+      })
 
-  const candidateTargets = useMemo(() => {
-    return visibleTargets.filter((target) => {
-      const status = getStatus(target)
-      return status === 'DISCOVERED' || status === 'NEEDS_REVIEW' || status === 'ERROR'
-    })
-  }, [visibleTargets])
+    return () => {
+      mounted = false
+    }
+  }, [companyId])
+  const activeTargets = useMemo(() => webTargets.filter((target) => isActiveTarget(target) && Boolean(target.externalUrl)), [webTargets])
+  const discoveredTargets = useMemo(() => webTargets.filter(isDiscoveredTarget), [webTargets])
 
-  const hiddenWeakCount = 0
+  const groupedActive = useMemo(() => {
+    const map = new Map<string, SourceTarget[]>()
 
-  const defaultIntervalHours = useMemo(() => {
-    const firstConfigured = monitoredTargets.find((target) => {
-      const config = getConfig(target)
-      return config.scanIntervalMinutes || config.autoScanEveryMinutes || config.everyMinutes
-    })
+    for (const target of activeTargets) {
+      const host = hostOf(target.externalUrl)
+      const items = map.get(host) || []
+      items.push(target)
+      map.set(host, items)
+    }
 
-    return firstConfigured ? getIntervalHours(firstConfigured, 24) : 24
-  }, [monitoredTargets])
+    return Array.from(map.entries()).map(([host, items]) => ({
+      host,
+      items,
+      mentionsCount: items.reduce((sum, item) => sum + Number(item.mentionsCount || 0), 0),
+      pagesCount: items.length,
+      lastMentionAt: items
+        .map((item) => item.lastMentionAt || item.lastMention?.publishedAt || item.lastMention?.createdAt || null)
+        .filter(Boolean)
+        .sort()
+        .reverse()[0] || null
+    }))
+  }, [activeTargets])
 
-  const [scanIntervalHours, setScanIntervalHours] = useState(defaultIntervalHours)
+  const effectiveGroupedActive = serverActiveGroups.length ? serverActiveGroups : groupedActive
+  const effectiveDiscovered = serverDiscovered.length ? serverDiscovered : discoveredTargets
 
-  async function reloadTargets() {
-    const freshTargets = await getCompanySourceTargets(companyId)
-    setTargets(Array.isArray(freshTargets) ? freshTargets : [])
-  }
+  const visibleActive = showAllActive ? effectiveGroupedActive : effectiveGroupedActive.slice(0, 5)
+  const visibleDiscovered = showAllDiscovered ? effectiveDiscovered : effectiveDiscovered.slice(0, 4)
 
-  async function runScan() {
-    if (isScanning) return
-
-    setIsScanning(true)
-    setScanState('running')
-    setScanMessage('Сканирование запущено. Можно не нажимать повторно — система ищет новые источники и обновляет список.')
+  async function handleStartSync() {
+    setSyncing(true)
+    setMessage(null)
 
     try {
-      await startCompanySync(companyId)
-
-      for (let step = 0; step < 6; step += 1) {
-        await sleep(3000)
-        await reloadTargets()
-        setScanMessage(
-          step < 5
-            ? `Сканирование идёт… обновляем найденные источники (${step + 1}/6)`
-            : 'Финально обновляем список найденных источников…'
-        )
-      }
-
-      await reloadTargets()
-      setScanState('done')
-      setScanMessage('Сканирование завершено. Проверьте блок «Найденные источники».')
+      await startCompanyWebSync(companyId)
+      setMessage('Сканирование запущено. Найденные площадки появятся после завершения сбора.')
+      router.refresh()
     } catch {
-      setScanState('error')
-      setScanMessage('Не удалось запустить сканирование. Проверьте API/worker и попробуйте ещё раз.')
+      setMessage('Не удалось запустить сканирование.')
     } finally {
-      setIsScanning(false)
+      setSyncing(false)
     }
   }
 
-  async function saveGlobalInterval(hours: number) {
-    setScanIntervalHours(hours)
-    setIsSavingInterval(true)
-
-    const interval = SCAN_INTERVALS.find((item) => item.hours === hours) || SCAN_INTERVALS[2]
-    const activeTargets = monitoredTargets
-
-    try {
-      await Promise.all(
-        activeTargets.map((target) => {
-          const config = getConfig(target)
-
-          return updateCompanySourceTarget(companyId, target.id, {
-            config: {
-              ...config,
-              scanIntervalHours: interval.hours,
-              scanIntervalMinutes: interval.minutes,
-              autoScanEveryMinutes: interval.minutes
-            }
-          })
-        })
-      )
-
-      await reloadTargets()
-    } finally {
-      setIsSavingInterval(false)
-    }
-  }
-
-  async function approve(target: SourceTarget) {
+  async function patchTarget(target: SourceTarget, patch: Partial<SourceTarget>) {
     setBusyId(target.id)
-
-    const interval = SCAN_INTERVALS.find((item) => item.hours === scanIntervalHours) || SCAN_INTERVALS[2]
-    const config = getConfig(target)
+    setMessage(null)
 
     try {
-      setTargets((current) =>
-        current.map((item) =>
+      const updated: any = await updateCompanySourceTarget(companyId, target.id, {
+        isActive: patch.isActive,
+        syncMentionsEnabled: patch.syncMentionsEnabled,
+        syncReviewsEnabled: false,
+        syncRatingsEnabled: false,
+        config: {
+          ...(target.config || {}),
+          ...(patch.config || {}),
+          scanIntervalMinutes: intervalMinutes,
+          scanIntervalHours: Math.round(intervalMinutes / 60)
+        }
+      })
+
+      setTargets((items) =>
+        items.map((item) =>
           item.id === target.id
             ? {
                 ...item,
-                isActive: true,
-                syncMentionsEnabled: true,
-                syncReviewsEnabled: false,
-                syncRatingsEnabled: false,
-                status: 'MONITORED',
-                config: {
-                  ...config,
-                  origin: 'approved',
-                  status: 'MONITORED',
-                  approvedAt: new Date().toISOString(),
-                  excluded: false,
-                  scanIntervalHours: interval.hours,
-                  scanIntervalMinutes: interval.minutes,
-                  autoScanEveryMinutes: interval.minutes
-                }
+                ...updated,
+                isActive: patch.isActive ?? updated?.isActive ?? item.isActive,
+                syncMentionsEnabled: patch.syncMentionsEnabled ?? updated?.syncMentionsEnabled ?? item.syncMentionsEnabled
               }
             : item
         )
       )
-
-      await updateCompanySourceTarget(companyId, target.id, {
-        isActive: true,
-        syncMentionsEnabled: true,
-        syncReviewsEnabled: false,
-        syncRatingsEnabled: false,
-        config: {
-          ...config,
-          origin: 'approved',
-          status: 'MONITORED',
-          approvedAt: new Date().toISOString(),
-          excluded: false,
-          scanIntervalHours: interval.hours,
-          scanIntervalMinutes: interval.minutes,
-          autoScanEveryMinutes: interval.minutes
-        }
-      })
-
-      await reloadTargets()
+      router.refresh()
+    } catch {
+      setMessage('Не удалось обновить источник.')
     } finally {
       setBusyId(null)
     }
   }
 
-  async function disable(target: SourceTarget) {
-    setBusyId(target.id)
+  async function removeTarget(target: SourceTarget) {
+    if (!confirm('Удалить источник из мониторинга?')) return
 
-    const config = getConfig(target)
+    setBusyId(target.id)
+    setMessage(null)
 
     try {
-      setTargets((current) =>
-        current.map((item) =>
-          item.id === target.id
-            ? {
-                ...item,
-                isActive: false,
-                syncMentionsEnabled: false,
-                status: 'NEEDS_REVIEW',
-                config: {
-                  ...config,
-                  status: 'NEEDS_REVIEW',
-                  disabledAt: new Date().toISOString()
-                }
-              }
-            : item
-        )
-      )
-
-      await updateCompanySourceTarget(companyId, target.id, {
-        isActive: false,
-        syncMentionsEnabled: false,
-        syncReviewsEnabled: false,
-        syncRatingsEnabled: false,
-        config: {
-          ...config,
-          status: 'NEEDS_REVIEW',
-          disabledAt: new Date().toISOString()
-        }
-      })
-
-      await reloadTargets()
-    } finally {
-      setBusyId(null)
-    }
-  }
-
-  async function exclude(target: SourceTarget) {
-    setBusyId(target.id)
-
-    const config = getConfig(target)
-
-    try {
-      setTargets((current) => current.filter((item) => item.id !== target.id))
-
-      await updateCompanySourceTarget(companyId, target.id, {
-        isActive: false,
-        syncMentionsEnabled: false,
-        syncReviewsEnabled: false,
-        syncRatingsEnabled: false,
-        config: {
-          ...config,
-          status: 'EXCLUDED',
-          excluded: true,
-          excludedAt: new Date().toISOString()
-        }
-      })
-
-      await reloadTargets()
-    } finally {
-      setBusyId(null)
-    }
-  }
-
-  async function deleteTarget(target: SourceTarget) {
-    setBusyId(target.id)
-
-    try {
-      setTargets((current) => current.filter((item) => item.id !== target.id))
       await deleteCompanySourceTarget(companyId, target.id)
-      await reloadTargets()
+      setTargets((items) => items.filter((item) => item.id !== target.id))
+      router.refresh()
+    } catch {
+      setMessage('Не удалось удалить источник.')
     } finally {
       setBusyId(null)
     }
   }
+
+  const lastScanLabel = 'после последнего запуска'
+  const currentInterval = SCAN_INTERVALS.find((item) => item.minutes === intervalMinutes) || SCAN_INTERVALS[2]
 
   return (
     <div className="space-y-5">
-      <Card className="overflow-hidden p-0">
-        <div className="border-b border-white/10 bg-white/[0.025] p-5">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div className="max-w-2xl">
-              <div className="text-xl font-semibold text-brand">Мониторинг сети</div>
-              <div className="mt-2 text-sm leading-6 text-muted">
-                Система ищет внешние источники: сайты, статьи, каталоги, RSS и найденные страницы.
-                Яндекс Карты и 2GIS остаются отдельными источниками отзывов.
-              </div>
-
-              {hiddenWeakCount > 0 ? (
-                <div className="mt-3 text-xs text-muted">Низкая релевантность помечается внутри карточек, но источники больше не скрываются</div>
-              ) : null}
+      <Card className="overflow-hidden border-cyan-400/15 bg-[radial-gradient(circle_at_0%_0%,rgba(34,211,238,0.13),transparent_34%),radial-gradient(circle_at_100%_0%,rgba(168,85,247,0.12),transparent_28%),rgba(15,23,42,0.72)] p-5 shadow-[0_0_42px_rgba(34,211,238,0.08)]">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <div className="text-xl font-semibold text-white">WEB-мониторинг</div>
+            <div className="mt-2 max-w-2xl text-sm leading-6 text-muted">
+              Система ищет внешние площадки, каталоги, статьи и страницы. Яндекс Карты и 2GIS остаются отдельными источниками отзывов.
             </div>
+          </div>
 
-            <div className="grid w-full gap-3 lg:w-[360px]">
-              <div>
-                <label className="text-xs font-semibold uppercase tracking-[0.16em] text-muted">
-                  Интервал автосканирования
-                </label>
+          <button
+            type="button"
+            onClick={handleStartSync}
+            disabled={syncing}
+            className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl border border-cyan-300/30 bg-cyan-400/10 px-5 text-sm font-semibold text-cyan-100 shadow-[0_0_24px_rgba(34,211,238,0.12)] transition hover:bg-cyan-400/20 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {syncing ? <Spinner /> : '✧'}
+            {syncing ? 'Сканируем…' : 'Запустить сканирование'}
+          </button>
+        </div>
 
-                <select
-                  value={scanIntervalHours}
-                  disabled={isSavingInterval || monitoredTargets.length === 0}
-                  onChange={(event) => saveGlobalInterval(Number(event.target.value))}
-                  className="mt-2 w-full rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm font-semibold text-brand outline-none transition hover:border-white/20 focus:border-cyan-300/50 disabled:cursor-not-allowed disabled:opacity-60"
+        <div className="mt-5 grid gap-3 md:grid-cols-4">
+          <div className="rounded-3xl border border-white/10 bg-black/15 p-4">
+            <div className="text-xs text-muted">Интервал</div>
+            <select
+              value={intervalMinutes}
+              onChange={(event) => setIntervalMinutes(Number(event.target.value))}
+              className="mt-2 h-11 w-full rounded-2xl border border-white/10 bg-white/[0.04] px-3 text-sm font-semibold text-white outline-none"
+            >
+              {SCAN_INTERVALS.map((item) => (
+                <option key={item.minutes} value={item.minutes}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="rounded-3xl border border-white/10 bg-black/15 p-4">
+            <div className="text-xs text-muted">Источников</div>
+            <div className="mt-2 text-3xl font-semibold text-cyan-100">{activeTargets.length}</div>
+            <div className="mt-1 text-xs text-emerald-200">мониторится</div>
+          </div>
+
+          <div className="rounded-3xl border border-white/10 bg-black/15 p-4">
+            <div className="text-xs text-muted">Найдено для проверки</div>
+            <div className="mt-2 text-3xl font-semibold text-white">{effectiveDiscovered.length}</div>
+            <div className="mt-1 text-xs text-muted">{lastScanLabel}</div>
+          </div>
+
+          <div className="rounded-3xl border border-white/10 bg-black/15 p-4">
+            <div className="text-xs text-muted">Статус</div>
+            <div className="mt-2 inline-flex rounded-full border border-emerald-400/25 bg-emerald-500/10 px-3 py-1 text-sm font-semibold text-emerald-100">
+              Активно
+            </div>
+            <div className="mt-2 text-xs text-muted">Интервал: {currentInterval.label}</div>
+          </div>
+        </div>
+
+        {message ? (
+          <div className="mt-4 rounded-2xl border border-cyan-400/20 bg-cyan-500/10 p-3 text-sm text-cyan-100">
+            {message}
+          </div>
+        ) : null}
+      </Card>
+
+      <Card className="border-white/10 bg-white/[0.025] p-5">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <div className="text-xl font-semibold text-white">Активные источники мониторинга</div>
+            <div className="mt-1 text-sm text-muted">Площадки, которые регулярно проверяются системой.</div>
+          </div>
+
+          <div className="hidden rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-sm text-muted sm:block">
+            {effectiveGroupedActive.length} активных
+          </div>
+        </div>
+
+        {visibleActive.length ? (
+          <div className="space-y-3">
+            {visibleActive.map((group: any) => {
+              const first = group.items[0]
+              const busy = group.items.some((item: any) => item.id === busyId)
+
+              return (
+                <div
+                  key={group.host}
+                  className="rounded-[26px] border border-cyan-300/15 bg-[radial-gradient(circle_at_0%_0%,rgba(34,211,238,0.11),transparent_34%),linear-gradient(135deg,rgba(255,255,255,0.055),rgba(255,255,255,0.018))] p-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_0_28px_rgba(34,211,238,0.05)] transition duration-300 hover:-translate-y-0.5 hover:border-cyan-300/30 hover:shadow-[0_0_34px_rgba(34,211,238,0.10)]"
                 >
-                  {SCAN_INTERVALS.map((item) => (
-                    <option key={item.hours} value={item.hours}>
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
+                  <div className="flex items-start gap-4">
+                    <SourceIcon host={group.host} />
 
-                <div className="mt-2 text-xs leading-5 text-muted">
-                  Применяется ко всем web-источникам на мониторинге.
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="truncate text-base font-semibold text-white">{group.host}</div>
+                        <span className="rounded-full border border-emerald-400/25 bg-emerald-500/10 px-2 py-0.5 text-xs font-semibold text-emerald-100">
+                          Мониторится
+                        </span>
+                      </div>
+
+                      <div className="mt-1 text-sm text-muted">
+                        {group.pagesCount} страниц · {group.mentionsCount} упоминаний · последняя активность: {formatDate(group.lastMentionAt)}
+                      </div>
+
+                      <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_112px_112px]">
+                        {first.externalUrl ? (
+                          <a
+                            href={normalizeUrl(first.externalUrl) || '#'}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex h-10 items-center justify-center rounded-2xl border border-cyan-400/20 bg-cyan-400/10 px-3 text-sm font-semibold text-cyan-100 transition hover:border-cyan-300/40 hover:bg-cyan-400/15 hover:shadow-[0_0_18px_rgba(34,211,238,0.12)]"
+                          >
+                            Открыть источник ↗
+                          </a>
+                        ) : null}
+
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => patchTarget(first, { isActive: false, syncMentionsEnabled: false })}
+                          className="inline-flex h-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.03] px-3 text-sm font-semibold text-muted transition hover:bg-white/[0.06] disabled:opacity-60"
+                        >
+                          Отключить
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => removeTarget(first)}
+                          className="inline-flex h-10 items-center justify-center rounded-2xl border border-red-400/20 bg-red-500/10 px-3 text-sm font-semibold text-red-100 transition hover:bg-red-500/15 disabled:opacity-60"
+                        >
+                          Удалить
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              </div>
+              )
+            })}
 
+            {effectiveGroupedActive.length > 5 ? (
               <button
                 type="button"
-                disabled={isScanning}
-                onClick={runScan}
-                className="rounded-2xl bg-cyan-300 px-2.5 py-2.5 text-xs font-bold text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-70"
+                onClick={() => setShowAllActive((value) => !value)}
+                className="w-full rounded-2xl border border-white/10 bg-white/[0.025] px-4 py-3 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-400/10"
               >
-                {isScanning ? (
-                  <span className="inline-flex items-center justify-center gap-2">
-                    <Spinner dark />
-                    Сканируем…
-                  </span>
-                ) : (
-                  'Запустить сканирование'
-                )}
+                {showAllActive ? 'Свернуть' : `Показать все источники (${effectiveGroupedActive.length})`}
               </button>
-            </div>
+            ) : null}
           </div>
+        ) : (
+          <div className="rounded-3xl border border-dashed border-white/10 bg-black/10 p-8 text-center">
+            <div className="text-base font-semibold text-white">Пока нет активных WEB-источников</div>
+            <div className="mt-2 text-sm text-muted">Запустите сканирование и добавьте найденные площадки в мониторинг.</div>
+          </div>
+        )}
+      </Card>
+
+      <Card className="border-purple-400/15 bg-[radial-gradient(circle_at_0%_0%,rgba(168,85,247,0.16),transparent_32%),rgba(15,23,42,0.66)] p-5">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <div className="text-xl font-semibold text-white">Новые найденные площадки</div>
+            <div className="mt-1 text-sm text-muted">Проверьте кандидатов и добавьте нужные в регулярный мониторинг.</div>
+          </div>
+
+          <div className="hidden text-sm text-muted sm:block">{effectiveDiscovered.length} на проверке</div>
         </div>
 
-        <div className="p-5">
-          <div
-            className={[
-              'rounded-3xl border p-4',
-              scanState === 'running'
-                ? 'border-cyan-300/30 bg-cyan-300/10'
-                : scanState === 'done'
-                  ? 'border-emerald-300/25 bg-emerald-500/10'
-                  : scanState === 'error'
-                    ? 'border-red-300/25 bg-red-500/10'
-                    : 'border-white/10 bg-white/[0.025]'
-            ].join(' ')}
+        {visibleDiscovered.length ? (
+          <>
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              {visibleDiscovered.map((target: SourceTarget) => {
+                const host = hostOf(target.externalUrl)
+                const label = relevanceLabel(target)
+                const busy = busyId === target.id
+
+                return (
+                  <div
+                    key={target.id}
+                    className="flex min-h-[232px] flex-col rounded-[26px] border border-purple-300/20 bg-[linear-gradient(145deg,rgba(168,85,247,0.13),rgba(15,23,42,0.66))] p-3.5 shadow-[0_0_30px_rgba(168,85,247,0.08)] transition duration-300 hover:-translate-y-0.5 hover:border-purple-300/35 hover:shadow-[0_0_36px_rgba(168,85,247,0.13)]"
+                  >
+                    <SourceIcon host={host} />
+
+                    <div className="mt-3 line-clamp-2 min-h-[44px] text-[15px] font-semibold leading-[22px] text-white">
+                      {sourceTitle(target)}
+                    </div>
+
+                    <div className="mt-1 text-sm text-muted">{host}</div>
+
+                    <div className={`mt-3 inline-flex w-fit rounded-full border px-2.5 py-1 text-[11px] font-semibold ${relevanceClass(label)}`}>
+                      {label} релевантность
+                    </div>
+
+                    <div className="mt-2 text-xs text-muted">
+                      Найдено страниц: 1
+                    </div>
+
+                    <div className="mt-auto grid grid-cols-3 gap-2 pt-4">
+                      {target.externalUrl ? (
+                        <a
+                          href={normalizeUrl(target.externalUrl) || '#'}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex h-10 items-center justify-center rounded-2xl border border-cyan-400/20 bg-cyan-400/10 px-3 text-sm font-semibold text-cyan-100 transition hover:border-cyan-300/40 hover:bg-cyan-400/15 hover:shadow-[0_0_18px_rgba(34,211,238,0.12)]"
+                        >
+                          Открыть ↗
+                        </a>
+                      ) : (
+                        <span className="inline-flex h-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.02] px-3 text-sm font-semibold text-muted">
+                          Нет URL
+                        </span>
+                      )}
+
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => patchTarget(target, { isActive: true, syncMentionsEnabled: true })}
+                        className="inline-flex h-10 items-center justify-center rounded-2xl border border-cyan-300/35 bg-cyan-300/90 px-3 text-sm font-bold text-slate-950 transition hover:bg-cyan-200 hover:shadow-[0_0_22px_rgba(103,232,249,0.24)] disabled:opacity-60"
+                      >
+                        {busy ? <Spinner /> : 'Добавить'}
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() =>
+                          patchTarget(target, {
+                            isActive: false,
+                            syncMentionsEnabled: false,
+                            config: {
+                              ...(target.config || {}),
+                              status: 'EXCLUDED',
+                              excluded: true
+                            }
+                          })
+                        }
+                        className="inline-flex h-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.025] px-3 text-sm font-semibold text-muted transition hover:bg-white/[0.06] disabled:opacity-60"
+                      >
+                        Скрыть
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {effectiveDiscovered.length > 4 ? (
+              <button
+                type="button"
+                onClick={() => setShowAllDiscovered((value) => !value)}
+                className="mt-4 w-full rounded-2xl border border-purple-300/20 bg-purple-500/10 px-4 py-3 text-sm font-semibold text-purple-100 transition hover:bg-purple-500/15"
+              >
+                {showAllDiscovered ? 'Свернуть' : `Показать все найденные (${effectiveDiscovered.length})`}
+              </button>
+            ) : null}
+          </>
+        ) : (
+          <div className="rounded-3xl border border-dashed border-white/10 bg-black/10 p-8 text-center">
+            <div className="text-base font-semibold text-white">Нет новых площадок</div>
+            <div className="mt-2 text-sm text-muted">После следующего сканирования здесь появятся кандидаты для подключения.</div>
+          </div>
+        )}
+      </Card>
+
+      <Card className="border-cyan-400/10 bg-[radial-gradient(circle_at_100%_0%,rgba(34,211,238,0.12),transparent_32%),rgba(15,23,42,0.62)] p-5">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <div className="text-xl font-semibold text-white">Последние WEB-сигналы</div>
+            <div className="mt-1 text-sm text-muted">Короткая сводка последних упоминаний. Полная лента остаётся в Inbox.</div>
+          </div>
+
+          <a
+            href={`/companies/${companyId}/inbox?platform=WEB`}
+            className="hidden rounded-2xl border border-cyan-400/25 bg-cyan-400/10 px-4 py-2 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-400/20 sm:inline-flex"
           >
-            <div className="flex items-start gap-3">
-              <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04]">
-                {scanState === 'running' ? <Spinner /> : scanState === 'done' ? '✓' : scanState === 'error' ? '!' : '•'}
-              </div>
+            Открыть Inbox →
+          </a>
+        </div>
 
-              <div>
-                <div className="font-semibold text-brand">
-                  {scanState === 'running'
-                    ? 'Сканирование выполняется'
-                    : scanState === 'done'
-                      ? 'Сканирование завершено'
-                      : scanState === 'error'
-                        ? 'Ошибка сканирования'
-                        : 'Готово к сканированию'}
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          {signals.length ? (
+            signals.map((signal) => {
+              const host = hostOf(signal.url || signal.sourceUrl)
+              const title = signal.title || signal.content || signal.url || 'WEB-сигнал'
+
+              return (
+                <div key={signal.id} className="rounded-3xl border border-white/10 bg-white/[0.025] p-4">
+                  <div className="flex items-center gap-3">
+                    <SourceIcon host={host} />
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-semibold text-white">{host}</div>
+                      <div className="text-xs text-muted">{formatDate(signal.publishedAt || signal.createdAt)}</div>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 line-clamp-2 text-sm leading-6 text-brand">{title}</div>
                 </div>
-                <div className="mt-1 text-sm leading-6 text-muted">{scanMessage}</div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="grid gap-3 px-5 pb-5 sm:grid-cols-3">
-          <div className="rounded-2xl border border-white/10 bg-white/[0.025] p-4">
-            <div className="text-2xl font-semibold text-brand">{monitoredTargets.length}</div>
-            <div className="mt-1 text-sm text-muted">источников на мониторинге</div>
-          </div>
-
-          <div className="rounded-2xl border border-white/10 bg-white/[0.025] p-4">
-            <div className="text-2xl font-semibold text-brand">{candidateTargets.length}</div>
-            <div className="mt-1 text-sm text-muted">найдено для проверки</div>
-          </div>
-
-          <div className="rounded-2xl border border-white/10 bg-white/[0.025] p-4">
-            <div className="text-2xl font-semibold text-brand">{scanIntervalHours} ч</div>
-            <div className="mt-1 text-sm text-muted">текущий интервал</div>
-          </div>
-        </div>
-      </Card>
-
-      <Card className="p-5">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <div className="text-lg font-semibold text-brand">Источники на мониторинге</div>
-            <div className="mt-1 text-sm leading-6 text-muted">
-              Эти площадки регулярно проверяются системой.
-            </div>
-          </div>
-
-          <div className="text-sm text-muted">{monitoredTargets.length} активных</div>
-        </div>
-
-        <div className="mt-5 space-y-3">
-          {monitoredTargets.length > 0 ? (
-            monitoredTargets.map((target) => (
-              <MonitoredSourceCard
-                key={target.id}
-                target={target}
-                busyId={busyId}
-                onDisable={disable}
-                onDelete={deleteTarget}
-              />
-            ))
+              )
+            })
           ) : (
-            <EmptyState
-              title="Пока нет источников на мониторинге"
-              description="Запустите сканирование или включите найденный источник вручную."
-            />
+            <div className="rounded-3xl border border-dashed border-white/10 bg-black/10 p-6 text-sm text-muted md:col-span-3">
+              Пока нет последних WEB-сигналов. После сканирования они появятся в Inbox.
+            </div>
           )}
         </div>
+
+        <a
+          href={`/companies/${companyId}/inbox?platform=WEB`}
+          className="mt-4 inline-flex w-full items-center justify-center rounded-2xl border border-cyan-400/25 bg-cyan-400/10 px-4 py-3 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-400/20 sm:hidden"
+        >
+          Открыть WEB в Inbox →
+        </a>
       </Card>
 
-      <Card className="p-5">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <div className="text-lg font-semibold text-brand">Найденные источники</div>
-            <div className="mt-1 text-sm leading-6 text-muted">
-              Проверьте найденные страницы и добавьте нужные в регулярный мониторинг.
-            </div>
+      <Card className="border-cyan-400/10 bg-white/[0.025] p-5">
+        <div className="text-lg font-semibold text-white">Как работает мониторинг?</div>
+
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          <div className="rounded-3xl border border-white/10 bg-white/[0.025] p-4">
+            <div className="text-sm font-semibold text-cyan-100">1. Находим страницы</div>
+            <div className="mt-2 text-sm leading-6 text-muted">Система ищет упоминания компании во внешней сети и каталогах.</div>
           </div>
 
-          <div className="text-sm text-muted">{candidateTargets.length} на проверке</div>
-        </div>
+          <div className="rounded-3xl border border-white/10 bg-white/[0.025] p-4">
+            <div className="text-sm font-semibold text-cyan-100">2. Вы выбираете источники</div>
+            <div className="mt-2 text-sm leading-6 text-muted">В мониторинг добавляются только площадки, которые важны для бизнеса.</div>
+          </div>
 
-        <div className="mt-5 space-y-3">
-          {candidateTargets.length > 0 ? (
-            candidateTargets.map((target) => (
-              <CandidateSourceCard
-                key={target.id}
-                target={target}
-                busyId={busyId}
-                onApprove={approve}
-                onExclude={exclude}
-                onDelete={deleteTarget}
-              />
-            ))
-          ) : (
-            <EmptyState
-              title="Нет новых источников"
-              description="После следующего сканирования здесь появятся найденные площадки для проверки."
-            />
-          )}
+          <div className="rounded-3xl border border-white/10 bg-white/[0.025] p-4">
+            <div className="text-sm font-semibold text-cyan-100">3. Получаете сигналы в Inbox</div>
+            <div className="mt-2 text-sm leading-6 text-muted">Все новые упоминания и отзывы попадают в единый Inbox.</div>
+          </div>
         </div>
       </Card>
     </div>

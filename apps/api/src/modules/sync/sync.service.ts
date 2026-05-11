@@ -84,74 +84,74 @@ export class SyncService {
 
     const requestedAt = new Date().toISOString()
 
-    const [mentionsJob, reviewsJob, ratingJob] = await Promise.all([
-      this.mentionsSyncQueue.add(
-        'mentions.sync',
-        {
-          companyId,
-          triggeredByUserId: userId,
-          requestedAt
-        },
-        SYNC_JOB_OPTIONS
-      ),
-      this.reviewsSyncQueue.add(
-        'reviews.sync',
-        {
-          companyId,
-          triggeredByUserId: userId,
-          requestedAt
-        },
-        SYNC_JOB_OPTIONS
-      ),
-      this.ratingRefreshQueue.add(
-        'rating.refresh',
-        {
-          companyId,
-          triggeredByUserId: userId,
-          requestedAt
-        },
-        SYNC_JOB_OPTIONS
-      )
-    ])
+    const reviewsJob = await this.reviewsSyncQueue.add(
+      'reviews.sync',
+      {
+        companyId,
+        triggeredByUserId: userId,
+        requestedAt,
+        scope: 'REVIEWS'
+      },
+      SYNC_JOB_OPTIONS
+    )
 
-    const logs = await Promise.all([
-      this.prisma.jobLog.create({
-        data: {
-          companyId,
-          triggeredByUserId: userId,
-          queueName: 'mentions_sync',
-          jobName: 'mentions.sync',
-          jobStatus: 'PENDING',
-          result: {
-            bullJobId: String(mentionsJob.id)
-          }
+    const log = await this.prisma.jobLog.create({
+      data: {
+        companyId,
+        triggeredByUserId: userId,
+        queueName: 'reviews_sync',
+        jobName: 'reviews.sync',
+        jobStatus: 'PENDING',
+        result: {
+          bullJobId: String(reviewsJob.id),
+          scope: 'REVIEWS'
         }
-      }),
-      this.prisma.jobLog.create({
-        data: {
-          companyId,
-          triggeredByUserId: userId,
+      }
+    })
+
+    return {
+      queued: true,
+      jobs: [
+        {
           queueName: 'reviews_sync',
           jobName: 'reviews.sync',
-          jobStatus: 'PENDING',
-          result: {
-            bullJobId: String(reviewsJob.id)
-          }
+          bullJobId: String(reviewsJob.id)
         }
-      }),
-      this.prisma.jobLog.create({
-        data: {
-          companyId,
-          triggeredByUserId: userId,
-          queueName: 'rating_refresh',
-          jobName: 'rating.refresh',
-          jobStatus: 'PENDING',
-          result: {
-            bullJobId: String(ratingJob.id)
-          }
+      ],
+      logs: [log]
+    }
+  }
+
+  async startWebSync(userId: string, companyId: string) {
+    await this.ensureWebBootstrapTarget(companyId)
+    await this.assertCompanyAccess(userId, companyId)
+
+    const requestedAt = new Date().toISOString()
+
+    const mentionsJob = await this.mentionsSyncQueue.add(
+      'mentions.sync',
+      {
+        companyId,
+        triggeredByUserId: userId,
+        requestedAt,
+        scope: 'WEB'
+      },
+      SYNC_JOB_OPTIONS
+    )
+
+    const log = await this.prisma.jobLog.create({
+      data: {
+        companyId,
+        triggeredByUserId: userId,
+        queueName: 'mentions_sync',
+        jobName: 'mentions.sync',
+        jobStatus: 'PENDING',
+        result: {
+          bullJobId: String(mentionsJob.id),
+          scope: 'WEB'
         }
-      })
-    ])
+      }
+    })
 
     return {
       queued: true,
@@ -160,44 +160,29 @@ export class SyncService {
           queueName: 'mentions_sync',
           jobName: 'mentions.sync',
           bullJobId: String(mentionsJob.id)
-        },
-        {
-          queueName: 'reviews_sync',
-          jobName: 'reviews.sync',
-          bullJobId: String(reviewsJob.id)
-        },
-        {
-          queueName: 'rating_refresh',
-          jobName: 'rating.refresh',
-          bullJobId: String(ratingJob.id)
         }
       ],
-      logs
+      logs: [log]
     }
   }
 
-
-  private getBullJobIdFromLog(log: { result?: unknown } | null) {
+  private getBullJobIdFromLog(log: any) {
     const result = log?.result as Record<string, unknown> | null
     const bullJobId = result?.bullJobId
+
     return bullJobId === undefined || bullJobId === null ? null : String(bullJobId)
   }
 
-  private async getQueueJobState(queue: Queue, bullJobId: string | null) {
-    if (!bullJobId) return null
+  private async getQueueJobState(queue: Queue, jobId?: string | null) {
+    if (!jobId) return null
 
     try {
-      const job = await queue.getJob(bullJobId)
+      const job = await queue.getJob(jobId)
       if (!job) return null
 
       return {
         id: String(job.id),
-        state: await job.getState(),
-        attemptsMade: job.attemptsMade,
-        failedReason: job.failedReason || null,
-        timestamp: job.timestamp,
-        processedOn: job.processedOn || null,
-        finishedOn: job.finishedOn || null
+        state: await job.getState()
       }
     } catch {
       return null
@@ -319,4 +304,86 @@ export class SyncService {
       logs: [log]
     }
   }
+  private async ensureWebBootstrapTarget(companyId: string) {
+    const company = await this.prisma.company.findUnique({
+      where: { id: companyId },
+      select: {
+        id: true,
+        workspaceId: true,
+        name: true,
+        normalizedName: true,
+        city: true,
+        normalizedCity: true,
+        website: true,
+        normalizedWebsite: true,
+      },
+    })
+
+    if (!company) {
+      throw new Error(`Company not found: ${companyId}`)
+    }
+
+    let webSource = await this.prisma.source.findFirst({
+      where: {
+        workspaceId: company.workspaceId,
+        platform: 'WEB',
+        type: 'WEB_MENTION_FEED',
+      },
+    })
+
+    if (!webSource) {
+      webSource = await this.prisma.source.create({
+        data: {
+          workspaceId: company.workspaceId,
+          name: 'WEB monitoring',
+          platform: 'WEB',
+          type: 'WEB_MENTION_FEED',
+          baseUrl: null,
+          isEnabled: true,
+          config: {
+            origin: 'auto-bootstrap',
+          },
+        },
+      })
+    }
+
+    const externalPlaceId = `web-bootstrap:${company.id}`
+
+    const existingTarget = await this.prisma.companySourceTarget.findFirst({
+      where: {
+        companyId: company.id,
+        sourceId: webSource.id,
+        externalPlaceId,
+      },
+    })
+
+    if (existingTarget) return existingTarget
+
+    return this.prisma.companySourceTarget.create({
+      data: {
+        companyId: company.id,
+        sourceId: webSource.id,
+        externalPlaceId,
+        externalUrl: company.website || null,
+        displayName: `${company.name} · WEB discovery`,
+        isActive: true,
+        syncReviewsEnabled: false,
+        syncRatingsEnabled: false,
+        syncMentionsEnabled: true,
+        config: {
+          origin: 'auto-bootstrap',
+          mode: 'discovery',
+          querySeeds: [
+            company.name,
+            company.city ? `${company.name} ${company.city}` : company.name,
+            company.normalizedName,
+            company.normalizedCity ? `${company.normalizedName} ${company.normalizedCity}` : company.normalizedName,
+          ].filter(Boolean),
+          scanIntervalHours: 24,
+        },
+      },
+    })
+  }
+
+
 }

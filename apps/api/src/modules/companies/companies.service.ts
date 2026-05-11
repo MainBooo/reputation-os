@@ -261,6 +261,37 @@ export class CompaniesService {
     }
   }
 
+  private async hasEnabledReviewTargets(companyId: string) {
+    const count = await this.prisma.companySourceTarget.count({
+      where: {
+        companyId,
+        isActive: true,
+        syncReviewsEnabled: true,
+        AND: [
+          { externalUrl: { not: null } },
+          { externalUrl: { not: '' } }
+        ],
+        source: {
+          platform: { in: ['YANDEX', 'TWOGIS'] },
+          isEnabled: true
+        }
+      }
+    })
+
+    return count > 0
+  }
+
+  private async refreshReviewsRepeat(companyId: string) {
+    if (await this.hasEnabledReviewTargets(companyId)) {
+      await this.ensureYandexReviewsRepeat(companyId)
+      this.logger.log(`[ReviewsCron] repeat reviews.sync enabled companyId=${companyId}`)
+      return
+    }
+
+    await this.removeYandexReviewsRepeat(companyId)
+    this.logger.log(`[ReviewsCron] repeat reviews.sync disabled companyId=${companyId}`)
+  }
+
   private getWebMentionsRepeatJobId(companyId: string) {
     return `web-mentions-sync:${companyId}`
   }
@@ -434,7 +465,7 @@ export class CompaniesService {
   }
 
   async findAll(userId: string) {
-    return this.prisma.company.findMany({
+    const companies = await this.prisma.company.findMany({
       where: { workspace: { members: { some: { userId } } } },
       include: {
         aliases: true,
@@ -443,6 +474,18 @@ export class CompaniesService {
       },
       orderBy: { createdAt: 'desc' }
     })
+
+    const logoRows = await this.prisma.$queryRawUnsafe<Array<{ id: string; logoUrl: string | null }>>(
+      'select "id", "logoUrl" from "Company" where "id" = any($1)',
+      companies.map((company) => company.id)
+    )
+
+    const logoById = new Map(logoRows.map((row) => [row.id, row.logoUrl]))
+
+    return companies.map((company) => ({
+      ...company,
+      logoUrl: logoById.get(company.id) || null
+    }))
   }
 
   async create(userId: string, dto: CreateCompanyDto) {
@@ -544,7 +587,16 @@ export class CompaniesService {
     }
 
     await this.assertWorkspaceAccess(userId, company.workspaceId)
-    return company
+
+    const logoRows = await this.prisma.$queryRawUnsafe<Array<{ logoUrl: string | null }>>(
+      'select "logoUrl" from "Company" where "id" = $1 limit 1',
+      id
+    )
+
+    return {
+      ...company,
+      logoUrl: logoRows[0]?.logoUrl || null
+    }
   }
 
   async update(userId: string, id: string, dto: UpdateCompanyDto) {
@@ -928,6 +980,147 @@ export class CompaniesService {
       }
     })
   }
+
+  private webSourceHost(value?: string | null) {
+    if (!value) return null
+
+    try {
+      const parsed = new URL(value.startsWith('http') ? value : `https://${value}`)
+      return parsed.hostname.toLowerCase().replace(/^www\./, '')
+    } catch {
+      return null
+    }
+  }
+
+  private isMapOrReviewPlatformUrl(value?: string | null) {
+    if (!value) return false
+
+    try {
+      const parsed = new URL(value.startsWith('http') ? value : `https://${value}`)
+      const host = parsed.hostname.toLowerCase().replace(/^www\./, '')
+      const path = parsed.pathname.toLowerCase()
+
+      return (
+        host === '2gis.ru' ||
+        host.endsWith('.2gis.ru') ||
+        ((host === 'yandex.ru' || host.endsWith('.yandex.ru') || host === 'yandex.com' || host.endsWith('.yandex.com')) &&
+          path.startsWith('/maps'))
+      )
+    } catch {
+      const normalized = value.toLowerCase()
+      return normalized.includes('2gis.ru') || normalized.includes('yandex.ru/maps') || normalized.includes('yandex.com/maps')
+    }
+  }
+
+  async getWebSourcesOverview(userId: string, companyId: string) {
+    const company = await this.prisma.company.findUnique({ where: { id: companyId } })
+
+    if (!company) {
+      throw new NotFoundException('Company not found')
+    }
+
+    await this.assertWorkspaceAccess(userId, company.workspaceId)
+
+    const targets = await this.getSources(userId, companyId)
+    const webTargets = targets.filter((target: any) => {
+      if (target.source?.platform !== 'WEB') return false
+      if (this.isMapOrReviewPlatformUrl(target.externalUrl)) return false
+      return true
+    })
+
+    const activeTargets = webTargets.filter((target: any) => {
+      if (!target.externalUrl) return false
+      return target.isActive !== false && target.syncMentionsEnabled !== false
+    })
+
+    const discoveredTargets = webTargets.filter((target: any) => {
+      const config = target.config && typeof target.config === 'object' && !Array.isArray(target.config)
+        ? target.config as Record<string, any>
+        : {}
+
+      if (target.isActive !== false && target.syncMentionsEnabled !== false) return false
+      if (config.status === 'EXCLUDED' || config.excluded === true) return false
+
+      return config.origin === 'auto' || config.origin === 'auto-bootstrap' || config.origin === 'auto-bootstrap-backfill' || target.isActive === false
+    })
+
+    const activeByHost = new Map<string, any[]>()
+
+    for (const target of activeTargets) {
+      const host = this.webSourceHost(target.externalUrl) || 'unknown'
+      const items = activeByHost.get(host) || []
+      items.push(target)
+      activeByHost.set(host, items)
+    }
+
+    const activeGroups = Array.from(activeByHost.entries()).map(([host, items]) => {
+      const mentionsCount = items.reduce((sum, item) => sum + Number(item.mentionsCount || 0), 0)
+      const lastMentionAt = items
+        .map((item) => item.lastMentionAt || item.lastMention?.publishedAt || item.lastMention?.createdAt || null)
+        .filter(Boolean)
+        .sort()
+        .reverse()[0] || null
+
+      const primary = items
+        .slice()
+        .sort((a, b) => Number(b.mentionsCount || 0) - Number(a.mentionsCount || 0))[0]
+
+      return {
+        host,
+        pagesCount: items.length,
+        mentionsCount,
+        lastMentionAt,
+        primary,
+        items
+      }
+    }).sort((a, b) => {
+      const byMentions = Number(b.mentionsCount || 0) - Number(a.mentionsCount || 0)
+      if (byMentions !== 0) return byMentions
+      return String(a.host).localeCompare(String(b.host))
+    })
+
+    const discovered = discoveredTargets
+      .filter((target: any) => Boolean(target.externalUrl))
+      .sort((a: any, b: any) => {
+        const byRelevance = Number(b.relevanceScore || 0) - Number(a.relevanceScore || 0)
+        if (byRelevance !== 0) return byRelevance
+        return String(a.displayName || a.externalUrl || '').localeCompare(String(b.displayName || b.externalUrl || ''))
+      })
+
+    const latestSignals = await this.prisma.mention.findMany({
+      where: {
+        companyId,
+        platform: 'WEB',
+        isRelevant: true
+      },
+      orderBy: { publishedAt: 'desc' },
+      take: 3,
+      select: {
+        id: true,
+        title: true,
+        content: true,
+        url: true,
+        publishedAt: true,
+        createdAt: true,
+        platform: true,
+        type: true
+      }
+    })
+
+    return {
+      summary: {
+        activeGroupsCount: activeGroups.length,
+        activeTargetsCount: activeTargets.length,
+        discoveredCount: discovered.length,
+        latestSignalsCount: latestSignals.length
+      },
+      activeGroups,
+      discovered: discovered.slice(0, 50),
+      latestSignals
+    }
+  }
+
+
   async createSourceTarget(userId: string, companyId: string, dto: CreateCompanySourceTargetDto) {
     const company = await this.prisma.company.findUnique({ where: { id: companyId } })
 
@@ -1038,13 +1231,8 @@ export class CompaniesService {
     })
 
     if ((updatedTarget.source?.platform === 'YANDEX' || updatedTarget.source?.platform === 'TWOGIS') && dto.syncReviewsEnabled !== undefined) {
-      if (dto.syncReviewsEnabled && updatedTarget.isActive && updatedTarget.externalUrl) {
-        await this.ensureYandexReviewsRepeat(companyId)
-        this.logger.log(`[YandexCron] repeat ensured from source target update companyId=${companyId} targetId=${targetId}`)
-      } else {
-        await this.removeYandexReviewsRepeat(companyId)
-        this.logger.log(`[YandexCron] repeat removed from source target update companyId=${companyId} targetId=${targetId}`)
-      }
+      await this.refreshReviewsRepeat(companyId)
+      this.logger.log(`[ReviewsCron] repeat refreshed from source target update companyId=${companyId} targetId=${targetId} platform=${updatedTarget.source?.platform}`)
     }
 
     if (updatedTarget.source?.platform === 'WEB') {

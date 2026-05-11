@@ -6,7 +6,7 @@ import Card from '@/components/ui/Card'
 import {
   deleteCompanySourceTarget,
   getCompanySourceTargets,
-  startCompanySync,
+  startCompanyWebSync,
   updateCompanySourceTarget
 } from '@/lib/api/companies'
 
@@ -126,7 +126,7 @@ export default function WebSourceSetupCard({ companyId }: { companyId: string })
     setMessage(null)
 
     try {
-      await startCompanySync(companyId)
+      await startCompanyWebSync(companyId)
       setMessage('Сканирование запущено. Новые WEB-упоминания появятся после обработки.')
       router.refresh()
     } catch {

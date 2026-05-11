@@ -3,7 +3,7 @@ import PageHeader from '@/components/ui/PageHeader'
 import EmptyState from '@/components/ui/EmptyState'
 import Card from '@/components/ui/Card'
 import CompanyYandexCronToggle from '@/components/companies/CompanyYandexCronToggle'
-import CompanyEditPanel from '@/components/companies/CompanyEditPanel'
+import CompanyEditPopup from '@/components/companies/CompanyEditPopup'
 import CompanySyncStatusCard from '@/components/companies/CompanySyncStatusCard'
 import CompanyManualSyncButton from '@/components/companies/CompanyManualSyncButton'
 import { getCompany, getCompanySyncStatus } from '@/lib/api/companies'
@@ -131,63 +131,65 @@ export default async function CompanyPage({ params }: { params: { id: string } }
   const twoGisSourceUrl = twoGisTarget?.externalUrl || ''
 
   return (
-    <div>
-      <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <PageHeader
-          title={company.name || 'Карточка компании'}
-          subtitle="Обзор компании, источники и действия мониторинга."
-        />
+    <div className="space-y-4 pb-28">
+      <CompanyEditPopup company={company} yandexUrl={primarySourceUrl} twoGisUrl={twoGisSourceUrl} />
 
-        <a
-          href="#company-edit"
-          className="inline-flex h-11 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] px-4 text-sm font-semibold text-brand transition hover:border-cyan-400/30 hover:bg-cyan-400/10"
-        >
-          ✎ Редактировать компанию
-        </a>
-      </div>
+        <Card className="overflow-hidden border-cyan-400/15 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.16),transparent_34%),linear-gradient(135deg,rgba(15,23,42,0.92),rgba(2,6,23,0.96))] p-5 shadow-[0_0_48px_rgba(34,211,238,0.08)]">
+          <div className="flex flex-col gap-5">
+            <div className="flex items-start gap-4">
+                <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-3xl border border-cyan-400/20 bg-cyan-400/10 text-2xl font-semibold text-cyan-100 shadow-[0_0_28px_rgba(34,211,238,0.16)]">
+                  {company.logoUrl ? (
+                    <img src={company.logoUrl} alt={company.name || "Логотип компании"} className="h-full w-full object-cover" />
+                  ) : (
+                    String(company.name || "R").trim().slice(0, 1).toUpperCase()
+                  )}
+                </div>
 
-      <Card className="p-5">
-        <div className="mb-4 flex items-center gap-2">
-          <div className="text-lg font-semibold text-brand">Состояние репутации</div>
-          <div className="rounded-full border border-white/10 px-2 py-0.5 text-xs text-muted">live</div>
-        </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded-full border border-emerald-400/20 bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-200">live мониторинг</span>
+                  <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-xs text-muted">{connectedSources || 0} источника</span>
+                </div>
 
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <div className="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-4">
-            <div className="text-4xl font-semibold text-cyan-200">{mentionsTotal}</div>
-            <div className="mt-1 text-sm text-muted">упоминаний</div>
-          </div>
+                <div className="mt-3 truncate text-2xl font-semibold text-brand">{company.name || 'Карточка компании'}</div>
+                <div className="mt-1 text-sm leading-6 text-muted">Сводка по отзывам, упоминаниям и сигналам, которые требуют внимания.</div>
+              </div>
+            </div>
 
-          <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4">
-            <div className="text-4xl font-semibold text-emerald-200">{getRatingLabel(averageRating)}</div>
-            <div className="mt-1 text-sm text-muted">средний рейтинг</div>
-          </div>
+            <div className="grid grid-cols-3 overflow-hidden rounded-3xl border border-white/10 bg-black/15">
+              <div className="p-4">
+                <div className="text-2xl font-semibold text-cyan-100">{mentionsTotal}</div>
+                <div className="mt-1 text-xs text-muted">упоминаний</div>
+              </div>
+              <div className="border-l border-white/10 p-4">
+                <div className="text-2xl font-semibold text-emerald-100">{getRatingLabel(averageRating)}</div>
+                <div className="mt-1 text-xs text-muted">{ratedCount} с оценкой</div>
+              </div>
+              <div className="border-l border-white/10 p-4">
+                <div className="text-2xl font-semibold text-red-100">{negativeTotal}</div>
+                <div className="mt-1 text-xs text-muted">внимания</div>
+              </div>
+            </div>
 
-          <div className="rounded-2xl border border-blue-400/20 bg-blue-400/10 p-4">
-            <div className="text-4xl font-semibold text-blue-200">{ratedCount}</div>
-            <div className="mt-1 text-sm text-muted">отзывов с оценкой</div>
-          </div>
+            <div className="flex flex-col gap-3 rounded-3xl border border-red-400/15 bg-red-500/[0.06] p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <div className="text-sm font-semibold text-red-100">{recentNegativeTotal} новых негативных сигналов за 7 дней</div>
+                <div className="mt-1 text-xs text-muted">Последний негатив: {formatShortDate(lastNegative?.publishedAt)}</div>
+              </div>
 
-          <div className="rounded-2xl border border-red-400/20 bg-red-400/10 p-4">
-            <div className="text-4xl font-semibold text-red-200">{negativeTotal}</div>
-            <div className="mt-1 text-sm text-muted">требуют внимания</div>
-            <div className="mt-2 text-xs text-red-100/70">
-              {recentNegativeTotal} новых за 7 дней
+              <Link href={`/companies/${company.id}/inbox?sentiment=NEGATIVE`} className="group relative inline-flex h-16 w-full items-center justify-center overflow-hidden rounded-[28px] border border-red-400/25 bg-red-500/10 px-4 text-sm font-semibold text-red-100 transition hover:bg-red-500/20">
+                Открыть Inbox →
+              </Link>
             </div>
           </div>
-        </div>
-
-        <div className="mt-4 text-sm text-muted">
-          Репутация отслеживается по {connectedSources || 0} источнику.
-        </div>
-      </Card>
+        </Card>
 
         <CompanySyncStatusCard status={syncStatus} />
 
         <Card className="mt-6 border-white/10 bg-white/[0.03] p-5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <div className="text-lg font-semibold text-brand">Ручное обновление</div>
+              <div className="text-xl font-semibold tracking-[-0.035em] text-white">Ручное обновление</div>
               <div className="mt-2 text-sm leading-6 text-muted">
                 Запустит сбор упоминаний, отзывов и рейтинга по подключенным источникам.
               </div>
@@ -197,7 +199,7 @@ export default async function CompanyPage({ params }: { params: { id: string } }
           </div>
         </Card>
 
-      <Card className="mt-6 border-orange-400/20 bg-orange-500/[0.04] p-5 shadow-[0_0_40px_rgba(249,115,22,0.08)]">
+      <Card className="mt-6 border-orange-400/20 bg-orange-500/10/10 shadow-[0_0_34px_rgba(251,146,60,0.10)]/[0.04] p-5 shadow-[0_0_40px_rgba(249,115,22,0.08)]">
         <div className="mb-4 text-lg font-semibold text-brand">⚠ Что требует внимания</div>
 
         <div className="grid gap-4 lg:grid-cols-[1fr_1fr_1fr_auto] lg:items-center">
@@ -218,7 +220,7 @@ export default async function CompanyPage({ params }: { params: { id: string } }
 
           <Link
             href={`/companies/${company.id}/inbox?sentiment=NEGATIVE`}
-            className="inline-flex h-11 items-center justify-center rounded-xl bg-orange-500 px-4 text-sm font-semibold text-white transition hover:bg-orange-400"
+            className="inline-flex h-11 items-center justify-center rounded-xl bg-orange-500/10/10 shadow-[0_0_34px_rgba(251,146,60,0.10)] px-4 text-sm font-semibold text-white transition hover:bg-orange-400"
           >
             Открыть негативные в Inbox
           </Link>
@@ -229,11 +231,11 @@ export default async function CompanyPage({ params }: { params: { id: string } }
         <div className="mb-4 text-lg font-semibold text-brand">Источники мониторинга</div>
 
         <div className="space-y-3">
-          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+          <div className="group relative overflow-hidden rounded-[28px] border border-cyan-300/15 bg-[radial-gradient(circle_at_0%_0%,rgba(34,211,238,0.10),transparent_36%),linear-gradient(135deg,rgba(255,255,255,0.055),rgba(255,255,255,0.018))] shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_0_36px_rgba(34,211,238,0.055)] transition hover:border-cyan-300/30 hover:bg-cyan-400/[0.045] p-4">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <div className="text-base font-semibold text-brand">Yandex Maps</div>
+                  <div className="text-base font-semibold text-white">Yandex Maps</div>
                   <span
                     className={
                       hasYandex
@@ -245,7 +247,7 @@ export default async function CompanyPage({ params }: { params: { id: string } }
                   </span>
                 </div>
 
-                <div className="mt-1 text-sm text-muted">
+                <div className="mt-2 text-sm leading-6 text-slate-400">
                   {mentionsTotal} отзывов · автообновление каждые 10 минут
                 </div>
 
@@ -254,7 +256,7 @@ export default async function CompanyPage({ params }: { params: { id: string } }
                     href={primarySourceUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="mt-2 block truncate text-sm text-cyan-300 hover:text-cyan-200"
+                    className="mt-2 block truncate text-sm break-all text-sm font-medium text-cyan-200/90 transition hover:text-cyan-100 hover:text-cyan-200"
                   >
                     {primarySourceUrl}
                   </a>
@@ -269,7 +271,7 @@ export default async function CompanyPage({ params }: { params: { id: string } }
                     href={primarySourceUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex h-10 items-center justify-center rounded-xl border border-white/10 px-3 text-sm text-brand transition hover:border-cyan-400/30 hover:bg-cyan-400/10"
+                    className="group relative inline-flex h-16 w-full items-center justify-center overflow-hidden rounded-[28px] border border-white/10 px-3 text-sm text-brand transition hover:border-cyan-400/30 hover:bg-cyan-400/10"
                   >
                     Открыть источник ↗
                   </a>
@@ -286,11 +288,11 @@ export default async function CompanyPage({ params }: { params: { id: string } }
             </div>
           </div>
 
-            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+            <div className="group relative overflow-hidden rounded-[28px] border border-cyan-300/15 bg-[radial-gradient(circle_at_0%_0%,rgba(34,211,238,0.10),transparent_36%),linear-gradient(135deg,rgba(255,255,255,0.055),rgba(255,255,255,0.018))] shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_0_36px_rgba(34,211,238,0.055)] transition hover:border-cyan-300/30 hover:bg-cyan-400/[0.045] p-4">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <div className="text-base font-semibold text-brand">2GIS</div>
+                    <div className="text-base font-semibold text-white">2GIS</div>
                     <span
                       className={
                         hasTwoGis
@@ -302,7 +304,7 @@ export default async function CompanyPage({ params }: { params: { id: string } }
                     </span>
                   </div>
 
-                  <div className="mt-1 text-sm text-muted">
+                  <div className="mt-2 text-sm leading-6 text-slate-400">
                     Отзывы 2GIS · автообновление каждые 10 минут
                   </div>
 
@@ -311,7 +313,7 @@ export default async function CompanyPage({ params }: { params: { id: string } }
                       href={twoGisSourceUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="mt-2 block truncate text-sm text-cyan-300 hover:text-cyan-200"
+                      className="mt-2 block truncate text-sm break-all text-sm font-medium text-cyan-200/90 transition hover:text-cyan-100 hover:text-cyan-200"
                     >
                       {twoGisSourceUrl}
                     </a>
@@ -326,10 +328,18 @@ export default async function CompanyPage({ params }: { params: { id: string } }
                       href={twoGisSourceUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex h-10 items-center justify-center rounded-xl border border-white/10 px-3 text-sm text-brand transition hover:border-cyan-400/30 hover:bg-cyan-400/10"
+                      className="group relative inline-flex h-16 w-full items-center justify-center overflow-hidden rounded-[28px] border border-white/10 px-3 text-sm text-brand transition hover:border-cyan-400/30 hover:bg-cyan-400/10"
                     >
                       Открыть источник ↗
                     </a>
+                  ) : null}
+
+                  {twoGisTarget ? (
+                    <CompanyYandexCronToggle
+                      companyId={company.id}
+                      targetId={twoGisTarget.id}
+                      initialEnabled={Boolean(twoGisTarget.syncReviewsEnabled)}
+                    />
                   ) : null}
                 </div>
               </div>
@@ -339,8 +349,8 @@ export default async function CompanyPage({ params }: { params: { id: string } }
 
       <Card className="mt-6 p-5">
         <div className="mb-4 flex items-center justify-between gap-3">
-          <div className="text-lg font-semibold text-brand">Данные компании</div>
-          <a href="#company-edit" className="text-sm text-cyan-300 hover:text-cyan-200">
+          <div className="text-xl font-semibold tracking-[-0.035em] text-white">Данные компании</div>
+          <a href="#company-edit" className="text-sm break-all text-sm font-medium text-cyan-200/90 transition hover:text-cyan-100 hover:text-cyan-200">
             Редактировать
           </a>
         </div>
@@ -354,7 +364,7 @@ export default async function CompanyPage({ params }: { params: { id: string } }
             <div className="grid grid-cols-[120px_1fr] gap-3">
               <span className="text-muted">Сайт:</span>
               {companyWebsite ? (
-                <a href={companyWebsite} target="_blank" rel="noopener noreferrer" className="truncate text-cyan-300 hover:text-cyan-200">
+                <a href={companyWebsite} target="_blank" rel="noopener noreferrer" className="truncate break-all text-sm font-medium text-cyan-200/90 transition hover:text-cyan-100 hover:text-cyan-200">
                   {companyWebsite}
                 </a>
               ) : (
@@ -375,7 +385,7 @@ export default async function CompanyPage({ params }: { params: { id: string } }
             <div className="grid grid-cols-[120px_1fr] gap-3">
               <span className="text-muted">Yandex Maps:</span>
               {primarySourceUrl ? (
-                <a href={primarySourceUrl} target="_blank" rel="noopener noreferrer" className="truncate text-cyan-300 hover:text-cyan-200">
+                <a href={primarySourceUrl} target="_blank" rel="noopener noreferrer" className="truncate break-all text-sm font-medium text-cyan-200/90 transition hover:text-cyan-100 hover:text-cyan-200">
                   {primarySourceUrl}
                 </a>
               ) : (
@@ -386,7 +396,7 @@ export default async function CompanyPage({ params }: { params: { id: string } }
             <div className="grid grid-cols-[120px_1fr] gap-3">
               <span className="text-muted">2GIS:</span>
               {twoGisSourceUrl ? (
-                <a href={twoGisSourceUrl} target="_blank" rel="noopener noreferrer" className="truncate text-cyan-300 hover:text-cyan-200">
+                <a href={twoGisSourceUrl} target="_blank" rel="noopener noreferrer" className="truncate break-all text-sm font-medium text-cyan-200/90 transition hover:text-cyan-100 hover:text-cyan-200">
                   {twoGisSourceUrl}
                 </a>
               ) : (
@@ -394,16 +404,14 @@ export default async function CompanyPage({ params }: { params: { id: string } }
               )}
             </div>
           </div>
-
-        <CompanyEditPanel company={company} yandexUrl={primarySourceUrl} twoGisUrl={twoGisSourceUrl} />
       </Card>
 
       <Card className="mt-6 p-5">
         <div className="mb-4 flex items-center justify-between gap-3">
-          <div className="text-lg font-semibold text-brand">Последние упоминания</div>
+          <div className="text-xl font-semibold tracking-[-0.035em] text-white">Последние упоминания</div>
           <Link
             href={`/companies/${company.id}/inbox`}
-            className="inline-flex h-9 items-center justify-center rounded-xl border border-cyan-400/30 px-3 text-sm text-cyan-300 transition hover:bg-cyan-400/10"
+            className="inline-flex h-9 items-center justify-center rounded-xl border border-cyan-400/30 px-3 text-sm break-all text-sm font-medium text-cyan-200/90 transition hover:text-cyan-100 transition hover:bg-cyan-400/10"
           >
             Открыть Inbox
           </Link>
@@ -419,7 +427,7 @@ export default async function CompanyPage({ params }: { params: { id: string } }
                   : null
 
               return (
-                <div key={mention.id} className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                <div key={mention.id} className="group relative overflow-hidden rounded-[28px] border border-cyan-300/15 bg-[radial-gradient(circle_at_0%_0%,rgba(34,211,238,0.10),transparent_36%),linear-gradient(135deg,rgba(255,255,255,0.055),rgba(255,255,255,0.018))] shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_0_36px_rgba(34,211,238,0.055)] transition hover:border-cyan-300/30 hover:bg-cyan-400/[0.045] p-4">
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">

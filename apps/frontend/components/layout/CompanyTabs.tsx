@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import clsx from 'clsx'
-import { Building2, Inbox, Globe2, BarChart3, Star } from 'lucide-react'
+import { BarChart3, Building2, Globe2, Inbox, Star } from 'lucide-react'
 
 export default function CompanyTabs({ companyId }: { companyId: string }) {
   const pathname = usePathname()
@@ -11,34 +11,42 @@ export default function CompanyTabs({ companyId }: { companyId: string }) {
   const items = [
     { href: `/companies/${companyId}`, label: 'Обзор', icon: Building2 },
     { href: `/companies/${companyId}/inbox`, label: 'Inbox', icon: Inbox },
-      { href: `/companies/${companyId}/web`, label: 'Сеть', icon: Globe2 },
+    { href: `/companies/${companyId}/web`, label: 'Сеть', icon: Globe2 },
     { href: `/companies/${companyId}/analytics`, label: 'Аналитика', icon: BarChart3 },
     { href: `/companies/${companyId}/ratings`, label: 'Рейтинги', icon: Star }
   ]
 
   return (
-    <div className="mb-6 overflow-x-auto px-1">
-      <div className="inline-flex w-max min-w-0 gap-2 rounded-[24px] border border-cyan-400/15 bg-white/[0.03] p-2 shadow-[0_0_24px_rgba(34,211,238,0.08)] backdrop-blur-xl">
+    <nav className="relative w-full overflow-hidden rounded-[34px] border border-cyan-300/25 bg-[radial-gradient(circle_at_0%_0%,rgba(34,211,238,0.22),transparent_34%),radial-gradient(circle_at_100%_0%,rgba(217,70,239,0.22),transparent_34%),rgba(5,10,24,0.94)] p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_0_60px_rgba(34,211,238,0.18),0_0_90px_rgba(217,70,239,0.14)] backdrop-blur-2xl">
+      <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-cyan-200 to-fuchsia-300" />
+      <div className="pointer-events-none absolute inset-x-8 bottom-0 h-px bg-gradient-to-r from-transparent via-cyan-400/70 to-fuchsia-400/70" />
+
+      <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
         {items.map((item) => {
           const Icon = item.icon
           const active = pathname === item.href
+
           return (
             <Link
               key={item.href}
               href={item.href}
               className={clsx(
-                'inline-flex items-center gap-2 whitespace-nowrap rounded-2xl px-4 py-2.5 text-sm transition-all',
+                'group relative flex shrink-0 items-center justify-center gap-2 overflow-hidden rounded-[22px] border px-4 py-3 text-sm font-semibold transition-all duration-200',
                 active
-                  ? 'bg-cyan-400/[0.14] text-white shadow-[0_0_18px_rgba(34,211,238,0.18)]'
-                  : 'text-slate-300 hover:bg-white/[0.05] hover:text-white'
+                  ? 'border-cyan-300/60 bg-cyan-500/[0.22] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.16),0_0_46px_rgba(34,211,238,0.38)]'
+                  : 'border-transparent bg-transparent text-slate-300 hover:border-cyan-300/25 hover:bg-cyan-500/[0.08] hover:text-white'
               )}
             >
-              <Icon size={16} />
-              {item.label}
+              {active ? (
+                <span className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(34,211,238,0.22),transparent_58%)]" />
+              ) : null}
+
+              <Icon className="relative h-5 w-5 shrink-0 drop-shadow-[0_0_12px_currentColor] sm:h-7 sm:w-7" />
+              <span className="relative whitespace-nowrap">{item.label}</span>
             </Link>
           )
         })}
       </div>
-    </div>
+    </nav>
   )
 }

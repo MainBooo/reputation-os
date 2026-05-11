@@ -66,6 +66,13 @@ export function startCompanySync(companyId: string) {
   })
 }
 
+export function startCompanyWebSync(companyId: string) {
+  return apiFetch(`/companies/${companyId}/start-web-sync`, {
+    method: 'POST',
+    body: JSON.stringify({})
+  })
+}
+
 export function updateCompanySourceTarget(
   companyId: string,
   targetId: string,
@@ -120,3 +127,18 @@ export function getCompanySyncStatus(companyId: string) {
     logs: []
   })
 }
+
+export function getCompanyWebSourcesOverview(companyId: string) {
+  return apiFetch(`/companies/${companyId}/web-sources`, undefined, {
+    summary: {
+      activeGroupsCount: 0,
+      activeTargetsCount: 0,
+      discoveredCount: 0,
+      latestSignalsCount: 0
+    },
+    activeGroups: [],
+    discovered: [],
+    latestSignals: []
+  })
+}
+

@@ -1,0 +1,47 @@
+import { CalendarDays, Filter, History, Inbox, Layers3, RefreshCw, ShieldAlert, Smartphone } from 'lucide-react'
+import Card from './ui/Card'
+import Container from './ui/Container'
+import Section from './ui/Section'
+
+const features = [
+  { icon: Inbox, title: 'Единый Inbox' },
+  { icon: Filter, title: 'Фильтры по площадке, оценке, тональности и датам' },
+  { icon: RefreshCw, title: 'Автоматический сбор' },
+  { icon: ShieldAlert, title: 'Контроль негативных сигналов' },
+  { icon: History, title: 'История источников' },
+  { icon: Layers3, title: 'Готовность к новым площадкам' },
+  { icon: Smartphone, title: 'Мобильный интерфейс' },
+  { icon: CalendarDays, title: 'Понятные статусы синхронизации' }
+]
+
+export default function FeaturesSection() {
+  return (
+    <Section id="features" ariaLabel="Возможности Reputation OS">
+      <Container>
+        <div className="grid gap-10 lg:grid-cols-[1fr_0.95fr] lg:items-center">
+          <div>
+            <h2 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">
+              Что получает бизнес
+            </h2>
+
+            <div className="mt-10 grid gap-4 sm:grid-cols-2">
+              {features.map((feature) => (
+                <Card key={feature.title}>
+                  <feature.icon className="mb-4 text-cyan-200" size={24} />
+                  <h3 className="text-base font-semibold leading-6 text-white">{feature.title}</h3>
+                </Card>
+              ))}
+            </div>
+          </div>
+
+          <PlatformShot
+            src="/screenshots/platform-company-overview.jpeg"
+            alt="Экран обзора компании в Reputation OS"
+            label="Обзор компании"
+            caption="Карточка компании собирает ключевые показатели, источники и быстрые действия в одном рабочем пространстве."
+          />
+        </div>
+      </Container>
+    </Section>
+  )
+}

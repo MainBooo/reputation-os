@@ -6,8 +6,8 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
-  Line,
-  LineChart,
+  Area,
+  AreaChart,
   Pie,
   PieChart,
   ResponsiveContainer,
@@ -65,11 +65,26 @@ function ChartTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null
 
   return (
-    <div className="rounded-xl border border-white/10 bg-[#10151f]/95 px-3 py-2 shadow-xl backdrop-blur">
+    <div className="rounded-2xl border border-white/10 bg-[#0b111b]/95 px-3.5 py-2.5 shadow-2xl backdrop-blur">
       <div className="text-xs text-muted">{label}</div>
       <div className="mt-1 text-sm font-semibold text-brand">
         {formatNumber(Number(payload[0]?.value || 0))}
       </div>
+    </div>
+  )
+}
+
+
+function MentionTooltip({ active, payload, label }: any) {
+  if (!active || !payload?.length) return null
+
+  const value = Number(payload[0]?.value || 0)
+  if (value <= 0) return null
+
+  return (
+    <div className="rounded-xl border border-cyan-400/20 bg-[#10151f]/95 px-3 py-2 shadow-xl backdrop-blur">
+      <div className="text-xs text-muted">{label}</div>
+      <div className="mt-1 text-sm font-semibold text-cyan-100">{formatNumber(value)}</div>
     </div>
   )
 }
@@ -80,7 +95,7 @@ function RatingTooltip({ active, payload, label }: any) {
   const value = Number(payload[0]?.value || 0)
 
   return (
-    <div className="rounded-xl border border-white/10 bg-[#10151f]/95 px-3 py-2 shadow-xl backdrop-blur">
+    <div className="rounded-2xl border border-white/10 bg-[#0b111b]/95 px-3.5 py-2.5 shadow-2xl backdrop-blur">
       <div className="text-xs text-muted">{label}</div>
       <div className="mt-1 text-sm font-semibold text-brand">{value.toFixed(1)} ★</div>
     </div>
@@ -136,15 +151,15 @@ export default function DashboardCharts({
 
   if (!mounted) {
     return (
-      <div className="grid min-w-0 gap-4">
-        <div className="grid min-w-0 gap-4 xl:grid-cols-2">
-          <Card className="min-w-0 overflow-hidden p-4 sm:p-5">
+      <div className="grid min-w-0 gap-5">
+        <div className="grid min-w-0 gap-5 xl:grid-cols-2">
+          <Card className="min-w-0 overflow-hidden rounded-[26px] border-white/10 bg-[#0b111c]/92 p-5 shadow-[0_22px_70px_rgba(0,0,0,0.34),0_0_34px_rgba(34,211,238,0.04)] sm:p-6">
             <div className="h-6 w-56 rounded-full bg-white/[0.06]" />
             <div className="mt-3 h-4 w-36 rounded-full bg-white/[0.04]" />
             <div className="mt-4 h-[180px] rounded-2xl bg-white/[0.035] sm:h-[220px]" />
           </Card>
 
-          <Card className="min-w-0 overflow-hidden p-4 sm:p-5">
+          <Card className="min-w-0 overflow-hidden rounded-[26px] border-white/10 bg-[#0b111c]/92 p-5 shadow-[0_22px_70px_rgba(0,0,0,0.34),0_0_34px_rgba(34,211,238,0.04)] sm:p-6">
             <div className="h-6 w-36 rounded-full bg-white/[0.06]" />
             <div className="mt-3 h-4 w-48 rounded-full bg-white/[0.04]" />
             <div className="mt-4 h-[180px] rounded-2xl bg-white/[0.035] sm:h-[220px]" />
@@ -155,13 +170,13 @@ export default function DashboardCharts({
   }
 
   return (
-    <div className="grid min-w-0 gap-4">
-      <div className="grid min-w-0 gap-4 xl:grid-cols-2">
-        <Card className="min-w-0 overflow-hidden p-4 sm:p-5">
+    <div className="grid min-w-0 gap-5">
+      <div className="grid min-w-0 gap-5 xl:grid-cols-2">
+        <Card className="min-w-0 overflow-hidden rounded-[26px] border-white/10 bg-[#0b111c]/92 p-5 shadow-[0_22px_70px_rgba(0,0,0,0.34),0_0_34px_rgba(34,211,238,0.04)] sm:p-6">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <div className="text-lg font-semibold text-brand">Динамика упоминаний</div>
-              <div className="mt-1 text-sm text-muted">За последние 30 дней</div>
+              <div className="text-xl font-semibold tracking-[-0.03em] text-white">Динамика упоминаний</div>
+              <div className="mt-2 text-sm text-slate-400">Новые упоминания по дням</div>
             </div>
 
             <div className="rounded-full border border-cyan-400/20 bg-cyan-500/10 px-3 py-1 text-sm font-semibold text-cyan-200">
@@ -169,10 +184,10 @@ export default function DashboardCharts({
             </div>
           </div>
 
-          <div className="mt-4 h-[180px] min-h-[180px] min-w-0 sm:h-[220px] sm:min-h-[220px]">
+          <div className="mt-6 h-[220px] min-h-[220px] min-w-0 sm:h-[260px] sm:min-h-[260px]">
             <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
-              <LineChart data={mentionTrend} margin={{ top: 8, right: 8, bottom: 0, left: -28 }}>
-                <CartesianGrid stroke="rgba(255,255,255,0.08)" strokeDasharray="4 6" vertical={false} />
+              <AreaChart data={mentionTrend} margin={{ top: 18, right: 18, bottom: 10, left: -18 }}>
+                <CartesianGrid stroke="rgba(255,255,255,0.055)" strokeDasharray="4 8" vertical={false} />
                 <XAxis
                   dataKey="label"
                   tick={{ fill: 'rgba(226,232,240,0.55)', fontSize: 11 }}
@@ -180,41 +195,36 @@ export default function DashboardCharts({
                   tickLine={false}
                   minTickGap={18}
                 />
-                <YAxis
-                  tick={{ fill: 'rgba(226,232,240,0.55)', fontSize: 11 }}
-                  axisLine={false}
-                  tickLine={false}
-                  allowDecimals={false}
-                />
-                <Tooltip content={<ChartTooltip />} cursor={{ stroke: 'rgba(34,211,238,0.25)' }} />
-                <Line
-                  type="monotone"
+                
+                <Tooltip content={<MentionTooltip />} cursor={{ stroke: 'rgba(34,211,238,0.14)' }} />
+                <Area
+                  type="basis"
                   dataKey="value"
                   stroke="#22d3ee"
                   strokeWidth={3}
                   dot={false}
-                  activeDot={{ r: 5, stroke: '#e0faff', strokeWidth: 2, fill: '#22d3ee' }}
+                  activeDot={{ r: 6, stroke: '#e0faff', strokeWidth: 3, fill: '#22d3ee' }}
                 />
-              </LineChart>
+              </AreaChart>
             </ResponsiveContainer>
           </div>
         </Card>
 
-        <Card className="min-w-0 overflow-hidden p-4 sm:p-5">
+        <Card className="min-w-0 overflow-hidden rounded-[26px] border-white/10 bg-[#0b111c]/92 p-5 shadow-[0_22px_70px_rgba(0,0,0,0.34),0_0_34px_rgba(34,211,238,0.04)] sm:p-6">
           <div>
-            <div className="text-lg font-semibold text-brand">Тональность</div>
-            <div className="mt-1 text-sm text-muted">Позитив / нейтральные / негатив</div>
+            <div className="text-xl font-semibold tracking-[-0.03em] text-white">Тональность</div>
+            <div className="mt-2 text-sm text-slate-400">Позитив / нейтральные / негатив</div>
           </div>
 
-          <div className="mt-4 grid gap-4 sm:grid-cols-[180px_1fr] sm:items-center">
-            <div className="relative h-[160px] min-h-[160px] min-w-0 sm:h-[180px] sm:min-h-[180px]">
+          <div className="mt-5 grid gap-5 sm:grid-cols-[230px_1fr] sm:items-center">
+            <div className="relative mx-auto h-[190px] min-h-[190px] w-full max-w-[220px] min-w-0 sm:h-[230px] sm:min-h-[230px] sm:max-w-none">
               <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
                 <PieChart>
                   <Pie
                     data={sentimentData.length ? sentimentData : [{ name: 'Нет данных', value: 1, color: 'rgba(255,255,255,0.12)' }]}
                     dataKey="value"
                     innerRadius={54}
-                    outerRadius={78}
+                    outerRadius={80}
                     paddingAngle={3}
                     stroke="rgba(0,0,0,0)"
                   >
@@ -227,12 +237,12 @@ export default function DashboardCharts({
               </ResponsiveContainer>
 
               <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
-                <div className="text-3xl font-semibold text-brand">{formatNumber(totalMentions)}</div>
+                <div className="text-3xl font-semibold tracking-[-0.05em] text-white sm:text-4xl">{formatNumber(totalMentions)}</div>
                 <div className="text-xs text-muted">упоминаний</div>
               </div>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-3 sm:pl-2">
               <div className="flex items-center justify-between gap-3 text-sm">
                 <span className="flex items-center gap-2 text-muted">
                   <span className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
@@ -267,11 +277,11 @@ export default function DashboardCharts({
         </Card>
       </div>
 
-      <div className="grid min-w-0 gap-4 xl:grid-cols-2">
-        <Card className="min-w-0 overflow-hidden p-4 sm:p-5">
+      <div className="grid min-w-0 gap-5 xl:grid-cols-2">
+        <Card className="min-w-0 overflow-hidden rounded-[26px] border-white/10 bg-[#0b111c]/92 p-5 shadow-[0_22px_70px_rgba(0,0,0,0.34),0_0_34px_rgba(34,211,238,0.04)] sm:p-6">
           <div>
-            <div className="text-lg font-semibold text-brand">Источники</div>
-            <div className="mt-1 text-sm text-muted">Распределение упоминаний по площадкам</div>
+            <div className="text-xl font-semibold tracking-[-0.03em] text-white">Источники</div>
+            <div className="mt-2 text-sm text-slate-400">Распределение упоминаний по площадкам</div>
           </div>
 
           <div className="mt-4 h-[180px] min-h-[180px] min-w-0 sm:h-[220px] sm:min-h-[220px]">
@@ -307,11 +317,11 @@ export default function DashboardCharts({
           </div>
         </Card>
 
-        <Card className="min-w-0 overflow-hidden p-4 sm:p-5">
+        <Card className="min-w-0 overflow-hidden rounded-[26px] border-white/10 bg-[#0b111c]/92 p-5 shadow-[0_22px_70px_rgba(0,0,0,0.34),0_0_34px_rgba(34,211,238,0.04)] sm:p-6">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <div className="text-lg font-semibold text-brand">Динамика рейтинга</div>
-              <div className="mt-1 text-sm text-muted">По отзывам с оценками</div>
+              <div className="text-xl font-semibold tracking-[-0.03em] text-white">Динамика рейтинга</div>
+              <div className="mt-2 text-sm text-slate-400">По отзывам с оценками</div>
             </div>
 
             <div className="text-right">
@@ -324,7 +334,7 @@ export default function DashboardCharts({
 
           <div className="mt-4 h-[180px] min-h-[180px] min-w-0 sm:h-[220px] sm:min-h-[220px]">
             <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
-              <LineChart data={ratingTrend} margin={{ top: 8, right: 8, bottom: 0, left: -28 }}>
+              <AreaChart data={ratingTrend} margin={{ top: 8, right: 8, bottom: 0, left: -28 }}>
                 <CartesianGrid stroke="rgba(255,255,255,0.08)" strokeDasharray="4 6" vertical={false} />
                 <XAxis
                   dataKey="label"
@@ -341,15 +351,15 @@ export default function DashboardCharts({
                   ticks={[1, 2, 3, 4, 5]}
                 />
                 <Tooltip content={<RatingTooltip />} cursor={{ stroke: 'rgba(74,222,128,0.25)' }} />
-                <Line
-                  type="monotone"
+                <Area
+                  type="basis"
                   dataKey="value"
                   stroke="#4ade80"
                   strokeWidth={3}
                   dot={false}
                   activeDot={{ r: 5, stroke: '#dcfce7', strokeWidth: 2, fill: '#4ade80' }}
                 />
-              </LineChart>
+              </AreaChart>
             </ResponsiveContainer>
           </div>
         </Card>

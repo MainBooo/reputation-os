@@ -1,0 +1,58 @@
+import { Activity, Globe2, Inbox, RefreshCw } from 'lucide-react'
+import Card from './ui/Card'
+import Container from './ui/Container'
+import PlatformShot from './ui/PlatformShot'
+import Section from './ui/Section'
+
+const cards = [
+  { icon: Inbox, title: 'Inbox отзывов и упоминаний', text: 'Единая лента сигналов по компании.' },
+  { icon: Globe2, title: 'Сеть: web-источники', text: 'Найденные страницы, статьи и внешние источники.' },
+  { icon: Activity, title: 'Рейтинги и динамика', text: 'Понятная картина изменений по репутации.' },
+  { icon: RefreshCw, title: 'Статусы синхронизации', text: 'Видно, что собирается и что требует проверки.' }
+]
+
+export default function ProductPreviewSection() {
+  return (
+    <Section ariaLabel="Решение Reputation OS">
+      <Container>
+        <div className="grid gap-8 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
+          <div>
+            <h2 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">
+              Reputation OS собирает всё в единую ленту
+            </h2>
+            <p className="mt-5 text-lg leading-8 text-slate-300">
+              Вместо разрозненных проверок бизнес получает понятный центр контроля: отзывы, web-упоминания, источники, рейтинги и статусы сбора.
+            </p>
+
+            <div className="mt-8 grid gap-4 sm:grid-cols-2">
+              {cards.map((card) => (
+                <Card key={card.title}>
+                  <card.icon className="mb-4 text-cyan-200" size={24} />
+                  <h3 className="font-semibold text-white">{card.title}</h3>
+                  <p className="mt-2 text-sm leading-6 text-slate-400">{card.text}</p>
+                </Card>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid gap-4">
+            <PlatformShot
+              src="/screenshots/platform-inbox.jpeg"
+              alt="Inbox Reputation OS с отзывами и упоминаниями"
+              label="Inbox"
+              caption="Единая лента помогает быстро видеть новые отзывы, web-упоминания, оценки и сигналы по компании."
+              imageClassName="aspect-[16/9]"
+            />
+            <PlatformShot
+              src="/screenshots/platform-dashboard-analytics.jpeg"
+              alt="Аналитический экран Reputation OS с графиками и метриками"
+              label="Аналитика"
+              caption="Динамика и метрики показывают, как меняется репутация после новых отзывов и упоминаний."
+              imageClassName="aspect-[16/8]"
+            />
+          </div>
+        </div>
+      </Container>
+    </Section>
+  )
+}

@@ -57,7 +57,13 @@ export class MentionsSyncProcessor implements OnModuleInit, OnModuleDestroy {
 
     try {
       const company = await this.prisma.company.findUnique({
-        where: { id: companyId }
+        where: { id: companyId },
+        include: {
+          aliases: {
+            orderBy: { priority: 'desc' },
+            take: 5
+          }
+        }
       })
 
       const targets = await this.prisma.companySourceTarget.findMany({
@@ -81,7 +87,7 @@ export class MentionsSyncProcessor implements OnModuleInit, OnModuleDestroy {
             website: company?.website || target.externalUrl || null,
             city: company?.city || null,
             industry: company?.industry || null,
-            aliases: []
+            aliases: company?.aliases?.map((alias) => alias.value) || []
           }
         })
 

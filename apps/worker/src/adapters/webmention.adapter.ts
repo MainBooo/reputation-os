@@ -51,6 +51,7 @@ export class WebMentionAdapter implements SourceAdapter {
     const results: any[] = []
     const seenUrls = new Set<string>()
     const seenFingerprints = new Set<string>()
+    const hostCounts = new Map<string, number>()
 
     for (const query of queries.slice(0, 4)) {
       const items = await this.fetchFromYandex(query)
@@ -72,8 +73,15 @@ export class WebMentionAdapter implements SourceAdapter {
         if (seenUrls.has(url)) continue
         if (seenFingerprints.has(fingerprint)) continue
 
+        const hostCount = hostCounts.get(host || 'unknown') || 0
+        if (hostCount >= 2) {
+          console.log('[WEB] relevance skip host limit', { host, title, url })
+          continue
+        }
+
         seenUrls.add(url)
         seenFingerprints.add(fingerprint)
+        hostCounts.set(host || 'unknown', hostCount + 1)
 
         if (this.isGarbage(url, title, snippet)) {
           console.log('[WEB] relevance skip garbage', { title, url })
@@ -213,11 +221,12 @@ export class WebMentionAdapter implements SourceAdapter {
     if (!base.length) return []
 
     return base.flatMap((name) => [
-      name,
       `${name} ${city || ''}`.trim(),
       `${name} отзывы ${city || ''}`.trim(),
-      `${name} новости ${city || ''}`.trim(),
-      `${name} рейтинг ${city || ''}`.trim()
+      `${name} ресторан ${city || ''}`.trim(),
+      `${name} бар ${city || ''}`.trim(),
+      `${name} официальный сайт`.trim(),
+      `${name} telegram`.trim()
     ]).filter((value, index, arr): value is string => Boolean(value) && arr.indexOf(value) === index)
   }
 
@@ -254,6 +263,11 @@ export class WebMentionAdapter implements SourceAdapter {
     const snippetText = this.normalizeText(item.snippet || '')
     const urlText = this.normalizeText(item.url)
     const allText = `${titleText} ${snippetText} ${urlText}`
+
+    const blocked = this.getBlockedReason(allText, item.url)
+    if (blocked) {
+      return { accepted: false, score: -100, reasons: [blocked] }
+    }
 
     let score = 0
     const reasons: string[] = []
@@ -307,21 +321,48 @@ export class WebMentionAdapter implements SourceAdapter {
     }
 
     if (/(новости|афиша|концерт|события|билеты|kassir|afisha)/i.test(allText)) {
-      score += 2
+      score += 1
       reasons.push('news_or_events')
     }
 
     if (/(официальный|official|сайт|бар|клуб|караоке|ресторан)/i.test(allText)) {
-      score += 2
+      score += 1
       reasons.push('business_terms')
     }
 
     const accepted =
-      score >= 7 &&
+      score >= 10 &&
       (exactNameHit || totalTokenHits >= 2) &&
-      !(hasOtherCity && !hasCityHit && score < 10)
+      (hasCityHit || score >= 13) &&
+      !(hasOtherCity && !hasCityHit)
 
     return { accepted, score, reasons }
+  }
+
+  private getBlockedReason(text: string, url?: string | null) {
+    const host = this.getHost(url || null) || ''
+
+    if (/(dreamjob|hh\.ru|superjob|rabota|zarplata|trudvsem)/i.test(host)) {
+      return 'blocked_job_domain'
+    }
+
+    if (/(работа|вакансии|вакансия|сотрудник|сотрудников|работодатель|зарплат|карьер)/i.test(text)) {
+      return 'blocked_job_content'
+    }
+
+    if (/(covid|ковид|коронавирус|самоизоляц|собянин|закрытие на 90 суток|ограничен|нарушени.*мер)/i.test(text)) {
+      return 'blocked_old_covid_news'
+    }
+
+    if (/(stereopeople group|stereopeoplegroup|рестораторы stereopeople group|клубная индустрия как армия)/i.test(text)) {
+      return 'blocked_group_not_place'
+    }
+
+    if (/(картинки по запросу|images\/search|яндекс картинки)/i.test(text)) {
+      return 'blocked_image_search'
+    }
+
+    return null
   }
 
   private hasConflictingCity(text: string, allowedCityTokens: string[]) {

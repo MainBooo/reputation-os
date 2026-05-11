@@ -21,6 +21,12 @@ export class SyncController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Post('companies/:id/start-web-sync')
+  startWebSync(@CurrentUser() user: AuthUser, @Param('id') companyId: string) {
+    return this.syncService.startWebSync(user.id, companyId)
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Get('companies/:id/sync-status')
   getSyncStatus(@CurrentUser() user: AuthUser, @Param('id') companyId: string) {
     return this.syncService.getSyncStatus(user.id, companyId)

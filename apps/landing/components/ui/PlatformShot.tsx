@@ -1,0 +1,63 @@
+import clsx from 'clsx'
+
+type PlatformShotProps = {
+  src: string
+  alt: string
+  label?: string
+  caption?: string
+  className?: string
+  imageClassName?: string
+}
+
+export default function PlatformShot({
+  src,
+  alt,
+  label,
+  caption,
+  className,
+  imageClassName
+}: PlatformShotProps) {
+  return (
+    <figure
+      className={clsx(
+        'group relative overflow-hidden rounded-[1.5rem] sm:rounded-[2rem] border border-white/10 bg-slate-950/70 p-2 shadow-2xl shadow-cyan-950/30',
+        className
+      )}
+    >
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-cyan-300/10 via-transparent to-blue-500/10 opacity-80" />
+
+      {label ? (
+        <div className="relative z-10 flex items-center justify-between gap-3 border-b border-white/10 px-3 py-2.5 sm:px-4 sm:py-3">
+          <div className="flex items-center gap-2">
+            <span className="h-2.5 w-2.5 rounded-full bg-red-400/80" />
+            <span className="h-2.5 w-2.5 rounded-full bg-yellow-300/80" />
+            <span className="h-2.5 w-2.5 rounded-full bg-emerald-400/80" />
+          </div>
+
+          <span className="rounded-full border border-cyan-200/20 bg-cyan-300/10 px-3 py-1 text-xs font-medium text-cyan-100">
+            {label}
+          </span>
+        </div>
+      ) : null}
+
+      <div className="relative z-10 rounded-[1.25rem] border border-white/10 bg-slate-950/80 p-1.5 sm:rounded-[1.45rem] sm:p-2">
+        <img
+          src={src}
+          alt={alt}
+          loading="lazy"
+          decoding="async"
+          className={clsx(
+            'block h-auto w-full rounded-[1.1rem] object-contain transition duration-700 group-hover:scale-[1.005]',
+            imageClassName
+          )}
+        />
+      </div>
+
+      {caption ? (
+        <figcaption className="relative z-10 px-3 pb-3 pt-3 text-sm leading-6 text-slate-400 sm:px-4 sm:pt-4">
+          {caption}
+        </figcaption>
+      ) : null}
+    </figure>
+  )
+}

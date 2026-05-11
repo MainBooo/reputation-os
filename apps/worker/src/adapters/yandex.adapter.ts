@@ -225,6 +225,23 @@ export class YandexAdapter {
 
       await page.waitForTimeout(5000)
 
+        const organizationLogoUrl = await page.evaluate(() => {
+          const html = document.documentElement.innerHTML
+          const businessImagesIndex = html.indexOf('"businessImages"')
+
+          if (businessImagesIndex < 0) return null
+
+          const chunk = html.slice(businessImagesIndex, businessImagesIndex + 2000)
+          const logoIndex = chunk.indexOf('"logo"')
+
+          if (logoIndex < 0) return null
+
+          const logoChunk = chunk.slice(logoIndex, logoIndex + 800)
+          const match = logoChunk.match(/"urlTemplate"\s*:\s*"([^"]+)"/)
+
+          return match?.[1] ? match[1].replace("%s", "XL") : null
+        }).catch(() => null)
+
       const currentUrl = page.url()
       const currentTitle = await page.title().catch(() => '')
 
@@ -772,15 +789,16 @@ export class YandexAdapter {
         const parsedPublishedAt = item.publishedAt ? new Date(item.publishedAt) : new Date()
         const publishedAt = Number.isFinite(parsedPublishedAt.getTime()) ? parsedPublishedAt : new Date()
 
-        return {
-          externalMentionId: item.externalMentionId,
-          url: item.url || normalizedUrl,
-          title: item.title || null,
-          content: item.content,
-          author: item.author,
-          publishedAt,
-          ratingValue: item.ratingValue ?? null
-        }
+          return {
+            externalMentionId: item.externalMentionId,
+            url: item.url || normalizedUrl,
+            title: item.title || null,
+            content: item.content,
+            author: item.author,
+            publishedAt,
+            ratingValue: item.ratingValue ?? null,
+            sourceMetadata: organizationLogoUrl ? { logoUrl: organizationLogoUrl } : undefined
+          }
       })
     } catch (e) {
       throw e
