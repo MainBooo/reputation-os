@@ -85,3 +85,7 @@ ts-node
 # PM2/local runtime
 dump.pm2
 .pm2/
+
+# Local backups / build cache
+*.bak.*
+*.tsbuildinfo
