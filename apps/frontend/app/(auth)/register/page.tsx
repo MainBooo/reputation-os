@@ -55,9 +55,9 @@ export default function RegisterPage() {
   return (
     <div className="flex min-h-screen items-center justify-center p-6">
       <Card className="w-full max-w-md p-8">
-        <div className="text-sm uppercase tracking-[0.2em] text-muted">Reputation OS</div>
+        <div className="text-sm uppercase tracking-[0.2em] text-zinc-300">Reputation OS</div>
         <h1 className="mt-3 text-2xl font-semibold text-brand">Регистрация</h1>
-        <p className="mt-2 text-sm text-muted">Создайте рабочее пространство и начните мониторинг.</p>
+        <p className="mt-2 text-sm text-zinc-300">Создайте рабочее пространство и начните мониторинг.</p>
 
         <form className="mt-8 space-y-4" onSubmit={handleSubmit}>
           <Input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Имя" />
@@ -69,7 +69,7 @@ export default function RegisterPage() {
           </Button>
         </form>
 
-        <div className="mt-6 text-sm text-muted">
+        <div className="mt-6 text-sm text-zinc-300">
           Уже есть аккаунт? <a href="/login" className="text-brand">Войти</a>
         </div>
       </Card>

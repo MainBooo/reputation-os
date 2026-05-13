@@ -33,7 +33,7 @@ export default function CompanyEditPopup({
       {open ? (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-black/75 px-3 py-6 backdrop-blur-xl sm:px-6 sm:py-10">
           <div className="mx-auto w-full max-w-3xl pb-28">
-            <div className="relative rounded-[32px] border border-cyan-300/20 bg-[#07111f]/95 p-4 shadow-[0_0_90px_rgba(34,211,238,0.22)] sm:p-6">
+            <div className="relative rounded-[32px] border border-blue-300/20 bg-[#080D24]/95 p-4 shadow-[0_0_90px_rgba(59,130,246,0.26)] sm:p-6">
               <button
                 type="button"
                 onClick={() => setOpen(false)}

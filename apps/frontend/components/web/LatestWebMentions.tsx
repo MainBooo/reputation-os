@@ -109,12 +109,12 @@ export default function LatestWebMentions({ companyId }: { companyId: string }) 
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <div className="text-lg font-semibold text-brand">Последние упоминания в сети</div>
-          <div className="mt-1 text-sm leading-6 text-muted">
+          <div className="mt-1 text-sm leading-6 text-zinc-300">
             Реальные найденные страницы из WEB-сбора: отзовики, каталоги, статьи и внешние площадки.
           </div>
         </div>
 
-        <div className="text-sm text-muted">
+        <div className="text-sm text-zinc-300">
           {isLoading ? 'Загружаем…' : `${visibleMentions.length} найдено`}
         </div>
       </div>
@@ -147,11 +147,11 @@ export default function LatestWebMentions({ companyId }: { companyId: string }) 
               >
                 <div className="flex flex-col gap-2">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="rounded-full border border-cyan-400/25 bg-cyan-500/10 px-2.5 py-1 text-xs font-semibold text-cyan-100">
+                    <span className="rounded-full border border-cyan-400/25 bg-blue-500/10 px-2.5 py-1 text-xs font-semibold text-blue-100">
                       WEB
                     </span>
 
-                    <span className="text-sm text-muted">{host}</span>
+                    <span className="text-sm text-zinc-300">{host}</span>
                   </div>
 
                   {href ? (
@@ -159,7 +159,7 @@ export default function LatestWebMentions({ companyId }: { companyId: string }) 
                       href={href}
                       target="_blank"
                       rel="noreferrer"
-                      className="line-clamp-2 text-base font-semibold leading-6 text-brand hover:text-cyan-100"
+                      className="line-clamp-2 text-base font-semibold leading-6 text-brand hover:text-blue-100"
                     >
                       {title}
                     </a>
@@ -167,7 +167,7 @@ export default function LatestWebMentions({ companyId }: { companyId: string }) 
                     <div className="line-clamp-2 text-base font-semibold leading-6 text-brand">{title}</div>
                   )}
 
-                  <div className="text-xs text-muted">Найдено: {formatDate(date)}</div>
+                  <div className="text-xs text-zinc-300">Найдено: {formatDate(date)}</div>
                 </div>
 
                 <button

@@ -109,7 +109,7 @@ export default function CompanyEditPanel({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="text-sm font-semibold text-brand">Редактирование компании</div>
-          <div className="mt-1 text-xs text-muted">
+          <div className="mt-1 text-xs text-zinc-300">
             Название, сайт, город, сфера, Яндекс Карты, 2GIS и ключевые слова мониторинга.
           </div>
         </div>
@@ -122,63 +122,63 @@ export default function CompanyEditPanel({
       {isOpen ? (
         <form onSubmit={handleSubmit} className="mt-4 space-y-3">
           <label className="block">
-            <span className="mb-1 block text-xs uppercase tracking-[0.16em] text-muted">Название</span>
+            <span className="mb-1 block text-xs uppercase tracking-[0.16em] text-zinc-300">Название</span>
             <input
               value={form.name}
               onChange={(event) => setField('name', event.target.value)}
-              className="h-11 w-full rounded-xl border border-line bg-panel px-4 text-sm text-brand outline-none transition focus:border-cyan-400/50"
+              className="h-11 w-full rounded-xl border border-line bg-[#050816] px-4 text-sm text-brand outline-none transition focus:border-cyan-400/50"
               required
             />
           </label>
 
           <label className="block">
-            <span className="mb-1 block text-xs uppercase tracking-[0.16em] text-muted">Сайт</span>
+            <span className="mb-1 block text-xs uppercase tracking-[0.16em] text-zinc-300">Сайт</span>
             <input
               value={form.website}
               onChange={(event) => setField('website', event.target.value)}
-              className="h-11 w-full rounded-xl border border-line bg-panel px-4 text-sm text-brand outline-none transition focus:border-cyan-400/50"
+              className="h-11 w-full rounded-xl border border-line bg-[#050816] px-4 text-sm text-brand outline-none transition focus:border-cyan-400/50"
               placeholder="https://example.ru"
             />
           </label>
 
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block">
-              <span className="mb-1 block text-xs uppercase tracking-[0.16em] text-muted">Город</span>
+              <span className="mb-1 block text-xs uppercase tracking-[0.16em] text-zinc-300">Город</span>
               <input
                 value={form.city}
                 onChange={(event) => setField('city', event.target.value)}
-                className="h-11 w-full rounded-xl border border-line bg-panel px-4 text-sm text-brand outline-none transition focus:border-cyan-400/50"
+                className="h-11 w-full rounded-xl border border-line bg-[#050816] px-4 text-sm text-brand outline-none transition focus:border-cyan-400/50"
                 placeholder="Москва"
               />
             </label>
 
             <label className="block">
-              <span className="mb-1 block text-xs uppercase tracking-[0.16em] text-muted">Сфера</span>
+              <span className="mb-1 block text-xs uppercase tracking-[0.16em] text-zinc-300">Сфера</span>
               <input
                 value={form.industry}
                 onChange={(event) => setField('industry', event.target.value)}
-                className="h-11 w-full rounded-xl border border-line bg-panel px-4 text-sm text-brand outline-none transition focus:border-cyan-400/50"
+                className="h-11 w-full rounded-xl border border-line bg-[#050816] px-4 text-sm text-brand outline-none transition focus:border-cyan-400/50"
                 placeholder="Бар / клуб / концертная площадка"
               />
             </label>
           </div>
 
           <label className="block">
-            <span className="mb-1 block text-xs uppercase tracking-[0.16em] text-muted">Yandex Maps URL</span>
+            <span className="mb-1 block text-xs uppercase tracking-[0.16em] text-zinc-300">Yandex Maps URL</span>
             <input
               value={form.yandexUrl}
               onChange={(event) => setField('yandexUrl', event.target.value)}
-              className="h-11 w-full rounded-xl border border-line bg-panel px-4 text-sm text-brand outline-none transition focus:border-cyan-400/50"
+              className="h-11 w-full rounded-xl border border-line bg-[#050816] px-4 text-sm text-brand outline-none transition focus:border-cyan-400/50"
               placeholder="https://yandex.ru/maps/org/..."
             />
           </label>
 
             <label className="block">
-              <span className="mb-1 block text-xs uppercase tracking-[0.16em] text-muted">2GIS URL</span>
+              <span className="mb-1 block text-xs uppercase tracking-[0.16em] text-zinc-300">2GIS URL</span>
               <input
                 value={form.twoGisUrl}
                 onChange={(event) => setField('twoGisUrl', event.target.value)}
-                className="h-11 w-full rounded-xl border border-line bg-panel px-4 text-sm text-brand outline-none transition focus:border-cyan-400/50"
+                className="h-11 w-full rounded-xl border border-line bg-[#050816] px-4 text-sm text-brand outline-none transition focus:border-cyan-400/50"
                 placeholder="https://2gis.ru/..."
               />
             </label>
@@ -187,12 +187,12 @@ export default function CompanyEditPanel({
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="text-sm font-semibold text-brand">Ключевые слова мониторинга</div>
-                <div className="mt-1 text-xs leading-5 text-muted">
+                <div className="mt-1 text-xs leading-5 text-zinc-300">
                   Эти слова сохраняются как алиасы компании и используются для поиска упоминаний.
                 </div>
               </div>
 
-              <div className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-xs text-muted">
+              <div className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-xs text-zinc-300">
                 {keywords.length}/20
               </div>
             </div>
@@ -203,7 +203,7 @@ export default function CompanyEditPanel({
                   key={keyword}
                   type="button"
                   onClick={() => removeKeyword(keyword)}
-                  className="rounded-full border border-cyan-400/20 bg-cyan-500/10 px-3 py-1.5 text-xs font-medium text-cyan-100 transition hover:bg-cyan-500/20"
+                  className="rounded-full border border-violet-400/40 bg-blue-500/10 px-3 py-1.5 text-xs font-medium text-blue-100 transition hover:bg-cyan-500/20"
                   title="Нажмите, чтобы удалить"
                 >
                   {keyword} ×
@@ -211,7 +211,7 @@ export default function CompanyEditPanel({
               ))}
 
               {!keywords.length ? (
-                <div className="rounded-full border border-white/10 bg-white/[0.035] px-3 py-1.5 text-xs text-muted">
+                <div className="rounded-full border border-white/10 bg-white/[0.035] px-3 py-1.5 text-xs text-zinc-300">
                   Пока нет ключевых слов
                 </div>
               ) : null}
@@ -222,7 +222,7 @@ export default function CompanyEditPanel({
                 value={keywordInput}
                 onChange={(event) => setKeywordInput(event.target.value)}
                 onKeyDown={handleKeywordKeyDown}
-                className="h-11 min-w-0 flex-1 rounded-xl border border-line bg-panel px-4 text-sm text-brand outline-none transition focus:border-cyan-400/50"
+                className="h-11 min-w-0 flex-1 rounded-xl border border-line bg-[#050816] px-4 text-sm text-brand outline-none transition focus:border-cyan-400/50"
                 placeholder="Например: Stereopeople отзывы"
               />
               <Button type="button" variant="secondary" onClick={() => addKeyword(keywordInput)}>

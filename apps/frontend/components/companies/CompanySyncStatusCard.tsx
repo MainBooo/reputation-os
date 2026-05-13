@@ -21,10 +21,10 @@ function statusLabel(value?: string | null) {
 }
 
 function statusClass(value?: string | null) {
-  if (value === 'RUNNING') return 'border-cyan-400/25 bg-cyan-500/10 text-cyan-100'
-  if (value === 'SUCCESS') return 'border-emerald-400/25 bg-emerald-500/10 text-emerald-100'
+  if (value === 'RUNNING') return 'border-cyan-400/25 bg-blue-500/10 text-blue-100'
+  if (value === 'SUCCESS') return 'border-emerald-400/25 bg-blue-500/10 text-emerald-100'
   if (value === 'FAILED') return 'border-red-400/25 bg-red-500/10 text-red-100'
-  return 'border-white/10 bg-white/[0.04] text-muted'
+  return 'border-white/10 bg-white/[0.04] text-zinc-300'
 }
 
 function mainStatusLabel(value?: string | null) {
@@ -96,7 +96,7 @@ export default function CompanySyncStatusCard({ status }: { status: any }) {
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <div className="text-lg font-semibold text-brand">Статус синхронизации</div>
-          <div className="mt-2 text-sm leading-6 text-muted">
+          <div className="mt-2 text-sm leading-6 text-zinc-300">
             Последний сбор отзывов и WEB-упоминаний без технических деталей.
           </div>
         </div>
@@ -120,7 +120,7 @@ export default function CompanySyncStatusCard({ status }: { status: any }) {
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="text-sm font-semibold text-brand">{row.title}</div>
-                  <div className="mt-1 text-xs text-muted">{row.description}</div>
+                  <div className="mt-1 text-xs text-zinc-300">{row.description}</div>
                 </div>
 
                 <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${statusClass(state)}`}>
@@ -128,11 +128,11 @@ export default function CompanySyncStatusCard({ status }: { status: any }) {
                 </span>
               </div>
 
-              <div className="mt-3 text-xs text-muted">
+              <div className="mt-3 text-xs text-zinc-300">
                 <div>Последний сбор: {formatDateTime(latestLog?.createdAt || latestLog?.finishedAt)}</div>
                 <div className="mt-1">{state === 'FAILED' ? 'Источник временно недоступен. Повторим позже.' : logSummary(latestLog)}</div>
                   {row.href ? (
-                    <a href={row.href} className="mt-3 inline-flex text-xs font-semibold text-cyan-200 hover:text-cyan-100">
+                    <a href={row.href} className="mt-3 inline-flex text-xs font-semibold text-blue-100 hover:text-blue-100">
                       Открыть вкладку Сеть →
                     </a>
                   ) : null}

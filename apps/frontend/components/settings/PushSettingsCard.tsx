@@ -216,35 +216,35 @@ export default function PushSettingsCard() {
   return (
     <Card className="p-5">
       <div className="text-base font-semibold text-brand">Push-уведомления</div>
-      <div className="mt-2 text-sm leading-6 text-muted">
+      <div className="mt-2 text-sm leading-6 text-zinc-300">
         Получайте уведомления о новых отзывах по выбранной тональности. На iPhone сайт должен быть открыт как PWA с экрана “Домой”.
       </div>
 
       <div className="mt-4 space-y-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm">
         <div className="flex items-center justify-between gap-3">
-          <span className="text-muted">Поддержка браузера</span>
+          <span className="text-zinc-300">Поддержка браузера</span>
           <span className="text-brand">{supportLabel}</span>
         </div>
 
         <div className="flex items-center justify-between gap-3">
-          <span className="text-muted">Разрешение</span>
+          <span className="text-zinc-300">Разрешение</span>
           <span className="text-brand">{permission}</span>
         </div>
 
         <div className="flex items-center justify-between gap-3">
-          <span className="text-muted">Статус</span>
-          <span className={subscribed ? 'text-emerald-300' : 'text-muted'}>
+          <span className="text-zinc-300">Статус</span>
+          <span className={subscribed ? 'text-emerald-300' : 'text-zinc-300'}>
             {subscribed ? 'Включено' : 'Не включено'}
           </span>
         </div>
 
         <div>
-          <div className="mb-2 text-xs uppercase tracking-[0.16em] text-muted">Оповещать о</div>
+          <div className="mb-2 text-xs uppercase tracking-[0.16em] text-zinc-300">Оповещать о</div>
           <div className="grid gap-2">
             {SENTIMENT_OPTIONS.map((option) => (
               <label
                 key={option.value}
-                className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-panel/50 px-3 py-2"
+                className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-[#050816]/50 px-3 py-2"
               >
                 <span className="text-brand">{option.label}</span>
                 <input
@@ -260,11 +260,11 @@ export default function PushSettingsCard() {
 
         {workspaces.length > 1 ? (
           <label className="block">
-            <span className="mb-1 block text-xs uppercase tracking-[0.16em] text-muted">Workspace</span>
+            <span className="mb-1 block text-xs uppercase tracking-[0.16em] text-zinc-300">Workspace</span>
             <select
               value={workspaceId}
               onChange={(event) => setWorkspaceId(event.target.value)}
-              className="h-11 w-full rounded-xl border border-line bg-panel px-3 text-sm text-brand outline-none"
+              className="h-11 w-full rounded-xl border border-line bg-[#050816] px-3 text-sm text-brand outline-none"
             >
               {workspaces.map((workspace) => (
                 <option key={workspace.id} value={workspace.id}>
@@ -277,7 +277,7 @@ export default function PushSettingsCard() {
       </div>
 
       {message ? (
-        <div className="mt-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-muted">
+        <div className="mt-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-zinc-300">
           {message}
         </div>
       ) : null}

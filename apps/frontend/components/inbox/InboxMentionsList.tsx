@@ -302,15 +302,15 @@ export default function InboxMentionsList({
         <div className="grid grid-cols-3 divide-x divide-white/10">
           <div className="px-3 py-4 text-center">
             <div className="text-2xl font-semibold text-brand">{ratingLabel}</div>
-            <div className="mt-1 text-[11px] leading-4 text-muted">Средний рейтинг</div>
+            <div className="mt-1 text-[11px] leading-4 text-zinc-300">Средний рейтинг</div>
           </div>
           <div className="px-3 py-4 text-center">
             <div className="text-2xl font-semibold text-brand">{ratedCount}</div>
-            <div className="mt-1 text-[11px] leading-4 text-muted">отзывов с оценкой</div>
+            <div className="mt-1 text-[11px] leading-4 text-zinc-300">отзывов с оценкой</div>
           </div>
           <div className="px-3 py-4 text-center">
             <div className="text-2xl font-semibold text-brand">{totalCount}</div>
-            <div className="mt-1 text-[11px] leading-4 text-muted">найдено</div>
+            <div className="mt-1 text-[11px] leading-4 text-zinc-300">найдено</div>
           </div>
         </div>
       </Card>
@@ -323,13 +323,13 @@ export default function InboxMentionsList({
             className={clsx(
               'inline-flex items-center gap-2 rounded-full border px-3 py-2 text-sm font-semibold transition-all',
               filtersOpen
-                ? 'border-cyan-400/30 bg-cyan-500/15 text-cyan-100'
-                : 'border-white/10 bg-white/[0.04] text-muted hover:text-brand'
+                ? 'border-cyan-400/30 bg-cyan-500/15 text-blue-100'
+                : 'border-white/10 bg-white/[0.04] text-zinc-300 hover:text-brand'
             )}
           >
             Фильтры
             {activeFilterCount > 0 ? (
-              <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-cyan-400/20 px-1.5 text-xs text-cyan-100">
+              <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-cyan-400/20 px-1.5 text-xs text-blue-100">
                 {activeFilterCount}
               </span>
             ) : null}
@@ -350,7 +350,7 @@ export default function InboxMentionsList({
                   sentiment === 'NEGATIVE'
                     ? 'border-red-400/30 bg-red-500/15 text-red-200'
                     : sentiment === 'POSITIVE'
-                      ? 'border-emerald-400/30 bg-emerald-500/15 text-emerald-200'
+                      ? 'border-emerald-400/30 bg-blue-500/15 text-emerald-200'
                       : 'border-amber-400/30 bg-amber-500/15 text-amber-100'
                 )}
               >
@@ -359,13 +359,13 @@ export default function InboxMentionsList({
             ) : null}
 
           {rating ? (
-            <button type="button" onClick={() => setRating(null)} className="rounded-full border border-cyan-400/30 bg-cyan-500/15 px-3 py-2 text-sm font-semibold text-cyan-100">
+            <button type="button" onClick={() => setRating(null)} className="rounded-full border border-cyan-400/30 bg-cyan-500/15 px-3 py-2 text-sm font-semibold text-blue-100">
               {rating} ★ ×
             </button>
           ) : null}
 
           {hasActiveFilters ? (
-            <button type="button" onClick={resetFilters} className="ml-auto text-sm font-medium text-cyan-300 hover:text-white">
+            <button type="button" onClick={resetFilters} className="ml-auto text-sm font-medium text-blue-300 hover:text-white">
               Сбросить все
             </button>
           ) : null}
@@ -374,10 +374,10 @@ export default function InboxMentionsList({
         {filtersOpen ? (
           <div className="mt-3 space-y-2 rounded-2xl border border-white/10 bg-black/10 p-3">
             <div>
-              <div className="mb-2 text-xs text-muted">Площадка</div>
+              <div className="mb-2 text-xs text-zinc-300">Площадка</div>
               <div className="flex flex-wrap gap-2">
                 {PLATFORM_FILTERS.map((item) => (
-                  <button key={item} type="button" onClick={() => setPlatform(platform === item ? '' : item)} className={clsx('rounded-full border px-3 py-1.5 text-xs font-semibold transition-all', platform === item ? 'border-cyan-400/30 bg-cyan-500/15 text-cyan-100' : 'border-white/10 bg-white/[0.04] text-muted hover:text-brand')}>
+                  <button key={item} type="button" onClick={() => setPlatform(platform === item ? '' : item)} className={clsx('rounded-full border px-3 py-1.5 text-xs font-semibold transition-all', platform === item ? 'border-cyan-400/30 bg-cyan-500/15 text-blue-100' : 'border-white/10 bg-white/[0.04] text-zinc-300 hover:text-brand')}>
                     {platformLabel(item)}
                   </button>
                 ))}
@@ -385,16 +385,16 @@ export default function InboxMentionsList({
             </div>
 
             <div>
-              <div className="mb-2 text-xs text-muted">Тональность</div>
+              <div className="mb-2 text-xs text-zinc-300">Тональность</div>
               <div className="flex flex-wrap gap-2">
                 {SENTIMENT_FILTERS.map((item) => (
                   <button key={item} type="button" onClick={() => setSentiment(sentiment === item ? '' : item)} className={clsx('rounded-full border px-3 py-1.5 text-xs font-semibold transition-all', sentiment === item
                         ? item === 'NEGATIVE'
                           ? 'border-red-400/30 bg-red-500/15 text-red-200'
                           : item === 'POSITIVE'
-                            ? 'border-emerald-400/30 bg-emerald-500/15 text-emerald-200'
+                            ? 'border-emerald-400/30 bg-blue-500/15 text-emerald-200'
                             : 'border-amber-400/30 bg-amber-500/15 text-amber-100'
-                        : 'border-white/10 bg-white/[0.04] text-muted hover:text-brand')}>
+                        : 'border-white/10 bg-white/[0.04] text-zinc-300 hover:text-brand')}>
                     {sentimentLabel(item)}
                   </button>
                 ))}
@@ -402,10 +402,10 @@ export default function InboxMentionsList({
             </div>
 
             <div>
-              <div className="mb-2 text-xs text-muted">Оценка</div>
+              <div className="mb-2 text-xs text-zinc-300">Оценка</div>
               <div className="flex flex-wrap gap-2">
                 {RATING_FILTERS.map((item) => (
-                  <button key={item} type="button" onClick={() => setRating(rating === item ? null : item)} className={clsx('rounded-full border px-3 py-1.5 text-xs font-semibold transition-all', rating === item ? 'border-cyan-400/30 bg-cyan-500/15 text-cyan-100' : 'border-white/10 bg-white/[0.04] text-muted hover:text-brand')}>
+                  <button key={item} type="button" onClick={() => setRating(rating === item ? null : item)} className={clsx('rounded-full border px-3 py-1.5 text-xs font-semibold transition-all', rating === item ? 'border-cyan-400/30 bg-cyan-500/15 text-blue-100' : 'border-white/10 bg-white/[0.04] text-zinc-300 hover:text-brand')}>
                     {item} ★
                   </button>
                 ))}
@@ -413,10 +413,10 @@ export default function InboxMentionsList({
             </div>
 
             <div>
-              <div className="mb-2 text-xs text-muted">Дата публикации</div>
+              <div className="mb-2 text-xs text-zinc-300">Дата публикации</div>
               <div className="grid grid-cols-2 gap-2">
-                <input type="date" value={from} onChange={(event) => setFrom(event.target.value)} className="h-10 rounded-xl border border-line bg-panel px-3 text-xs text-brand outline-none transition focus:border-cyan-400/50" />
-                <input type="date" value={to} onChange={(event) => setTo(event.target.value)} className="h-10 rounded-xl border border-line bg-panel px-3 text-xs text-brand outline-none transition focus:border-cyan-400/50" />
+                <input type="date" value={from} onChange={(event) => setFrom(event.target.value)} className="h-10 rounded-xl border border-line bg-[#050816] px-3 text-xs text-brand outline-none transition focus:border-cyan-400/50" />
+                <input type="date" value={to} onChange={(event) => setTo(event.target.value)} className="h-10 rounded-xl border border-line bg-[#050816] px-3 text-xs text-brand outline-none transition focus:border-cyan-400/50" />
               </div>
             </div>
           </div>
@@ -433,7 +433,7 @@ export default function InboxMentionsList({
 
           <Card className="p-5">
             <div className="mb-2 text-base font-semibold">Загружаем данные из Яндекс Карт</div>
-            <div className="text-sm text-muted">Первые отзывы появятся здесь автоматически.</div>
+            <div className="text-sm text-zinc-300">Первые отзывы появятся здесь автоматически.</div>
             <div className="mt-4 space-y-3">
               <div className="h-16 animate-pulse rounded-2xl bg-white/[0.04]" />
               <div className="h-16 animate-pulse rounded-2xl bg-white/[0.04]" />
@@ -482,7 +482,7 @@ export default function InboxMentionsList({
               </Button>
             </div>
           ) : totalCount > PAGE_LIMIT ? (
-            <div className="mt-4 text-center text-sm text-muted">
+            <div className="mt-4 text-center text-sm text-zinc-300">
               Показаны все упоминания: {Math.min(visibleCount || mentions.length, totalCount)} из {totalCount}
             </div>
           ) : null}

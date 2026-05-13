@@ -27,6 +27,27 @@ function formatShortDate(value?: string | Date | null) {
   return date.toLocaleDateString('ru-RU', { day: '2-digit', month: 'short' })
 }
 
+function getSourceUrl(mention: any) {
+  return mention?.url || mention?.sourceUrl || null
+}
+
+function getSourceHostname(sourceUrl?: string | null) {
+  if (!sourceUrl) return null
+
+  try {
+    return new URL(sourceUrl).hostname.replace(/^www\./, '')
+  } catch {
+    return null
+  }
+}
+
+function getFaviconUrl(sourceUrl?: string | null) {
+  const hostname = getSourceHostname(sourceUrl)
+  if (!hostname) return null
+
+  return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(hostname)}&sz=64`
+}
+
 function getMentionsCount(company: any) {
   return toNumber(company?._count?.mentions)
 }
@@ -168,29 +189,88 @@ function buildMentionTrend(mentions: any[]) {
   }
 
   const values = days.map((day) => map.get(day) || 0)
+  const smoothedValues = values.map((value, index) => {
+    const previous = values[index - 1] ?? value
+    const next = values[index + 1] ?? value
+    return Math.round((previous + value * 2 + next) / 4)
+  })
 
   return days.map((day, index) => ({
-    label: index % 7 === 0 || index === days.length - 1 ? formatShortDate(day) : '',
-    value: values[index]
+    date: day,
+    label: formatShortDate(day),
+    value: smoothedValues[index],
+    rawValue: values[index]
   }))
 }
 
-function buildRatingTrend(mentions: any[]) {
-  const ratings = mentions
-    .map(getMentionRating)
-    .filter((value): value is number => value !== null)
-    .slice()
-    .reverse()
+function buildRatingTrend(mentions: any[], averageRating: number | null) {
+  const days = buildLastDays()
+  const grouped = new Map(days.map((day) => [day, [] as number[]]))
 
-  const source = ratings.length >= 2
-    ? ratings.slice(-16)
-    : [3.8, 3.9, 4.1, 4.0, 4.2, 4.1, 4.3, 4.2, 4.0, 3.9, 3.8, 4.0, 3.9, 4.1, 4.2, 4.3]
+  for (const mention of mentions) {
+    const platform = String(mention?.platform || '').toUpperCase()
 
-  return source.map((value, index) => ({
-    label: index % 4 === 0 || index === source.length - 1 ? `${index + 1}` : '',
-    value
-  }))
+    if (!['YANDEX', 'TWOGIS'].includes(platform)) {
+      continue
+    }
+
+    const rating =
+      mention?.ratingValue !== null && mention?.ratingValue !== undefined
+        ? Number(mention.ratingValue)
+        : null
+
+    if (rating === null || !Number.isFinite(rating)) continue
+
+    const activityDateRaw =
+      mention?.discoveredAt || mention?.createdAt || mention?.publishedAt || null
+
+    const activityDate = activityDateRaw ? new Date(activityDateRaw) : null
+
+    if (!activityDate || Number.isNaN(activityDate.getTime())) continue
+
+    const key = activityDate.toISOString().slice(0, 10)
+
+    if (grouped.has(key)) {
+      grouped.get(key)?.push(rating)
+    }
+  }
+
+  let previousAverage = 4.1
+
+  const values = days.map((day) => {
+    const ratings = grouped.get(day) || []
+
+    if (!ratings.length) {
+      return previousAverage
+    }
+
+    const avg =
+      ratings.reduce((sum, value) => sum + value, 0) / ratings.length
+
+    previousAverage =
+      Number(((previousAverage * 0.82) + (avg * 0.18)).toFixed(2))
+
+    return previousAverage
+  })
+
+  return days.map((day, index) => {
+    const finalAverage =
+      averageRating !== null &&
+      Number.isFinite(averageRating) &&
+      index === days.length - 1
+        ? Number(averageRating.toFixed(2))
+        : values[index]
+
+    return {
+      date: day,
+      label: formatShortDate(day),
+      value: finalAverage,
+      rawValue: finalAverage
+    }
+  })
+    .filter((point): point is { date: string; label: string; value: number; rawValue: number } => point !== null)
 }
+
 
 function KpiCard({
   Icon,
@@ -331,35 +411,170 @@ export default async function DashboardPage() {
     { positive: 0, neutral: 0, negative: 0 }
   )
 
-  if (dashboardMentions.length === 0 && totalMentions > 0) {
-    sentimentCounts.positive = Math.round(totalMentions * 0.6)
-    sentimentCounts.neutral = Math.round(totalMentions * 0.28)
-    sentimentCounts.negative = Math.max(0, totalMentions - sentimentCounts.positive - sentimentCounts.neutral)
-  }
-
-  const negativeMentions = dashboardMentions.filter((mention) => getMentionSentiment(mention) === 'NEGATIVE')
   const latestMentions = dashboardMentions.slice(0, 3)
   const mentionTrend = buildMentionTrend(dashboardMentions)
   const mentionsInPeriod = mentionTrend.reduce((sum, point) => sum + point.value, 0)
-  const ratingTrend = buildRatingTrend(dashboardMentions)
+  const ratingTrend = buildRatingTrend(dashboardMentions, averageRating)
   const ratingLabel = averageRating === null || Number.isNaN(averageRating) ? '—' : `${averageRating.toFixed(1)} ★`
 
-  const attentionItems = [
-    {
-      title: negativeMentions.length > 0 ? 'Новый негативный отзыв' : 'Негатив под контролем',
-      description: negativeMentions.length > 0 ? 'Проверьте последние негативные упоминания.' : 'Критичных новых сигналов не найдено.',
-      meta: negativeMentions.length > 0 ? 'Высокий' : 'Низкий',
-      tone: negativeMentions.length > 0 ? 'red' : 'emerald',
+  type AttentionItem = {
+    title: string
+    description: string
+    meta: string
+    tone: 'red' | 'amber' | 'emerald'
+    href: string
+  }
+
+  const now = new Date()
+  const dayMs = 24 * 60 * 60 * 1000
+  const since24h = new Date(now.getTime() - dayMs)
+  const since7d = new Date(now.getTime() - dayMs * 7)
+  const since14d = new Date(now.getTime() - dayMs * 14)
+
+  const getDate = (mention: any) => {
+    const raw = getMentionActivityDate(mention)
+    const date = raw ? new Date(raw) : null
+    return date && !Number.isNaN(date.getTime()) ? date : null
+  }
+
+  const isAfter = (mention: any, date: Date) => {
+    const mentionDate = getDate(mention)
+    return Boolean(mentionDate && mentionDate >= date)
+  }
+
+  const recent24h = dashboardMentions.filter((mention) => isAfter(mention, since24h))
+  const recent7d = dashboardMentions.filter((mention) => isAfter(mention, since7d))
+  const previous7d = dashboardMentions.filter((mention) => {
+    const date = getDate(mention)
+    return Boolean(date && date >= since14d && date < since7d)
+  })
+
+  const getAverageRating = (mentions: any[]) => {
+    const ratings = mentions
+      .map(getMentionRating)
+      .filter((value): value is number => value !== null)
+
+    if (!ratings.length) return null
+
+    return ratings.reduce((sum, value) => sum + value, 0) / ratings.length
+  }
+
+  const negative24h = recent24h.filter((mention) => getMentionSentiment(mention) === 'NEGATIVE')
+  const negative7d = recent7d.filter((mention) => getMentionSentiment(mention) === 'NEGATIVE')
+  const previousNegative7d = previous7d.filter((mention) => getMentionSentiment(mention) === 'NEGATIVE')
+
+  const lowRating24h = recent24h.filter((mention) => {
+    const rating = getMentionRating(mention)
+    return rating !== null && rating <= 2
+  })
+
+  const web24h = recent24h.filter((mention) => String(mention?.platform || '').toUpperCase() === 'WEB')
+  const web7d = recent7d.filter((mention) => String(mention?.platform || '').toUpperCase() === 'WEB')
+
+  const unrated24h = recent24h.filter((mention) => getMentionRating(mention) === null)
+  const newUnprocessed24h = recent24h.filter((mention) => mention?.status === 'NEW')
+
+  const current7dRating = getAverageRating(recent7d)
+  const previous7dRating = getAverageRating(previous7d)
+  const ratingDrop =
+    current7dRating !== null && previous7dRating !== null
+      ? previous7dRating - current7dRating
+      : 0
+
+  const attentionItems: AttentionItem[] = []
+
+  if (ratingDrop >= 0.2) {
+    attentionItems.push({
+      title: 'Рейтинг начал снижаться',
+      description: `Средняя оценка за 7 дней ниже предыдущего периода на ${ratingDrop.toFixed(1)}★.`,
+      meta: ratingDrop >= 0.4 ? 'Высокий' : 'Средний',
+      tone: ratingDrop >= 0.4 ? 'red' : 'amber',
+      href: firstCompany ? `/companies/${firstCompany.id}/ratings` : '/companies'
+    })
+  }
+
+  if (negative24h.length > 0) {
+    attentionItems.push({
+      title: 'Новый негатив за сутки',
+      description: `За последние 24 часа найдено ${negative24h.length} негативных сигналов.`,
+      meta: negative24h.length >= 3 ? 'Высокий' : 'Средний',
+      tone: negative24h.length >= 3 ? 'red' : 'amber',
+      href: firstCompany ? `/companies/${firstCompany.id}/inbox?sentiment=NEGATIVE` : '/companies'
+    })
+  } else if (negative7d.length > previousNegative7d.length && negative7d.length >= 3) {
+    attentionItems.push({
+      title: 'Негатив растёт',
+      description: `За 7 дней негативных сигналов стало больше: ${negative7d.length} против ${previousNegative7d.length}.`,
+      meta: 'Средний',
+      tone: 'amber',
+      href: firstCompany ? `/companies/${firstCompany.id}/inbox?sentiment=NEGATIVE` : '/companies'
+    })
+  }
+
+  if (lowRating24h.length > 0) {
+    attentionItems.push({
+      title: 'Появились низкие оценки',
+      description: `${lowRating24h.length} новых отзывов имеют рейтинг 1–2★ и требуют реакции.`,
+      meta: 'Высокий',
+      tone: 'red',
       href: firstCompany ? `/companies/${firstCompany.id}/inbox` : '/companies'
-    },
-    {
-      title: 'Синхронизация Yandex',
-      description: totalSources > 0 ? 'Источник активен и готов к обновлениям.' : 'Добавьте источник для автоматического сбора.',
-      meta: totalSources > 0 ? 'Низкий' : 'Высокий',
-      tone: totalSources > 0 ? 'emerald' : 'amber',
+    })
+  }
+
+  if (web24h.length >= 5 || web7d.length >= 20) {
+    attentionItems.push({
+      title: 'Активность во внешней сети',
+      description: `WEB-упоминаний: ${web24h.length} за сутки и ${web7d.length} за 7 дней.`,
+      meta: web24h.length >= 10 ? 'Средний' : 'Низкий',
+      tone: web24h.length >= 10 ? 'amber' : 'emerald',
+      href: firstCompany ? `/companies/${firstCompany.id}/web` : '/companies'
+    })
+  }
+
+  if (newUnprocessed24h.length >= 5) {
+    attentionItems.push({
+      title: 'Новые сигналы без обработки',
+      description: `${newUnprocessed24h.length} новых упоминаний ещё не переведены в обработанные.`,
+      meta: 'Средний',
+      tone: 'amber',
+      href: firstCompany ? `/companies/${firstCompany.id}/inbox` : '/companies'
+    })
+  }
+
+  if (unrated24h.length >= 5 && attentionItems.length < 4) {
+    attentionItems.push({
+      title: 'Упоминания без оценки',
+      description: `${unrated24h.length} свежих сигналов требуют ручной проверки тональности.`,
+      meta: 'Низкий',
+      tone: 'emerald',
+      href: firstCompany ? `/companies/${firstCompany.id}/inbox` : '/companies'
+    })
+  }
+
+  if (recent24h.length === 0 && totalSources > 0) {
+    attentionItems.push({
+      title: 'Нет новых сигналов за сутки',
+      description: 'Источники подключены, но за последние 24 часа новых упоминаний не было.',
+      meta: 'Низкий',
+      tone: 'emerald',
       href: firstCompany ? `/companies/${firstCompany.id}` : '/companies'
-    }
-  ]
+    })
+  }
+
+  if (attentionItems.length === 0) {
+    attentionItems.push({
+      title: 'Критичных сигналов нет',
+      description: 'Негатив, падение рейтинга и резкие всплески не обнаружены.',
+      meta: 'Низкий',
+      tone: 'emerald',
+      href: firstCompany ? `/companies/${firstCompany.id}/inbox` : '/companies'
+    })
+  }
+
+  attentionItems.sort((a, b) => {
+    const priority = { Высокий: 3, Средний: 2, Низкий: 1 } as Record<string, number>
+    return (priority[b.meta] || 0) - (priority[a.meta] || 0)
+  })
 
   return (
     <div className="relative">
@@ -447,39 +662,60 @@ export default async function DashboardPage() {
         {latestMentions.length > 0 ? (
           <div className="space-y-3">
             {latestMentions.map((mention: any) => {
-              const sentiment = getMentionSentiment(mention)
+                const sentiment = getMentionSentiment(mention)
+                const sourceUrl = getSourceUrl(mention)
+                const sourceHostname = getSourceHostname(sourceUrl)
+                const faviconUrl = getFaviconUrl(sourceUrl)
+                const title = getMentionTitle(mention)
+                const sourceLabel = sourceHostname || mention.author || getMentionSourceName(mention)
 
-              return (
-                <Link
-                  key={mention.id}
-                  href={firstCompany ? `/companies/${firstCompany.id}/inbox` : '/companies'}
-                  className="group grid gap-3 rounded-[22px] border border-white/10 bg-white/[0.025] p-4 transition hover:border-cyan-400/20 hover:bg-cyan-500/[0.04] sm:grid-cols-[52px_1fr_auto] sm:items-center"
-                >
-                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.05] text-xs font-bold text-white shadow-[0_0_22px_rgba(255,255,255,0.04)]">
-                    {getPlatformLabel(mention.platform)}
-                  </div>
+                return (
+                  <Link
+                    key={mention.id}
+                    href={firstCompany ? `/companies/${firstCompany.id}/inbox` : '/companies'}
+                    className="group grid gap-3 rounded-[22px] border border-white/10 bg-white/[0.025] p-4 transition hover:border-cyan-400/20 hover:bg-cyan-500/[0.04] sm:grid-cols-[52px_1fr_auto] sm:items-center"
+                  >
+                    <div
+                      title={sourceHostname || getPlatformLabel(mention.platform)}
+                      className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.05] text-xs font-bold text-white shadow-[0_0_22px_rgba(255,255,255,0.04)]"
+                    >
+                      {faviconUrl ? (
+                        <img
+                          src={faviconUrl}
+                          alt=""
+                          width={24}
+                          height={24}
+                          loading="lazy"
+                          referrerPolicy="no-referrer"
+                          className="h-6 w-6 rounded-md"
+                        />
+                      ) : (
+                        <span>{sourceHostname ? sourceHostname.slice(0, 1).toUpperCase() : getPlatformLabel(mention.platform)}</span>
+                      )}
+                    </div>
 
-                  <div className="min-w-0">
-                    <div className="flex min-w-0 items-center gap-2">
-                      <div className="truncate text-sm font-semibold text-white">
-                        {mention.author || getMentionSourceName(mention)}
+                    <div className="min-w-0">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <div className="truncate text-sm font-semibold text-white">
+                          {title}
+                        </div>
+                        <ExternalLink className="h-3.5 w-3.5 shrink-0 text-white/25 transition group-hover:text-cyan-300" />
                       </div>
-                      <ExternalLink className="h-3.5 w-3.5 shrink-0 text-white/25 transition group-hover:text-cyan-300" />
+                      <div className="mt-1 line-clamp-2 text-sm leading-5 text-slate-400">
+                        <span className="font-medium text-slate-300">{sourceLabel}</span>
+                        {mention.content ? ` · ${truncate(mention.content, 120)}` : ''}
+                      </div>
                     </div>
-                    <div className="mt-1 line-clamp-2 text-sm leading-5 text-slate-400">
-                      {truncate(mention.content, 132)}
-                    </div>
-                  </div>
 
-                  <div className="flex items-center justify-between gap-3 sm:flex-col sm:items-end">
-                    <span className={`inline-flex rounded-full border px-3 py-1.5 text-xs font-semibold ${sentimentTone(sentiment)}`}>
-                      {sentimentLabel(sentiment)}
-                    </span>
-                    <span className="text-xs text-slate-500">{formatShortDate(mention.publishedAt)}</span>
-                  </div>
-                </Link>
-              )
-            })}
+                    <div className="flex items-center justify-between gap-3 sm:flex-col sm:items-end">
+                      <span className={`inline-flex rounded-full border px-3 py-1.5 text-xs font-semibold ${sentimentTone(sentiment)}`}>
+                        {sentimentLabel(sentiment)}
+                      </span>
+                      <span className="text-xs text-slate-500">{formatShortDate(mention.publishedAt)}</span>
+                    </div>
+                  </Link>
+                )
+              })}
           </div>
         ) : (
           <EmptyState
@@ -489,51 +725,87 @@ export default async function DashboardPage() {
         )}
       </Card>
 
-      <Card className="mt-6 overflow-hidden rounded-[30px] border-white/10 bg-[#0b111c]/92 p-5 shadow-[0_22px_70px_rgba(0,0,0,0.34)] sm:p-6">
-        <div className="mb-5 flex items-center gap-3">
-          <span className="flex h-10 w-10 items-center justify-center rounded-2xl border border-amber-400/20 bg-amber-500/10 text-amber-200">
-            <AlertTriangle className="h-5 w-5" />
-          </span>
-          <div>
-            <div className="text-xl font-semibold tracking-[-0.03em] text-white">Что требует внимания</div>
-            <div className="mt-1 text-sm leading-6 text-slate-400">Приоритетные риски и проверки на сегодня.</div>
+        <Card className="mt-6 overflow-hidden rounded-[30px] border-white/10 bg-[radial-gradient(circle_at_0%_0%,rgba(251,191,36,0.10),transparent_34%),#0b111c] p-5 shadow-[0_22px_70px_rgba(0,0,0,0.34),0_0_38px_rgba(251,191,36,0.05)] sm:p-6">
+          <div className="mb-5 flex items-start justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <span className="flex h-10 w-10 items-center justify-center rounded-2xl border border-amber-400/25 bg-amber-500/10 text-amber-200 shadow-[0_0_24px_rgba(251,191,36,0.10)]">
+                <AlertTriangle className="h-5 w-5" />
+              </span>
+              <div>
+                <div className="text-xl font-semibold tracking-[-0.03em] text-white">Что требует внимания</div>
+                <div className="mt-1 text-sm leading-6 text-slate-400">Живые сигналы, риски и проверки по мониторингу.</div>
+              </div>
+            </div>
+
+            <span className="hidden rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs font-semibold text-slate-300 sm:inline-flex">
+              {attentionItems.length} события
+            </span>
           </div>
-        </div>
 
-        <div className="grid gap-3 xl:grid-cols-2">
-          {attentionItems.map((item) => {
-            const isRisk = item.tone === 'red' || item.tone === 'amber'
-            const Icon = isRisk ? AlertTriangle : ShieldCheck
-            const toneClass = isRisk
-              ? 'border-amber-400/20 bg-amber-500/[0.08] text-amber-100'
-              : 'border-emerald-400/20 bg-emerald-500/[0.08] text-emerald-100'
+          <div className="space-y-3">
+            {attentionItems.map((item) => {
+              const isHigh = item.meta === 'Высокий'
+              const isMedium = item.meta === 'Средний'
+              const isRisk = item.tone === 'red' || item.tone === 'amber'
+              const Icon = isRisk ? AlertTriangle : ShieldCheck
 
-            return (
-              <Link
-                key={item.title}
-                href={item.href}
-                className="group rounded-[24px] border border-white/10 bg-white/[0.03] p-4 transition hover:border-cyan-400/25 hover:bg-cyan-500/[0.04]"
-              >
-                <div className="flex items-start gap-3">
-                  <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border ${toneClass}`}>
-                    <Icon className="h-5 w-5" />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="truncate text-sm font-semibold text-white">{item.title}</div>
-                      <ArrowRight className="h-4 w-4 shrink-0 text-white/25 transition group-hover:text-cyan-300" />
-                    </div>
-                    <div className="mt-1 text-sm leading-6 text-slate-400">{item.description}</div>
-                    <div className={`mt-3 inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${toneClass}`}>
-                      Приоритет: {item.meta}
+              const shellClass = isHigh
+                ? 'border-red-400/20 bg-red-500/[0.055] shadow-[inset_3px_0_0_rgba(248,113,113,0.70),0_0_34px_rgba(248,113,113,0.06)] hover:border-red-300/30'
+                : isMedium
+                  ? 'border-amber-400/20 bg-amber-500/[0.055] shadow-[inset_3px_0_0_rgba(251,191,36,0.70),0_0_34px_rgba(251,191,36,0.05)] hover:border-amber-300/30'
+                  : 'border-emerald-400/20 bg-emerald-500/[0.055] shadow-[inset_3px_0_0_rgba(52,211,153,0.70),0_0_34px_rgba(52,211,153,0.05)] hover:border-emerald-300/30'
+
+              const iconClass = isHigh
+                ? 'border-red-400/25 bg-red-500/10 text-red-200'
+                : isMedium
+                  ? 'border-amber-400/25 bg-amber-500/10 text-amber-200'
+                  : 'border-emerald-400/25 bg-emerald-500/10 text-emerald-200'
+
+              const badgeClass = isHigh
+                ? 'border-red-400/25 bg-red-500/10 text-red-100'
+                : isMedium
+                  ? 'border-amber-400/25 bg-amber-500/10 text-amber-100'
+                  : 'border-emerald-400/25 bg-emerald-500/10 text-emerald-100'
+
+              return (
+                <Link
+                  key={item.title}
+                  href={item.href}
+                  className={`group block rounded-[24px] border p-4 transition hover:bg-white/[0.045] ${shellClass}`}
+                >
+                  <div className="flex items-start gap-3">
+                    <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border ${iconClass}`}>
+                      <Icon className="h-5 w-5" />
+                    </span>
+
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-semibold text-white">{item.title}</div>
+                          <div className="mt-1 line-clamp-2 text-sm leading-5 text-slate-400">{item.description}</div>
+                        </div>
+
+                        <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-white/25 transition group-hover:translate-x-0.5 group-hover:text-cyan-300" />
+                      </div>
+
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${badgeClass}`}>
+                          Приоритет: {item.meta}
+                        </span>
+                        <span className="inline-flex rounded-full border border-white/10 bg-white/[0.035] px-3 py-1 text-xs font-medium text-slate-400">
+                          Сегодня
+                        </span>
+                        <span className="inline-flex rounded-full border border-cyan-400/15 bg-cyan-500/[0.06] px-3 py-1 text-xs font-medium text-cyan-100">
+                          Открыть проверку
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              </Link>
-            )
-          })}
-        </div>
-      </Card>
+                </Link>
+              )
+            })}
+          </div>
+        </Card>
 
       <Card className="mt-6 overflow-hidden rounded-[30px] border-white/10 bg-[radial-gradient(circle_at_0%_0%,rgba(34,211,238,0.10),transparent_35%),#0b111c] p-5 shadow-[0_22px_70px_rgba(0,0,0,0.34)] sm:p-6">
         <div className="mb-5 flex items-center justify-between gap-3">

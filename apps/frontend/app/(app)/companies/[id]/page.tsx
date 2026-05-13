@@ -44,7 +44,7 @@ function sentimentLabel(value: string) {
 }
 
 function sentimentClass(value: string) {
-  if (value === 'POSITIVE') return 'border-emerald-400/30 bg-emerald-500/15 text-emerald-200'
+  if (value === 'POSITIVE') return 'border-emerald-400/30 bg-blue-500/15 text-emerald-200'
   if (value === 'NEGATIVE') return 'border-red-400/30 bg-red-500/15 text-red-200'
   if (value === 'NEUTRAL') return 'border-amber-400/30 bg-amber-500/15 text-amber-100'
   return 'border-white/10 bg-white/10 text-brand'
@@ -134,10 +134,10 @@ export default async function CompanyPage({ params }: { params: { id: string } }
     <div className="space-y-4 pb-28">
       <CompanyEditPopup company={company} yandexUrl={primarySourceUrl} twoGisUrl={twoGisSourceUrl} />
 
-        <Card className="overflow-hidden border-cyan-400/15 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.16),transparent_34%),linear-gradient(135deg,rgba(15,23,42,0.92),rgba(2,6,23,0.96))] p-5 shadow-[0_0_48px_rgba(34,211,238,0.08)]">
+        <Card className="overflow-hidden border-cyan-400/15 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.16),transparent_34%),linear-gradient(135deg,rgba(15,23,42,0.92),rgba(2,6,23,0.96))] p-5 shadow-[0_0_48px_rgba(59,130,246,0.12)]">
           <div className="flex flex-col gap-5">
             <div className="flex items-start gap-4">
-                <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-3xl border border-cyan-400/20 bg-cyan-400/10 text-2xl font-semibold text-cyan-100 shadow-[0_0_28px_rgba(34,211,238,0.16)]">
+                <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-3xl border border-violet-400/40 bg-cyan-400/10 text-2xl font-semibold text-blue-100 shadow-[0_0_28px_rgba(34,211,238,0.16)]">
                   {company.logoUrl ? (
                     <img src={company.logoUrl} alt={company.name || "Логотип компании"} className="h-full w-full object-cover" />
                   ) : (
@@ -147,34 +147,34 @@ export default async function CompanyPage({ params }: { params: { id: string } }
 
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="rounded-full border border-emerald-400/20 bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-200">live мониторинг</span>
-                  <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-xs text-muted">{connectedSources || 0} источника</span>
+                  <span className="rounded-full border border-violet-400/40 bg-blue-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-200">live мониторинг</span>
+                  <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-xs text-zinc-300">{connectedSources || 0} источника</span>
                 </div>
 
                 <div className="mt-3 truncate text-2xl font-semibold text-brand">{company.name || 'Карточка компании'}</div>
-                <div className="mt-1 text-sm leading-6 text-muted">Сводка по отзывам, упоминаниям и сигналам, которые требуют внимания.</div>
+                <div className="mt-1 text-sm leading-6 text-zinc-300">Сводка по отзывам, упоминаниям и сигналам, которые требуют внимания.</div>
               </div>
             </div>
 
             <div className="grid grid-cols-3 overflow-hidden rounded-3xl border border-white/10 bg-black/15">
               <div className="p-4">
-                <div className="text-2xl font-semibold text-cyan-100">{mentionsTotal}</div>
-                <div className="mt-1 text-xs text-muted">упоминаний</div>
+                <div className="text-2xl font-semibold text-blue-100">{mentionsTotal}</div>
+                <div className="mt-1 text-xs text-zinc-300">упоминаний</div>
               </div>
               <div className="border-l border-white/10 p-4">
                 <div className="text-2xl font-semibold text-emerald-100">{getRatingLabel(averageRating)}</div>
-                <div className="mt-1 text-xs text-muted">{ratedCount} с оценкой</div>
+                <div className="mt-1 text-xs text-zinc-300">{ratedCount} с оценкой</div>
               </div>
               <div className="border-l border-white/10 p-4">
                 <div className="text-2xl font-semibold text-red-100">{negativeTotal}</div>
-                <div className="mt-1 text-xs text-muted">внимания</div>
+                <div className="mt-1 text-xs text-zinc-300">внимания</div>
               </div>
             </div>
 
             <div className="flex flex-col gap-3 rounded-3xl border border-red-400/15 bg-red-500/[0.06] p-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <div className="text-sm font-semibold text-red-100">{recentNegativeTotal} новых негативных сигналов за 7 дней</div>
-                <div className="mt-1 text-xs text-muted">Последний негатив: {formatShortDate(lastNegative?.publishedAt)}</div>
+                <div className="mt-1 text-xs text-zinc-300">Последний негатив: {formatShortDate(lastNegative?.publishedAt)}</div>
               </div>
 
               <Link href={`/companies/${company.id}/inbox?sentiment=NEGATIVE`} className="group relative inline-flex h-16 w-full items-center justify-center overflow-hidden rounded-[28px] border border-red-400/25 bg-red-500/10 px-4 text-sm font-semibold text-red-100 transition hover:bg-red-500/20">
@@ -190,7 +190,7 @@ export default async function CompanyPage({ params }: { params: { id: string } }
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <div className="text-xl font-semibold tracking-[-0.035em] text-white">Ручное обновление</div>
-              <div className="mt-2 text-sm leading-6 text-muted">
+              <div className="mt-2 text-sm leading-6 text-zinc-300">
                 Запустит сбор упоминаний, отзывов и рейтинга по подключенным источникам.
               </div>
             </div>
@@ -205,17 +205,17 @@ export default async function CompanyPage({ params }: { params: { id: string } }
         <div className="grid gap-4 lg:grid-cols-[1fr_1fr_1fr_auto] lg:items-center">
           <div>
             <div className="text-2xl font-semibold text-orange-200">{negativeTotal}</div>
-            <div className="text-sm text-muted">негативных отзывов</div>
+            <div className="text-sm text-zinc-300">негативных отзывов</div>
           </div>
 
           <div>
             <div className="text-2xl font-semibold text-orange-200">{recentNegativeTotal}</div>
-            <div className="text-sm text-muted">новых за последние 7 дней</div>
+            <div className="text-sm text-zinc-300">новых за последние 7 дней</div>
           </div>
 
           <div>
             <div className="text-2xl font-semibold text-orange-200">{formatShortDate(lastNegative?.publishedAt)}</div>
-            <div className="text-sm text-muted">последний негатив</div>
+            <div className="text-sm text-zinc-300">последний негатив</div>
           </div>
 
           <Link
@@ -231,7 +231,7 @@ export default async function CompanyPage({ params }: { params: { id: string } }
         <div className="mb-4 text-lg font-semibold text-brand">Источники мониторинга</div>
 
         <div className="space-y-3">
-          <div className="group relative overflow-hidden rounded-[28px] border border-cyan-300/15 bg-[radial-gradient(circle_at_0%_0%,rgba(34,211,238,0.10),transparent_36%),linear-gradient(135deg,rgba(255,255,255,0.055),rgba(255,255,255,0.018))] shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_0_36px_rgba(34,211,238,0.055)] transition hover:border-cyan-300/30 hover:bg-cyan-400/[0.045] p-4">
+          <div className="group relative overflow-hidden rounded-[28px] border border-cyan-300/15 bg-[radial-gradient(circle_at_0%_0%,rgba(59,130,246,0.14),transparent_36%),linear-gradient(135deg,rgba(255,255,255,0.055),rgba(255,255,255,0.018))] shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_0_36px_rgba(34,211,238,0.055)] transition hover:border-blue-300/30 hover:bg-cyan-400/[0.045] p-4">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
@@ -239,8 +239,8 @@ export default async function CompanyPage({ params }: { params: { id: string } }
                   <span
                     className={
                       hasYandex
-                        ? 'rounded-full border border-emerald-400/20 bg-emerald-500/10 px-2 py-0.5 text-xs text-emerald-200'
-                        : 'rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-xs text-muted'
+                        ? 'rounded-full border border-violet-400/40 bg-blue-500/10 px-2 py-0.5 text-xs text-emerald-200'
+                        : 'rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-xs text-zinc-300'
                     }
                   >
                     {hasYandex ? 'Подключено' : 'Не подключено'}
@@ -256,12 +256,12 @@ export default async function CompanyPage({ params }: { params: { id: string } }
                     href={primarySourceUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="mt-2 block truncate text-sm break-all text-sm font-medium text-cyan-200/90 transition hover:text-cyan-100 hover:text-cyan-200"
+                    className="mt-2 block truncate text-sm break-all text-sm font-medium text-blue-100/90 transition hover:text-blue-100 hover:text-blue-100"
                   >
                     {primarySourceUrl}
                   </a>
                 ) : (
-                  <div className="mt-2 text-sm text-muted">Добавьте ссылку на Яндекс Карты в данных компании.</div>
+                  <div className="mt-2 text-sm text-zinc-300">Добавьте ссылку на Яндекс Карты в данных компании.</div>
                 )}
               </div>
 
@@ -288,7 +288,7 @@ export default async function CompanyPage({ params }: { params: { id: string } }
             </div>
           </div>
 
-            <div className="group relative overflow-hidden rounded-[28px] border border-cyan-300/15 bg-[radial-gradient(circle_at_0%_0%,rgba(34,211,238,0.10),transparent_36%),linear-gradient(135deg,rgba(255,255,255,0.055),rgba(255,255,255,0.018))] shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_0_36px_rgba(34,211,238,0.055)] transition hover:border-cyan-300/30 hover:bg-cyan-400/[0.045] p-4">
+            <div className="group relative overflow-hidden rounded-[28px] border border-cyan-300/15 bg-[radial-gradient(circle_at_0%_0%,rgba(59,130,246,0.14),transparent_36%),linear-gradient(135deg,rgba(255,255,255,0.055),rgba(255,255,255,0.018))] shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_0_36px_rgba(34,211,238,0.055)] transition hover:border-blue-300/30 hover:bg-cyan-400/[0.045] p-4">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
@@ -296,8 +296,8 @@ export default async function CompanyPage({ params }: { params: { id: string } }
                     <span
                       className={
                         hasTwoGis
-                          ? 'rounded-full border border-emerald-400/20 bg-emerald-500/10 px-2 py-0.5 text-xs text-emerald-200'
-                          : 'rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-xs text-muted'
+                          ? 'rounded-full border border-violet-400/40 bg-blue-500/10 px-2 py-0.5 text-xs text-emerald-200'
+                          : 'rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-xs text-zinc-300'
                       }
                     >
                       {hasTwoGis ? 'Подключено' : 'Не подключено'}
@@ -313,12 +313,12 @@ export default async function CompanyPage({ params }: { params: { id: string } }
                       href={twoGisSourceUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="mt-2 block truncate text-sm break-all text-sm font-medium text-cyan-200/90 transition hover:text-cyan-100 hover:text-cyan-200"
+                      className="mt-2 block truncate text-sm break-all text-sm font-medium text-blue-100/90 transition hover:text-blue-100 hover:text-blue-100"
                     >
                       {twoGisSourceUrl}
                     </a>
                   ) : (
-                    <div className="mt-2 text-sm text-muted">Добавьте ссылку на 2GIS в данных компании.</div>
+                    <div className="mt-2 text-sm text-zinc-300">Добавьте ссылку на 2GIS в данных компании.</div>
                   )}
                 </div>
 
@@ -350,57 +350,57 @@ export default async function CompanyPage({ params }: { params: { id: string } }
       <Card className="mt-6 p-5">
         <div className="mb-4 flex items-center justify-between gap-3">
           <div className="text-xl font-semibold tracking-[-0.035em] text-white">Данные компании</div>
-          <a href="#company-edit" className="text-sm break-all text-sm font-medium text-cyan-200/90 transition hover:text-cyan-100 hover:text-cyan-200">
+          <a href="#company-edit" className="text-sm break-all text-sm font-medium text-blue-100/90 transition hover:text-blue-100 hover:text-blue-100">
             Редактировать
           </a>
         </div>
 
           <div className="space-y-2 text-sm">
             <div className="grid grid-cols-[120px_1fr] gap-3">
-              <span className="text-muted">Название:</span>
+              <span className="text-zinc-300">Название:</span>
               <span className="text-brand">{company.name || 'Не указано'}</span>
             </div>
 
             <div className="grid grid-cols-[120px_1fr] gap-3">
-              <span className="text-muted">Сайт:</span>
+              <span className="text-zinc-300">Сайт:</span>
               {companyWebsite ? (
-                <a href={companyWebsite} target="_blank" rel="noopener noreferrer" className="truncate break-all text-sm font-medium text-cyan-200/90 transition hover:text-cyan-100 hover:text-cyan-200">
+                <a href={companyWebsite} target="_blank" rel="noopener noreferrer" className="truncate break-all text-sm font-medium text-blue-100/90 transition hover:text-blue-100 hover:text-blue-100">
                   {companyWebsite}
                 </a>
               ) : (
-                <span className="text-muted">Не заполнено</span>
+                <span className="text-zinc-300">Не заполнено</span>
               )}
             </div>
 
             <div className="grid grid-cols-[120px_1fr] gap-3">
-              <span className="text-muted">Город:</span>
-              <span className={company.city ? 'text-brand' : 'text-muted'}>{company.city || 'Не заполнено'}</span>
+              <span className="text-zinc-300">Город:</span>
+              <span className={company.city ? 'text-brand' : 'text-zinc-300'}>{company.city || 'Не заполнено'}</span>
             </div>
 
             <div className="grid grid-cols-[120px_1fr] gap-3">
-              <span className="text-muted">Сфера:</span>
-              <span className={company.industry ? 'text-brand' : 'text-muted'}>{company.industry || 'Не заполнено'}</span>
+              <span className="text-zinc-300">Сфера:</span>
+              <span className={company.industry ? 'text-brand' : 'text-zinc-300'}>{company.industry || 'Не заполнено'}</span>
             </div>
 
             <div className="grid grid-cols-[120px_1fr] gap-3">
-              <span className="text-muted">Yandex Maps:</span>
+              <span className="text-zinc-300">Yandex Maps:</span>
               {primarySourceUrl ? (
-                <a href={primarySourceUrl} target="_blank" rel="noopener noreferrer" className="truncate break-all text-sm font-medium text-cyan-200/90 transition hover:text-cyan-100 hover:text-cyan-200">
+                <a href={primarySourceUrl} target="_blank" rel="noopener noreferrer" className="truncate break-all text-sm font-medium text-blue-100/90 transition hover:text-blue-100 hover:text-blue-100">
                   {primarySourceUrl}
                 </a>
               ) : (
-                <span className="text-muted">Не заполнено</span>
+                <span className="text-zinc-300">Не заполнено</span>
               )}
             </div>
 
             <div className="grid grid-cols-[120px_1fr] gap-3">
-              <span className="text-muted">2GIS:</span>
+              <span className="text-zinc-300">2GIS:</span>
               {twoGisSourceUrl ? (
-                <a href={twoGisSourceUrl} target="_blank" rel="noopener noreferrer" className="truncate break-all text-sm font-medium text-cyan-200/90 transition hover:text-cyan-100 hover:text-cyan-200">
+                <a href={twoGisSourceUrl} target="_blank" rel="noopener noreferrer" className="truncate break-all text-sm font-medium text-blue-100/90 transition hover:text-blue-100 hover:text-blue-100">
                   {twoGisSourceUrl}
                 </a>
               ) : (
-                <span className="text-muted">Не заполнено</span>
+                <span className="text-zinc-300">Не заполнено</span>
               )}
             </div>
           </div>
@@ -411,7 +411,7 @@ export default async function CompanyPage({ params }: { params: { id: string } }
           <div className="text-xl font-semibold tracking-[-0.035em] text-white">Последние упоминания</div>
           <Link
             href={`/companies/${company.id}/inbox`}
-            className="inline-flex h-9 items-center justify-center rounded-xl border border-cyan-400/30 px-3 text-sm break-all text-sm font-medium text-cyan-200/90 transition hover:text-cyan-100 transition hover:bg-cyan-400/10"
+            className="inline-flex h-9 items-center justify-center rounded-xl border border-cyan-400/30 px-3 text-sm break-all text-sm font-medium text-blue-100/90 transition hover:text-blue-100 transition hover:bg-cyan-400/10"
           >
             Открыть Inbox
           </Link>
@@ -427,7 +427,7 @@ export default async function CompanyPage({ params }: { params: { id: string } }
                   : null
 
               return (
-                <div key={mention.id} className="group relative overflow-hidden rounded-[28px] border border-cyan-300/15 bg-[radial-gradient(circle_at_0%_0%,rgba(34,211,238,0.10),transparent_36%),linear-gradient(135deg,rgba(255,255,255,0.055),rgba(255,255,255,0.018))] shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_0_36px_rgba(34,211,238,0.055)] transition hover:border-cyan-300/30 hover:bg-cyan-400/[0.045] p-4">
+                <div key={mention.id} className="group relative overflow-hidden rounded-[28px] border border-cyan-300/15 bg-[radial-gradient(circle_at_0%_0%,rgba(59,130,246,0.14),transparent_36%),linear-gradient(135deg,rgba(255,255,255,0.055),rgba(255,255,255,0.018))] shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_0_36px_rgba(34,211,238,0.055)] transition hover:border-blue-300/30 hover:bg-cyan-400/[0.045] p-4">
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
@@ -446,7 +446,7 @@ export default async function CompanyPage({ params }: { params: { id: string } }
                       <div className="mt-2 text-sm leading-6 text-brand">“{truncate(mention.content)}”</div>
                     </div>
 
-                    <div className="shrink-0 text-left text-xs text-muted lg:text-right">
+                    <div className="shrink-0 text-left text-xs text-zinc-300 lg:text-right">
                       <div>{mention.author || 'Автор неизвестен'}</div>
                       <div className="mt-1">{formatShortDate(mention.publishedAt)}</div>
                     </div>

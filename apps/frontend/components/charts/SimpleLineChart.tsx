@@ -4,7 +4,7 @@ export default function SimpleLineChart({
   points: { label: string; value: number }[]
 }) {
   if (!points.length) {
-    return <div className="text-sm text-muted">No data</div>
+    return <div className="text-sm text-zinc-300">No data</div>
   }
 
   const width = 100
@@ -26,7 +26,7 @@ export default function SimpleLineChart({
       <svg viewBox={`0 0 ${width} ${height}`} className="h-32 w-full">
         <path d={path} fill="none" stroke="currentColor" strokeWidth="2" className="text-white/80" />
       </svg>
-      <div className="mt-3 flex justify-between gap-2 text-xs text-muted">
+      <div className="mt-3 flex justify-between gap-2 text-xs text-zinc-300">
         {points.map((point) => (
           <span key={point.label}>{point.label}</span>
         ))}

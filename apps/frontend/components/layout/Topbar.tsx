@@ -49,8 +49,8 @@ function navTone(tone: string, active: boolean) {
 
   if (tone === 'emerald') {
     return active
-      ? 'border-emerald-400/40 bg-emerald-500/[0.16] shadow-[0_0_34px_rgba(16,185,129,0.22)]'
-      : 'border-emerald-400/15 bg-emerald-500/[0.055] hover:border-emerald-400/30 hover:bg-emerald-500/[0.10]'
+      ? 'border-emerald-400/40 bg-emerald-500/[0.16] shadow-[0_0_34px_rgba(99,102,241,0.34)]'
+      : 'border-emerald-400/15 bg-emerald-500/[0.055] hover:border-blue-400/35 hover:bg-emerald-500/[0.10]'
   }
 
   return active
@@ -60,8 +60,8 @@ function navTone(tone: string, active: boolean) {
 
 function iconTone(tone: string, active: boolean) {
   if (tone === 'violet') return active ? 'border-violet-300/35 bg-violet-300/15 text-violet-100' : 'border-violet-300/15 bg-white/[0.04] text-violet-200'
-  if (tone === 'emerald') return active ? 'border-emerald-300/35 bg-emerald-300/15 text-emerald-100' : 'border-emerald-300/15 bg-white/[0.04] text-emerald-200'
-  return active ? 'border-cyan-300/35 bg-cyan-300/15 text-cyan-100' : 'border-cyan-300/15 bg-white/[0.04] text-cyan-200'
+  if (tone === 'emerald') return active ? 'border-emerald-300/35 bg-cyan-300/15 text-emerald-100' : 'border-emerald-300/15 bg-white/[0.04] text-cyan-100'
+  return active ? 'border-cyan-300/35 bg-cyan-300/15 text-blue-100' : 'border-cyan-300/15 bg-white/[0.04] text-blue-100'
 }
 
 export default function Topbar() {
@@ -96,14 +96,14 @@ export default function Topbar() {
 
   return (
     <header className="sticky top-0 z-30 overflow-hidden border-b border-cyan-300/10 bg-[#050d18]/78 shadow-[0_18px_80px_rgba(0,0,0,0.35)] backdrop-blur-2xl">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_14%_0%,rgba(34,211,238,0.22),transparent_38%),radial-gradient(circle_at_78%_10%,rgba(139,92,246,0.14),transparent_32%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_14%_0%,rgba(59,130,246,0.26),transparent_38%),radial-gradient(circle_at_78%_10%,rgba(139,92,246,0.14),transparent_32%)]" />
       <div className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-cyan-300/35 to-transparent" />
 
       <div className="relative px-4 py-4 sm:px-5 lg:px-8">
-        <div className="rounded-[34px] border border-white/10 bg-white/[0.035] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.07),0_0_52px_rgba(34,211,238,0.08)]">
+        <div className="rounded-[34px] border border-white/10 bg-white/[0.035] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.07),0_0_52px_rgba(59,130,246,0.12)]">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
             <div className="min-w-0">
-              <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.36em] text-cyan-200">
+              <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.36em] text-blue-100">
                 <Sparkles className="h-3.5 w-3.5" />
                 Workspace
               </div>
@@ -117,7 +117,7 @@ export default function Topbar() {
                 className={clsx(
                   'inline-flex min-w-0 max-w-full items-center gap-3 rounded-[22px] border px-4 py-3 text-sm shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]',
                   user
-                    ? 'border-emerald-400/25 bg-emerald-400/[0.10] text-emerald-100 shadow-[0_0_30px_rgba(16,185,129,0.16)]'
+                    ? 'border-emerald-400/25 bg-emerald-400/[0.10] text-emerald-100 shadow-[0_0_30px_rgba(59,130,246,0.16)]'
                     : 'border-amber-400/25 bg-amber-400/[0.10] text-amber-100'
                 )}
               >
@@ -126,8 +126,8 @@ export default function Topbar() {
                   {loading ? 'Проверка...' : user ? (user.email || 'Выполнен вход') : 'Гость'}
                 </span>
                 {user ? (
-                  <span className="hidden items-center gap-1.5 text-emerald-300 sm:inline-flex">
-                    <span className="h-2 w-2 rounded-full bg-emerald-300 shadow-[0_0_14px_rgba(110,231,183,0.9)]" />
+                  <span className="hidden items-center gap-1.5 text-cyan-200 sm:inline-flex">
+                    <span className="h-2 w-2 rounded-full bg-cyan-300 shadow-[0_0_14px_rgba(110,231,183,0.9)]" />
                     Онлайн
                   </span>
                 ) : null}
@@ -145,7 +145,7 @@ export default function Topbar() {
               ) : (
                 <Link
                   href="/login"
-                  className="inline-flex shrink-0 items-center rounded-[22px] border border-cyan-400/20 bg-cyan-500/[0.08] px-4 py-3 text-sm text-slate-100 transition hover:border-cyan-300/35 hover:bg-cyan-500/[0.14] hover:text-white"
+                  className="inline-flex shrink-0 items-center rounded-[22px] border border-violet-400/40 bg-cyan-500/[0.08] px-4 py-3 text-sm text-slate-100 transition hover:border-cyan-300/35 hover:bg-cyan-500/[0.14] hover:text-white"
                 >
                   Войти
                 </Link>
@@ -185,7 +185,7 @@ export default function Topbar() {
                     </span>
 
                     {active ? (
-                      <Radio className="ml-auto hidden h-4 w-4 shrink-0 text-cyan-200 sm:block" />
+                      <Radio className="ml-auto hidden h-4 w-4 shrink-0 text-blue-100 sm:block" />
                     ) : null}
                   </div>
                 </Link>

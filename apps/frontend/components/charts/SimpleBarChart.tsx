@@ -11,7 +11,7 @@ export function SimpleBarChart({
         <div key={item.label} className="space-y-1">
           <div className="flex items-center justify-between text-sm">
             <span className="text-slate-200">{item.label}</span>
-            <span className="text-muted">{item.value}</span>
+            <span className="text-zinc-300">{item.value}</span>
           </div>
           <div className="h-2 rounded-full bg-white/5">
             <div className="h-2 rounded-full bg-white" style={{ width: `${(item.value / max) * 100}%` }} />

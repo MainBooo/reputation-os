@@ -195,7 +195,7 @@ export default function WebSourceSetupCard({ companyId }: { companyId: string })
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <div className="text-lg font-semibold text-brand">Сканирование сети</div>
-          <div className="mt-2 text-sm leading-6 text-muted">
+          <div className="mt-2 text-sm leading-6 text-zinc-300">
             WEB-источники без Яндекс Карт и 2GIS. Добавляйте источники из найденных упоминаний ниже.
           </div>
         </div>
@@ -204,14 +204,14 @@ export default function WebSourceSetupCard({ companyId }: { companyId: string })
           type="button"
           onClick={handleStartSync}
           disabled={syncing}
-          className="inline-flex h-10 items-center justify-center rounded-xl border border-cyan-400/20 bg-cyan-400/10 px-4 text-sm font-semibold text-cyan-200 transition hover:bg-cyan-400/20 disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex h-10 items-center justify-center rounded-xl border border-violet-400/40 bg-cyan-400/10 px-4 text-sm font-semibold text-blue-100 transition hover:bg-cyan-400/20 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {syncing ? 'Запускаем…' : 'Запустить сканирование'}
         </button>
       </div>
 
       <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_auto_auto_auto] lg:items-center">
-        <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-muted">
+        <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-zinc-300">
           {loading
             ? 'Загружаем настройки…'
             : webTargets.length > 0
@@ -251,7 +251,7 @@ export default function WebSourceSetupCard({ companyId }: { companyId: string })
               syncMentionsEnabled: true
             })
           }
-          className="inline-flex h-10 items-center justify-center rounded-xl border border-emerald-400/20 bg-emerald-500/10 px-4 text-sm font-semibold text-emerald-200 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex h-10 items-center justify-center rounded-xl border border-violet-400/40 bg-blue-500/10 px-4 text-sm font-semibold text-emerald-200 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-50"
         >
           Включить все
         </button>
@@ -306,7 +306,7 @@ export default function WebSourceSetupCard({ companyId }: { companyId: string })
                             href={target.externalUrl}
                             target="_blank"
                             rel="noreferrer"
-                            className="mt-1 block truncate text-xs text-cyan-200 hover:text-cyan-100"
+                            className="mt-1 block truncate text-xs text-blue-100 hover:text-blue-100"
                           >
                             {sourceHost(target.externalUrl) || target.externalUrl}
                           </a>
@@ -346,7 +346,7 @@ export default function WebSourceSetupCard({ companyId }: { companyId: string })
         </div>
       ) : null}
 
-      {message ? <div className="mt-4 text-sm text-muted">{message}</div> : null}
+      {message ? <div className="mt-4 text-sm text-zinc-300">{message}</div> : null}
     </Card>
   )
 }

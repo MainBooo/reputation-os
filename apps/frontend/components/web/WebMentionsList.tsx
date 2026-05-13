@@ -218,7 +218,7 @@ export default function WebMentionsList({
   return (
     <div className="mt-5 space-y-3">
       {message ? (
-        <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-sm text-muted">
+        <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-sm text-zinc-300">
           {message}
         </div>
       ) : null}
@@ -238,7 +238,7 @@ export default function WebMentionsList({
               actions={
                 <>
                   {sourceAdded ? (
-                    <span className="inline-flex items-center rounded-md border border-emerald-400/20 bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-200">
+                    <span className="inline-flex items-center rounded-md border border-violet-400/40 bg-blue-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-200">
                       Источник добавлен
                     </span>
                   ) : (
@@ -246,7 +246,7 @@ export default function WebMentionsList({
                       type="button"
                       onClick={() => handleAddSource(mention)}
                       disabled={isAdding}
-                      className="inline-flex items-center rounded-md border border-cyan-400/20 bg-cyan-400/10 px-2.5 py-1 text-xs font-semibold text-cyan-200 transition hover:bg-cyan-400/20 disabled:cursor-not-allowed disabled:opacity-60"
+                      className="inline-flex items-center rounded-md border border-violet-400/40 bg-cyan-400/10 px-2.5 py-1 text-xs font-semibold text-blue-100 transition hover:bg-cyan-400/20 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       {isAdding ? 'Добавляем…' : 'Добавить в автосканирование'}
                     </button>

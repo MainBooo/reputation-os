@@ -125,8 +125,8 @@ function relevanceLabel(target: SourceTarget) {
 }
 
 function relevanceClass(label: string) {
-  if (label.includes('высок')) return 'border-emerald-400/25 bg-emerald-500/10 text-emerald-100'
-  if (label.includes('низ')) return 'border-slate-400/20 bg-white/[0.04] text-muted'
+  if (label.includes('высок')) return 'border-emerald-400/25 bg-blue-500/10 text-emerald-100'
+  if (label.includes('низ')) return 'border-slate-400/20 bg-white/[0.04] text-zinc-300'
   return 'border-amber-400/25 bg-amber-500/10 text-amber-100'
 }
 
@@ -152,7 +152,7 @@ function SourceIcon({ host }: { host: string }) {
   const fallback = host.replace(/\.(ru|com|net|org|ph)$/i, '').slice(0, 2).toUpperCase()
 
   return (
-    <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-cyan-300/15 bg-cyan-400/10 text-xs font-black text-cyan-100 shadow-[0_0_22px_rgba(34,211,238,0.10)]">
+    <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-cyan-300/15 bg-cyan-400/10 text-xs font-black text-blue-100 shadow-[0_0_22px_rgba(59,130,246,0.14)]">
       {url ? <img src={url} alt="" className="h-6 w-6 rounded-md" /> : fallback}
     </div>
   )
@@ -307,11 +307,11 @@ export default function DiscoveryCenter({
 
   return (
     <div className="space-y-5">
-      <Card className="overflow-hidden border-cyan-400/15 bg-[radial-gradient(circle_at_0%_0%,rgba(34,211,238,0.13),transparent_34%),radial-gradient(circle_at_100%_0%,rgba(168,85,247,0.12),transparent_28%),rgba(15,23,42,0.72)] p-5 shadow-[0_0_42px_rgba(34,211,238,0.08)]">
+      <Card className="overflow-hidden border-cyan-400/15 bg-[radial-gradient(circle_at_0%_0%,rgba(34,211,238,0.13),transparent_34%),radial-gradient(circle_at_100%_0%,rgba(168,85,247,0.12),transparent_28%),rgba(15,23,42,0.72)] p-5 shadow-[0_0_42px_rgba(59,130,246,0.12)]">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <div className="text-xl font-semibold text-white">WEB-мониторинг</div>
-            <div className="mt-2 max-w-2xl text-sm leading-6 text-muted">
+            <div className="mt-2 max-w-2xl text-sm leading-6 text-zinc-300">
               Система ищет внешние площадки, каталоги, статьи и страницы. Яндекс Карты и 2GIS остаются отдельными источниками отзывов.
             </div>
           </div>
@@ -320,7 +320,7 @@ export default function DiscoveryCenter({
             type="button"
             onClick={handleStartSync}
             disabled={syncing}
-            className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl border border-cyan-300/30 bg-cyan-400/10 px-5 text-sm font-semibold text-cyan-100 shadow-[0_0_24px_rgba(34,211,238,0.12)] transition hover:bg-cyan-400/20 disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl border border-blue-300/30 bg-cyan-400/10 px-5 text-sm font-semibold text-blue-100 shadow-[0_0_24px_rgba(34,211,238,0.12)] transition hover:bg-cyan-400/20 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {syncing ? <Spinner /> : '✧'}
             {syncing ? 'Сканируем…' : 'Запустить сканирование'}
@@ -329,7 +329,7 @@ export default function DiscoveryCenter({
 
         <div className="mt-5 grid gap-3 md:grid-cols-4">
           <div className="rounded-3xl border border-white/10 bg-black/15 p-4">
-            <div className="text-xs text-muted">Интервал</div>
+            <div className="text-xs text-zinc-300">Интервал</div>
             <select
               value={intervalMinutes}
               onChange={(event) => setIntervalMinutes(Number(event.target.value))}
@@ -344,28 +344,28 @@ export default function DiscoveryCenter({
           </div>
 
           <div className="rounded-3xl border border-white/10 bg-black/15 p-4">
-            <div className="text-xs text-muted">Источников</div>
-            <div className="mt-2 text-3xl font-semibold text-cyan-100">{activeTargets.length}</div>
+            <div className="text-xs text-zinc-300">Источников</div>
+            <div className="mt-2 text-3xl font-semibold text-blue-100">{activeTargets.length}</div>
             <div className="mt-1 text-xs text-emerald-200">мониторится</div>
           </div>
 
           <div className="rounded-3xl border border-white/10 bg-black/15 p-4">
-            <div className="text-xs text-muted">Найдено для проверки</div>
+            <div className="text-xs text-zinc-300">Найдено для проверки</div>
             <div className="mt-2 text-3xl font-semibold text-white">{effectiveDiscovered.length}</div>
-            <div className="mt-1 text-xs text-muted">{lastScanLabel}</div>
+            <div className="mt-1 text-xs text-zinc-300">{lastScanLabel}</div>
           </div>
 
           <div className="rounded-3xl border border-white/10 bg-black/15 p-4">
-            <div className="text-xs text-muted">Статус</div>
-            <div className="mt-2 inline-flex rounded-full border border-emerald-400/25 bg-emerald-500/10 px-3 py-1 text-sm font-semibold text-emerald-100">
+            <div className="text-xs text-zinc-300">Статус</div>
+            <div className="mt-2 inline-flex rounded-full border border-emerald-400/25 bg-blue-500/10 px-3 py-1 text-sm font-semibold text-emerald-100">
               Активно
             </div>
-            <div className="mt-2 text-xs text-muted">Интервал: {currentInterval.label}</div>
+            <div className="mt-2 text-xs text-zinc-300">Интервал: {currentInterval.label}</div>
           </div>
         </div>
 
         {message ? (
-          <div className="mt-4 rounded-2xl border border-cyan-400/20 bg-cyan-500/10 p-3 text-sm text-cyan-100">
+          <div className="mt-4 rounded-2xl border border-violet-400/40 bg-blue-500/10 p-3 text-sm text-blue-100">
             {message}
           </div>
         ) : null}
@@ -375,10 +375,10 @@ export default function DiscoveryCenter({
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
             <div className="text-xl font-semibold text-white">Активные источники мониторинга</div>
-            <div className="mt-1 text-sm text-muted">Площадки, которые регулярно проверяются системой.</div>
+            <div className="mt-1 text-sm text-zinc-300">Площадки, которые регулярно проверяются системой.</div>
           </div>
 
-          <div className="hidden rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-sm text-muted sm:block">
+          <div className="hidden rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-sm text-zinc-300 sm:block">
             {effectiveGroupedActive.length} активных
           </div>
         </div>
@@ -392,7 +392,7 @@ export default function DiscoveryCenter({
               return (
                 <div
                   key={group.host}
-                  className="rounded-[26px] border border-cyan-300/15 bg-[radial-gradient(circle_at_0%_0%,rgba(34,211,238,0.11),transparent_34%),linear-gradient(135deg,rgba(255,255,255,0.055),rgba(255,255,255,0.018))] p-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_0_28px_rgba(34,211,238,0.05)] transition duration-300 hover:-translate-y-0.5 hover:border-cyan-300/30 hover:shadow-[0_0_34px_rgba(34,211,238,0.10)]"
+                  className="rounded-[26px] border border-cyan-300/15 bg-[radial-gradient(circle_at_0%_0%,rgba(34,211,238,0.11),transparent_34%),linear-gradient(135deg,rgba(255,255,255,0.055),rgba(255,255,255,0.018))] p-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_0_28px_rgba(34,211,238,0.05)] transition duration-300 hover:-translate-y-0.5 hover:border-blue-300/30 hover:shadow-[0_0_34px_rgba(59,130,246,0.14)]"
                 >
                   <div className="flex items-start gap-4">
                     <SourceIcon host={group.host} />
@@ -400,12 +400,12 @@ export default function DiscoveryCenter({
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <div className="truncate text-base font-semibold text-white">{group.host}</div>
-                        <span className="rounded-full border border-emerald-400/25 bg-emerald-500/10 px-2 py-0.5 text-xs font-semibold text-emerald-100">
+                        <span className="rounded-full border border-emerald-400/25 bg-blue-500/10 px-2 py-0.5 text-xs font-semibold text-emerald-100">
                           Мониторится
                         </span>
                       </div>
 
-                      <div className="mt-1 text-sm text-muted">
+                      <div className="mt-1 text-sm text-zinc-300">
                         {group.pagesCount} страниц · {group.mentionsCount} упоминаний · последняя активность: {formatDate(group.lastMentionAt)}
                       </div>
 
@@ -415,7 +415,7 @@ export default function DiscoveryCenter({
                             href={normalizeUrl(first.externalUrl) || '#'}
                             target="_blank"
                             rel="noreferrer"
-                            className="inline-flex h-10 items-center justify-center rounded-2xl border border-cyan-400/20 bg-cyan-400/10 px-3 text-sm font-semibold text-cyan-100 transition hover:border-cyan-300/40 hover:bg-cyan-400/15 hover:shadow-[0_0_18px_rgba(34,211,238,0.12)]"
+                            className="inline-flex h-10 items-center justify-center rounded-2xl border border-violet-400/40 bg-cyan-400/10 px-3 text-sm font-semibold text-blue-100 transition hover:border-cyan-300/40 hover:bg-cyan-400/15 hover:shadow-[0_0_18px_rgba(34,211,238,0.12)]"
                           >
                             Открыть источник ↗
                           </a>
@@ -425,7 +425,7 @@ export default function DiscoveryCenter({
                           type="button"
                           disabled={busy}
                           onClick={() => patchTarget(first, { isActive: false, syncMentionsEnabled: false })}
-                          className="inline-flex h-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.03] px-3 text-sm font-semibold text-muted transition hover:bg-white/[0.06] disabled:opacity-60"
+                          className="inline-flex h-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.03] px-3 text-sm font-semibold text-zinc-300 transition hover:bg-white/[0.06] disabled:opacity-60"
                         >
                           Отключить
                         </button>
@@ -449,7 +449,7 @@ export default function DiscoveryCenter({
               <button
                 type="button"
                 onClick={() => setShowAllActive((value) => !value)}
-                className="w-full rounded-2xl border border-white/10 bg-white/[0.025] px-4 py-3 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-400/10"
+                className="w-full rounded-2xl border border-white/10 bg-white/[0.025] px-4 py-3 text-sm font-semibold text-blue-100 transition hover:bg-cyan-400/10"
               >
                 {showAllActive ? 'Свернуть' : `Показать все источники (${effectiveGroupedActive.length})`}
               </button>
@@ -458,7 +458,7 @@ export default function DiscoveryCenter({
         ) : (
           <div className="rounded-3xl border border-dashed border-white/10 bg-black/10 p-8 text-center">
             <div className="text-base font-semibold text-white">Пока нет активных WEB-источников</div>
-            <div className="mt-2 text-sm text-muted">Запустите сканирование и добавьте найденные площадки в мониторинг.</div>
+            <div className="mt-2 text-sm text-zinc-300">Запустите сканирование и добавьте найденные площадки в мониторинг.</div>
           </div>
         )}
       </Card>
@@ -467,10 +467,10 @@ export default function DiscoveryCenter({
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
             <div className="text-xl font-semibold text-white">Новые найденные площадки</div>
-            <div className="mt-1 text-sm text-muted">Проверьте кандидатов и добавьте нужные в регулярный мониторинг.</div>
+            <div className="mt-1 text-sm text-zinc-300">Проверьте кандидатов и добавьте нужные в регулярный мониторинг.</div>
           </div>
 
-          <div className="hidden text-sm text-muted sm:block">{effectiveDiscovered.length} на проверке</div>
+          <div className="hidden text-sm text-zinc-300 sm:block">{effectiveDiscovered.length} на проверке</div>
         </div>
 
         {visibleDiscovered.length ? (
@@ -492,13 +492,13 @@ export default function DiscoveryCenter({
                       {sourceTitle(target)}
                     </div>
 
-                    <div className="mt-1 text-sm text-muted">{host}</div>
+                    <div className="mt-1 text-sm text-zinc-300">{host}</div>
 
                     <div className={`mt-3 inline-flex w-fit rounded-full border px-2.5 py-1 text-[11px] font-semibold ${relevanceClass(label)}`}>
                       {label} релевантность
                     </div>
 
-                    <div className="mt-2 text-xs text-muted">
+                    <div className="mt-2 text-xs text-zinc-300">
                       Найдено страниц: 1
                     </div>
 
@@ -508,12 +508,12 @@ export default function DiscoveryCenter({
                           href={normalizeUrl(target.externalUrl) || '#'}
                           target="_blank"
                           rel="noreferrer"
-                          className="inline-flex h-10 items-center justify-center rounded-2xl border border-cyan-400/20 bg-cyan-400/10 px-3 text-sm font-semibold text-cyan-100 transition hover:border-cyan-300/40 hover:bg-cyan-400/15 hover:shadow-[0_0_18px_rgba(34,211,238,0.12)]"
+                          className="inline-flex h-10 items-center justify-center rounded-2xl border border-violet-400/40 bg-cyan-400/10 px-3 text-sm font-semibold text-blue-100 transition hover:border-cyan-300/40 hover:bg-cyan-400/15 hover:shadow-[0_0_18px_rgba(34,211,238,0.12)]"
                         >
                           Открыть ↗
                         </a>
                       ) : (
-                        <span className="inline-flex h-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.02] px-3 text-sm font-semibold text-muted">
+                        <span className="inline-flex h-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.02] px-3 text-sm font-semibold text-zinc-300">
                           Нет URL
                         </span>
                       )}
@@ -541,7 +541,7 @@ export default function DiscoveryCenter({
                             }
                           })
                         }
-                        className="inline-flex h-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.025] px-3 text-sm font-semibold text-muted transition hover:bg-white/[0.06] disabled:opacity-60"
+                        className="inline-flex h-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.025] px-3 text-sm font-semibold text-zinc-300 transition hover:bg-white/[0.06] disabled:opacity-60"
                       >
                         Скрыть
                       </button>
@@ -564,7 +564,7 @@ export default function DiscoveryCenter({
         ) : (
           <div className="rounded-3xl border border-dashed border-white/10 bg-black/10 p-8 text-center">
             <div className="text-base font-semibold text-white">Нет новых площадок</div>
-            <div className="mt-2 text-sm text-muted">После следующего сканирования здесь появятся кандидаты для подключения.</div>
+            <div className="mt-2 text-sm text-zinc-300">После следующего сканирования здесь появятся кандидаты для подключения.</div>
           </div>
         )}
       </Card>
@@ -573,12 +573,12 @@ export default function DiscoveryCenter({
         <div className="flex items-center justify-between gap-3">
           <div>
             <div className="text-xl font-semibold text-white">Последние WEB-сигналы</div>
-            <div className="mt-1 text-sm text-muted">Короткая сводка последних упоминаний. Полная лента остаётся в Inbox.</div>
+            <div className="mt-1 text-sm text-zinc-300">Короткая сводка последних упоминаний. Полная лента остаётся в Inbox.</div>
           </div>
 
           <a
             href={`/companies/${companyId}/inbox?platform=WEB`}
-            className="hidden rounded-2xl border border-cyan-400/25 bg-cyan-400/10 px-4 py-2 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-400/20 sm:inline-flex"
+            className="hidden rounded-2xl border border-cyan-400/25 bg-cyan-400/10 px-4 py-2 text-sm font-semibold text-blue-100 transition hover:bg-cyan-400/20 sm:inline-flex"
           >
             Открыть Inbox →
           </a>
@@ -596,7 +596,7 @@ export default function DiscoveryCenter({
                     <SourceIcon host={host} />
                     <div className="min-w-0">
                       <div className="truncate text-sm font-semibold text-white">{host}</div>
-                      <div className="text-xs text-muted">{formatDate(signal.publishedAt || signal.createdAt)}</div>
+                      <div className="text-xs text-zinc-300">{formatDate(signal.publishedAt || signal.createdAt)}</div>
                     </div>
                   </div>
 
@@ -605,7 +605,7 @@ export default function DiscoveryCenter({
               )
             })
           ) : (
-            <div className="rounded-3xl border border-dashed border-white/10 bg-black/10 p-6 text-sm text-muted md:col-span-3">
+            <div className="rounded-3xl border border-dashed border-white/10 bg-black/10 p-6 text-sm text-zinc-300 md:col-span-3">
               Пока нет последних WEB-сигналов. После сканирования они появятся в Inbox.
             </div>
           )}
@@ -613,7 +613,7 @@ export default function DiscoveryCenter({
 
         <a
           href={`/companies/${companyId}/inbox?platform=WEB`}
-          className="mt-4 inline-flex w-full items-center justify-center rounded-2xl border border-cyan-400/25 bg-cyan-400/10 px-4 py-3 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-400/20 sm:hidden"
+          className="mt-4 inline-flex w-full items-center justify-center rounded-2xl border border-cyan-400/25 bg-cyan-400/10 px-4 py-3 text-sm font-semibold text-blue-100 transition hover:bg-cyan-400/20 sm:hidden"
         >
           Открыть WEB в Inbox →
         </a>
@@ -624,18 +624,18 @@ export default function DiscoveryCenter({
 
         <div className="mt-4 grid gap-3 md:grid-cols-3">
           <div className="rounded-3xl border border-white/10 bg-white/[0.025] p-4">
-            <div className="text-sm font-semibold text-cyan-100">1. Находим страницы</div>
-            <div className="mt-2 text-sm leading-6 text-muted">Система ищет упоминания компании во внешней сети и каталогах.</div>
+            <div className="text-sm font-semibold text-blue-100">1. Находим страницы</div>
+            <div className="mt-2 text-sm leading-6 text-zinc-300">Система ищет упоминания компании во внешней сети и каталогах.</div>
           </div>
 
           <div className="rounded-3xl border border-white/10 bg-white/[0.025] p-4">
-            <div className="text-sm font-semibold text-cyan-100">2. Вы выбираете источники</div>
-            <div className="mt-2 text-sm leading-6 text-muted">В мониторинг добавляются только площадки, которые важны для бизнеса.</div>
+            <div className="text-sm font-semibold text-blue-100">2. Вы выбираете источники</div>
+            <div className="mt-2 text-sm leading-6 text-zinc-300">В мониторинг добавляются только площадки, которые важны для бизнеса.</div>
           </div>
 
           <div className="rounded-3xl border border-white/10 bg-white/[0.025] p-4">
-            <div className="text-sm font-semibold text-cyan-100">3. Получаете сигналы в Inbox</div>
-            <div className="mt-2 text-sm leading-6 text-muted">Все новые упоминания и отзывы попадают в единый Inbox.</div>
+            <div className="text-sm font-semibold text-blue-100">3. Получаете сигналы в Inbox</div>
+            <div className="mt-2 text-sm leading-6 text-zinc-300">Все новые упоминания и отзывы попадают в единый Inbox.</div>
           </div>
         </div>
       </Card>

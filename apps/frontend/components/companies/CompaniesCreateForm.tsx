@@ -181,15 +181,15 @@ export default function CompaniesCreateForm() {
 
   return (
     <Card className="overflow-hidden">
-      <div className="relative border-b border-white/10 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.18),transparent_34%),linear-gradient(135deg,rgba(15,23,42,0.96),rgba(2,6,23,0.92))] p-5 sm:p-6">
-        <div className="inline-flex rounded-full border border-cyan-400/20 bg-cyan-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-cyan-200">
+      <div className="relative border-b border-white/10 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.34),transparent_34%),linear-gradient(135deg,rgba(15,23,42,0.96),rgba(2,6,23,0.92))] p-5 sm:p-6">
+        <div className="inline-flex rounded-full border border-violet-400/40 bg-blue-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-blue-100">
           Smart setup
         </div>
 
         <div className="mt-4 grid gap-5 lg:grid-cols-[1.2fr_0.8fr] lg:items-end">
           <div>
             <div className="text-2xl font-semibold text-brand">Добавить компанию</div>
-            <div className="mt-2 max-w-2xl text-sm leading-6 text-muted">
+            <div className="mt-2 max-w-2xl text-sm leading-6 text-zinc-300">
               Создайте карточку мониторинга: название, источники и ключевые слова сразу попадут в систему как рабочие алиасы.
             </div>
           </div>
@@ -197,17 +197,17 @@ export default function CompaniesCreateForm() {
           <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <div className="text-xs uppercase tracking-[0.18em] text-muted">Готовность</div>
+                <div className="text-xs uppercase tracking-[0.18em] text-zinc-300">Готовность</div>
                 <div className="mt-1 text-2xl font-semibold text-brand">{readinessScore}%</div>
               </div>
-              <div className="text-right text-xs text-muted">
+              <div className="text-right text-xs text-zinc-300">
                 {readinessScore >= 90 ? 'Готово к запуску' : readinessScore >= 60 ? 'Почти готово' : 'Заполните основу'}
               </div>
             </div>
 
             <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/[0.07]">
               <div
-                className="h-full rounded-full bg-gradient-to-r from-cyan-300 via-emerald-300 to-amber-300 transition-all"
+                className="h-full rounded-full bg-gradient-to-r from-cyan-300 via-blue-300 to-amber-300 transition-all"
                 style={{ width: `${readinessScore}%` }}
               />
             </div>
@@ -233,12 +233,12 @@ export default function CompaniesCreateForm() {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="text-sm font-semibold text-brand">Ключевые слова мониторинга</div>
-                <div className="mt-1 text-xs leading-5 text-muted">
+                <div className="mt-1 text-xs leading-5 text-zinc-300">
                   Добавьте варианты названия, брендовые запросы, адресные или нишевые фразы.
                 </div>
               </div>
 
-              <div className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-xs text-muted">
+              <div className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-xs text-zinc-300">
                 {keywords.length}/20
               </div>
             </div>
@@ -249,7 +249,7 @@ export default function CompaniesCreateForm() {
                   key={keyword}
                   type="button"
                   onClick={() => removeKeyword(keyword)}
-                  className="rounded-full border border-cyan-400/20 bg-cyan-500/10 px-3 py-1.5 text-xs font-medium text-cyan-100 transition hover:bg-cyan-500/20"
+                  className="rounded-full border border-violet-400/40 bg-blue-500/10 px-3 py-1.5 text-xs font-medium text-blue-100 transition hover:bg-cyan-500/20"
                   title="Нажмите, чтобы удалить"
                 >
                   {keyword} ×
@@ -257,7 +257,7 @@ export default function CompaniesCreateForm() {
               ))}
 
               {!keywords.length ? (
-                <div className="rounded-full border border-white/10 bg-white/[0.035] px-3 py-1.5 text-xs text-muted">
+                <div className="rounded-full border border-white/10 bg-white/[0.035] px-3 py-1.5 text-xs text-zinc-300">
                   Пока нет ключевых слов
                 </div>
               ) : null}
@@ -277,14 +277,14 @@ export default function CompaniesCreateForm() {
 
             {suggestedKeywords.length ? (
               <div className="mt-3">
-                <div className="mb-2 text-xs uppercase tracking-[0.18em] text-muted">Умные подсказки</div>
+                <div className="mb-2 text-xs uppercase tracking-[0.18em] text-zinc-300">Умные подсказки</div>
                 <div className="flex flex-wrap gap-2">
                   {suggestedKeywords.map((keyword) => (
                     <button
                       key={keyword}
                       type="button"
                       onClick={() => addKeyword(keyword)}
-                      className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs text-muted transition hover:border-emerald-400/30 hover:bg-emerald-500/10 hover:text-emerald-100"
+                      className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs text-zinc-300 transition hover:border-emerald-400/30 hover:bg-blue-500/10 hover:text-emerald-100"
                     >
                       + {keyword}
                     </button>
@@ -298,7 +298,7 @@ export default function CompaniesCreateForm() {
             <select
               value={workspaceId}
               onChange={(e) => setWorkspaceId(e.target.value)}
-              className="h-12 w-full rounded-xl border border-line bg-panel2 px-3 text-sm text-brand outline-none transition focus:border-cyan-400/50"
+              className="h-12 w-full rounded-xl border border-line bg-[#050816]2 px-3 text-sm text-brand outline-none transition focus:border-cyan-400/50"
             >
               {workspaces.map((workspace) => (
                 <option key={workspace.id} value={workspace.id}>
@@ -323,11 +323,11 @@ export default function CompaniesCreateForm() {
           <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
             <div className="text-sm font-semibold text-brand">Превью мониторинга</div>
 
-            <div className="mt-4 rounded-2xl border border-white/10 bg-panel p-4">
+            <div className="mt-4 rounded-2xl border border-white/10 bg-[#050816] p-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="text-lg font-semibold text-brand">{name.trim() || 'Название компании'}</div>
-                  <div className="mt-1 text-xs text-muted">
+                  <div className="mt-1 text-xs text-zinc-300">
                     {[city.trim() || 'Город не указан', industry.trim() || 'Отрасль не указана'].join(' · ')}
                   </div>
                 </div>
@@ -336,7 +336,7 @@ export default function CompaniesCreateForm() {
                   className={clsx(
                     'rounded-full border px-2.5 py-1 text-xs font-medium',
                     readinessScore >= 70
-                      ? 'border-emerald-400/25 bg-emerald-500/10 text-emerald-200'
+                      ? 'border-emerald-400/25 bg-blue-500/10 text-emerald-200'
                       : 'border-amber-400/25 bg-amber-500/10 text-amber-100'
                   )}
                 >
@@ -346,12 +346,12 @@ export default function CompaniesCreateForm() {
 
               <div className="mt-4 grid grid-cols-2 gap-2">
                 <div className="rounded-xl border border-white/10 bg-white/[0.035] p-3">
-                  <div className="text-xs text-muted">Ключи</div>
+                  <div className="text-xs text-zinc-300">Ключи</div>
                   <div className="mt-1 text-xl font-semibold text-brand">{keywords.length}</div>
                 </div>
 
                 <div className="rounded-xl border border-white/10 bg-white/[0.035] p-3">
-                  <div className="text-xs text-muted">Источники</div>
+                  <div className="text-xs text-zinc-300">Источники</div>
                   <div className="mt-1 text-xl font-semibold text-brand">{[yandexUrl.trim(), twoGisUrl.trim()].filter(Boolean).length}</div>
                 </div>
               </div>
@@ -363,23 +363,23 @@ export default function CompaniesCreateForm() {
 
             <div className="mt-3 space-y-3 text-sm">
               <div className="flex items-center justify-between gap-3">
-                <span className="text-muted">Карточка компании</span>
-                <span className={name.trim() ? 'text-emerald-300' : 'text-muted'}>{name.trim() ? 'готово' : 'ожидает'}</span>
+                <span className="text-zinc-300">Карточка компании</span>
+                <span className={name.trim() ? 'text-emerald-300' : 'text-zinc-300'}>{name.trim() ? 'готово' : 'ожидает'}</span>
               </div>
 
               <div className="flex items-center justify-between gap-3">
-                <span className="text-muted">Yandex Maps</span>
-                <span className={yandexUrl.trim() ? 'text-emerald-300' : 'text-muted'}>{yandexUrl.trim() ? 'подключён' : 'не указан'}</span>
+                <span className="text-zinc-300">Yandex Maps</span>
+                <span className={yandexUrl.trim() ? 'text-emerald-300' : 'text-zinc-300'}>{yandexUrl.trim() ? 'подключён' : 'не указан'}</span>
               </div>
 
               <div className="flex items-center justify-between gap-3">
-                <span className="text-muted">2GIS</span>
-                <span className={twoGisUrl.trim() ? 'text-emerald-300' : 'text-muted'}>{twoGisUrl.trim() ? 'подключён' : 'не указан'}</span>
+                <span className="text-zinc-300">2GIS</span>
+                <span className={twoGisUrl.trim() ? 'text-emerald-300' : 'text-zinc-300'}>{twoGisUrl.trim() ? 'подключён' : 'не указан'}</span>
               </div>
 
               <div className="flex items-center justify-between gap-3">
-                <span className="text-muted">Алиасы / keywords</span>
-                <span className={keywords.length ? 'text-emerald-300' : 'text-muted'}>{keywords.length ? `${keywords.length} шт.` : 'не заданы'}</span>
+                <span className="text-zinc-300">Алиасы / keywords</span>
+                <span className={keywords.length ? 'text-emerald-300' : 'text-zinc-300'}>{keywords.length ? `${keywords.length} шт.` : 'не заданы'}</span>
               </div>
             </div>
           </div>

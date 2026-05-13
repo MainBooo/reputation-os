@@ -18,7 +18,7 @@ export default function CompanyTabs({ companyId }: { companyId: string }) {
   const base = `/companies/${companyId}`
 
   return (
-    <nav className="relative w-full overflow-hidden rounded-[32px] border border-cyan-300/25 bg-[radial-gradient(circle_at_0%_0%,rgba(34,211,238,0.18),transparent_32%),radial-gradient(circle_at_100%_0%,rgba(217,70,239,0.18),transparent_34%),rgba(4,10,20,0.92)] p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.10),0_0_70px_rgba(34,211,238,0.16),0_0_90px_rgba(217,70,239,0.10)] backdrop-blur-2xl">
+    <nav className="relative w-full overflow-hidden rounded-[32px] border border-cyan-300/25 bg-[radial-gradient(circle_at_0%_0%,rgba(59,130,246,0.34),transparent_32%),radial-gradient(circle_at_100%_0%,rgba(217,70,239,0.18),transparent_34%),rgba(4,10,20,0.92)] p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.10),0_0_70px_rgba(34,211,238,0.16),0_0_90px_rgba(217,70,239,0.10)] backdrop-blur-2xl">
       <div className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-cyan-200 to-fuchsia-300" />
       <div className="pointer-events-none absolute inset-x-10 bottom-0 h-px bg-gradient-to-r from-transparent via-cyan-400/70 to-fuchsia-400/70" />
 
@@ -40,7 +40,7 @@ export default function CompanyTabs({ companyId }: { companyId: string }) {
               )}
             >
               {active ? (
-                <span className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(34,211,238,0.18),transparent_52%)]" />
+                <span className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(59,130,246,0.34),transparent_52%)]" />
               ) : null}
 
               <Icon className="relative h-5 w-5 shrink-0 drop-shadow-[0_0_12px_currentColor] sm:h-7 sm:w-7" />

@@ -3,7 +3,7 @@
 export default function MentionDrawer({ mention }: { mention: any }) {
   if (!mention) {
     return (
-      <div className="w-full h-full flex items-center justify-center text-zinc-500">
+      <div className="w-full h-full flex items-center justify-center text-zinc-400">
         Select mention
       </div>
     )
@@ -11,7 +11,7 @@ export default function MentionDrawer({ mention }: { mention: any }) {
 
   return (
     <div className="p-6 h-full overflow-auto border-l border-zinc-800">
-      <div className="text-xs text-zinc-500 mb-2">
+      <div className="text-xs text-zinc-400 mb-2">
         {mention.platform} • {mention.type}
       </div>
 

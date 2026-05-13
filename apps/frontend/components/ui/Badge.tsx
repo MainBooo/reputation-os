@@ -1,20 +1,20 @@
 import clsx from 'clsx'
 
 const colorMap: Record<string, string> = {
-  POSITIVE: 'bg-emerald-500/15 text-emerald-300',
-  NEGATIVE: 'bg-red-500/15 text-red-300',
-  NEUTRAL: 'bg-zinc-500/15 text-zinc-300',
-  UNKNOWN: 'bg-zinc-500/15 text-zinc-300',
-  NEW: 'bg-blue-500/15 text-blue-300',
-  REVIEWED: 'bg-violet-500/15 text-violet-300',
-  HIDDEN: 'bg-zinc-500/15 text-zinc-300',
-  ARCHIVED: 'bg-zinc-500/15 text-zinc-400',
-  YANDEX: 'bg-yellow-500/15 text-yellow-300',
-  GOOGLE: 'bg-emerald-500/15 text-emerald-300',
-  TWOGIS: 'bg-lime-500/15 text-lime-300',
-  WEB: 'bg-fuchsia-500/15 text-fuchsia-300',
-  CUSTOM: 'bg-orange-500/15 text-orange-300',
-  OWNER: 'bg-emerald-500/15 text-emerald-300'
+  POSITIVE: 'border-emerald-300/25 bg-emerald-400/10 text-emerald-200',
+  NEGATIVE: 'border-rose-300/25 bg-rose-500/10 text-rose-200',
+  NEUTRAL: 'border-blue-300/25 bg-blue-500/10 text-blue-200',
+  UNKNOWN: 'border-white/10 bg-white/7 text-slate-300',
+  NEW: 'border-cyan-300/25 bg-cyan-400/10 text-blue-100',
+  REVIEWED: 'border-violet-300/25 bg-violet-500/10 text-violet-200',
+  HIDDEN: 'border-white/10 bg-white/7 text-slate-300',
+  ARCHIVED: 'border-white/10 bg-white/7 text-slate-400',
+  YANDEX: 'border-amber-300/25 bg-amber-400/10 text-amber-200',
+  GOOGLE: 'border-emerald-300/25 bg-emerald-400/10 text-emerald-200',
+  TWOGIS: 'border-sky-300/25 bg-sky-400/10 text-sky-200',
+  WEB: 'border-fuchsia-300/25 bg-fuchsia-500/10 text-fuchsia-200',
+  CUSTOM: 'border-violet-300/25 bg-violet-500/10 text-violet-200',
+  OWNER: 'border-cyan-300/25 bg-cyan-400/10 text-blue-100'
 }
 
 export default function Badge({
@@ -26,8 +26,8 @@ export default function Badge({
 }) {
   return (
     <span className={clsx(
-      'inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium',
-      tone ? colorMap[tone] || 'bg-white/10 text-brand' : 'bg-white/10 text-brand'
+      'inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur',
+      tone ? colorMap[tone] || 'border-white/10 bg-white/10 text-brand' : 'border-white/10 bg-white/10 text-brand'
     )}>
       {children}
     </span>

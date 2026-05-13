@@ -15,14 +15,14 @@ export default function SettingsPage() {
 
         <Card className="p-5">
           <div className="text-base font-semibold text-brand">Правила уведомлений</div>
-          <div className="mt-3 text-sm leading-6 text-muted">
+          <div className="mt-3 text-sm leading-6 text-zinc-300">
             Скоро здесь будут условия: негативные отзывы, падение рейтинга, новые упоминания и ежедневные дайджесты.
           </div>
         </Card>
 
         <Card className="p-5">
           <div className="text-base font-semibold text-brand">Workspace</div>
-          <div className="mt-3 text-sm leading-6 text-muted">
+          <div className="mt-3 text-sm leading-6 text-zinc-300">
             Настройки команды, источников и доступа к рабочему пространству.
           </div>
         </Card>

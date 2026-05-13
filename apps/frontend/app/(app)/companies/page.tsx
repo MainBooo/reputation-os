@@ -40,9 +40,9 @@ function getStatusLabel(status: CompanyStatus) {
 function getStatusClasses(status: CompanyStatus) {
   if (status === 'active') {
     return {
-      card: 'border-emerald-400/25 bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.13),transparent_34%),rgba(15,23,42,0.72)] shadow-[0_0_34px_rgba(16,185,129,0.08)]',
-      badge: 'border-emerald-400/30 bg-emerald-500/15 text-emerald-200',
-      dot: 'bg-emerald-300 shadow-[0_0_18px_rgba(52,211,153,0.65)]'
+      card: 'border-blue-400/25 bg-[radial-gradient(circle_at_top_left,rgba(37,99,235,0.22),transparent_34%),radial-gradient(circle_at_100%_0%,rgba(168,85,247,0.18),transparent_38%),rgba(6,10,24,0.88)] shadow-[0_0_42px_rgba(59,130,246,0.16)]',
+      badge: 'border-blue-400/35 bg-blue-500/15 text-blue-50',
+      dot: 'bg-blue-300 shadow-[0_0_18px_rgba(96,165,250,0.85)]'
     }
   }
 
@@ -55,8 +55,8 @@ function getStatusClasses(status: CompanyStatus) {
   }
 
   return {
-    card: 'border-white/10 bg-panel',
-    badge: 'border-white/10 bg-white/[0.05] text-muted',
+    card: 'border-white/10 bg-[#050816]',
+    badge: 'border-white/10 bg-white/[0.05] text-zinc-300',
     dot: 'bg-slate-500'
   }
 }
@@ -85,8 +85,8 @@ function CompanyCard({ company, featured = false }: { company: any; featured?: b
   const statusClasses =
     status === 'active'
       ? {
-          badge: 'border-emerald-400/20 bg-emerald-500/10 text-emerald-300 shadow-[0_0_24px_rgba(16,185,129,0.16)]',
-          dot: 'bg-emerald-400 shadow-[0_0_16px_rgba(74,222,128,0.9)]'
+          badge: 'border-blue-400/45 bg-blue-500/15 text-blue-50 shadow-[0_0_26px_rgba(59,130,246,0.22)]',
+          dot: 'bg-cyan-300 shadow-[0_0_18px_rgba(34,211,238,0.9)]'
         }
       : status === 'pending'
         ? {
@@ -107,12 +107,12 @@ function CompanyCard({ company, featured = false }: { company: any; featured?: b
   const metrics = [
     { label: 'Упоминания', value: mentionsCount, icon: MessageSquare, tone: 'border-violet-400/10 bg-violet-500/10 text-violet-300' },
     { label: 'Источники', value: sourcesCount, icon: Database, tone: 'border-sky-400/10 bg-sky-500/10 text-sky-300' },
-    { label: 'Ключи', value: aliasesCount, icon: KeyRound, tone: 'border-emerald-400/10 bg-emerald-500/10 text-emerald-300' }
+    { label: 'Ключи', value: aliasesCount, icon: KeyRound, tone: 'border-fuchsia-400/15 bg-fuchsia-500/10 text-fuchsia-200' }
   ]
 
   return (
-    <Card className="group relative overflow-hidden rounded-[32px] border border-white/10 bg-[#08111d]/95 p-5 shadow-[0_22px_70px_rgba(0,0,0,0.42),0_0_42px_rgba(34,211,238,0.08)] transition hover:border-cyan-400/20 hover:shadow-[0_26px_90px_rgba(0,0,0,0.48),0_0_62px_rgba(34,211,238,0.16)] sm:p-6">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_12%_0%,rgba(34,211,238,0.16),transparent_36%),radial-gradient(circle_at_100%_18%,rgba(16,185,129,0.08),transparent_28%)]" />
+    <Card className="group relative overflow-hidden rounded-[32px] border border-white/10 bg-[#060914]/95 p-5 shadow-[0_22px_70px_rgba(0,0,0,0.42),0_0_42px_rgba(59,130,246,0.12)] transition hover:border-violet-400/40 hover:shadow-[0_26px_90px_rgba(0,0,0,0.48),0_0_62px_rgba(34,211,238,0.16)] sm:p-6">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_12%_0%,rgba(37,99,235,0.24),transparent_36%),radial-gradient(circle_at_100%_12%,rgba(168,85,247,0.22),transparent_34%)]" />
 
       <div className="relative flex flex-col gap-5">
         <div className="flex min-w-0 items-start gap-4">
@@ -159,7 +159,7 @@ function CompanyCard({ company, featured = false }: { company: any; featured?: b
           {metrics.map((metric) => {
             const Icon = metric.icon
             return (
-              <div key={metric.label} className="min-w-0 rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
+              <div key={metric.label} className="min-w-0 rounded-[22px] border border-blue-300/12 bg-[#070B16]/92 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.03),0_0_32px_rgba(59,130,246,0.08)]">
                 <div className={`mb-3 flex h-9 w-9 items-center justify-center rounded-2xl border ${metric.tone}`}>
                   <Icon className="h-4 w-4" />
                 </div>
@@ -171,8 +171,8 @@ function CompanyCard({ company, featured = false }: { company: any; featured?: b
         </div>
 
         {featured ? (
-          <div className="flex gap-3 rounded-[24px] border border-emerald-400/10 bg-[linear-gradient(135deg,rgba(16,185,129,0.14),rgba(0,153,255,0.08))] p-4 text-sm leading-[1.55] text-emerald-50/90">
-            <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-300" />
+          <div className="flex gap-3 rounded-[24px] border border-cyan-400/15 bg-[linear-gradient(135deg,rgba(37,99,235,0.30),rgba(168,85,247,0.18))] p-4 text-sm leading-[1.55] text-white/92 shadow-[0_0_30px_rgba(37,99,235,0.10)]">
+            <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-cyan-300" />
             <span>Компания уже собирает данные. Можно сразу перейти во входящие и обработать найденные отзывы.</span>
           </div>
         ) : null}
@@ -189,7 +189,7 @@ function CompanyCard({ company, featured = false }: { company: any; featured?: b
 
             <Link
               href={`/companies/${company.id}/inbox`}
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-[20px] border border-cyan-400/20 bg-cyan-500/10 px-4 text-sm font-medium text-cyan-100 shadow-[0_0_24px_rgba(34,211,238,0.12)] transition hover:bg-cyan-500/20"
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-[20px] border border-cyan-400/35 bg-blue-500/12 px-4 text-sm font-medium text-cyan-100 shadow-[0_0_24px_rgba(14,165,233,0.16)] transition hover:bg-blue-500/20"
             >
               <Inbox className="h-4 w-4" />
               Inbox
@@ -229,7 +229,7 @@ export default async function CompaniesPage() {
 
         <a
           href="#add-company"
-          className="inline-flex h-11 shrink-0 items-center justify-center rounded-xl border border-cyan-400/25 bg-cyan-500/10 px-4 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-500/20"
+          className="inline-flex h-11 shrink-0 items-center justify-center rounded-xl border border-cyan-400/25 bg-blue-500/10 px-4 text-sm font-semibold text-blue-50 transition hover:bg-cyan-500/20"
         >
           Добавить компанию
         </a>
@@ -244,8 +244,8 @@ export default async function CompaniesPage() {
         <div className="space-y-6">
           {activeCompanies.length ? (
             <section>
-              <div className="relative mb-4 overflow-hidden rounded-[32px] border border-white/10 bg-[#07111f] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.35)] sm:flex sm:items-center sm:justify-between sm:gap-3">
-                <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_0%,rgba(34,211,238,0.18),transparent_34%)]" />
+              <div className="relative mb-4 overflow-hidden rounded-[32px] border border-blue-400/20 bg-[#07091c] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.35)] sm:flex sm:items-center sm:justify-between sm:gap-3">
+                <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_0%,rgba(37,99,235,0.46),transparent_34%)]" />
                 <div className="relative">
                   <div className="text-[30px] font-semibold leading-none tracking-[-0.04em] text-white">Действующие компании</div>
                   <div className="mt-3 max-w-xl text-sm leading-[1.55] text-white/55">
@@ -253,7 +253,7 @@ export default async function CompaniesPage() {
                   </div>
                 </div>
 
-                <span className="relative mt-4 inline-flex rounded-[26px] border border-white/10 bg-white/[0.05] px-4 py-2 text-sm font-semibold text-cyan-100 shadow-[0_0_28px_rgba(34,211,238,0.08)] sm:mt-0">
+                <span className="relative mt-4 inline-flex rounded-[26px] border border-white/10 bg-white/[0.05] px-4 py-2 text-sm font-semibold text-blue-50 shadow-[0_0_28px_rgba(59,130,246,0.12)] sm:mt-0">
                   {activeCompanies.length} активных
                 </span>
               </div>
@@ -279,7 +279,7 @@ export default async function CompaniesPage() {
                   </div>
                 </div>
 
-                <span className="relative mt-4 inline-flex rounded-[26px] border border-white/10 bg-white/[0.05] px-4 py-2 text-sm font-semibold text-cyan-100 sm:mt-0">
+                <span className="relative mt-4 inline-flex rounded-[26px] border border-white/10 bg-white/[0.05] px-4 py-2 text-sm font-semibold text-blue-50 sm:mt-0">
                   {otherCompanies.length} всего
                 </span>
               </div>

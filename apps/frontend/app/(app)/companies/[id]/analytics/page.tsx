@@ -43,32 +43,32 @@ export default async function CompanyAnalyticsPage({ params }: { params: { id: s
             <Card className="p-5">
               <div className="mb-4 text-base font-semibold">Разбивка по тональности</div>
               {sentiment.length ? (
-                <div className="space-y-3 text-sm text-muted">
+                <div className="space-y-3 text-sm text-zinc-300">
                   {sentiment.map((row: any, idx: number) => (
-                    <div key={idx} className="flex items-center justify-between rounded-xl border border-line bg-panel2 px-4 py-3">
+                    <div key={idx} className="flex items-center justify-between rounded-xl border border-line bg-[#050816]2 px-4 py-3">
                       <div>{row.sentiment || 'НЕИЗВЕСТНО'}</div>
                       <div>{row.count || 0}</div>
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="text-sm text-muted">Данных по тональности пока нет.</div>
+                <div className="text-sm text-zinc-300">Данных по тональности пока нет.</div>
               )}
             </Card>
 
             <Card className="p-5">
               <div className="mb-4 text-base font-semibold">Площадки</div>
               {platforms?.items?.length ? (
-                <div className="space-y-3 text-sm text-muted">
+                <div className="space-y-3 text-sm text-zinc-300">
                   {platforms.items.map((row: any, idx: number) => (
-                    <div key={idx} className="flex items-center justify-between rounded-xl border border-line bg-panel2 px-4 py-3">
+                    <div key={idx} className="flex items-center justify-between rounded-xl border border-line bg-[#050816]2 px-4 py-3">
                       <div>{row.platform || 'НЕИЗВЕСТНО'}</div>
                       <div>{row.count || 0}</div>
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="text-sm text-muted">Данных по площадкам пока нет.</div>
+                <div className="text-sm text-zinc-300">Данных по площадкам пока нет.</div>
               )}
             </Card>
           </div>

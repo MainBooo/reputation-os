@@ -41,16 +41,16 @@ export default async function CompanyRatingsPage({ params }: { params: { id: str
             <Card className="p-5">
               <div className="mb-4 text-base font-semibold">История рейтингов</div>
               {history.length ? (
-                <div className="space-y-3 text-sm text-muted">
+                <div className="space-y-3 text-sm text-zinc-300">
                   {history.map((row: any, idx: number) => (
-                    <div key={idx} className="flex items-center justify-between rounded-xl border border-line bg-panel2 px-4 py-3">
+                    <div key={idx} className="flex items-center justify-between rounded-xl border border-line bg-[#050816]2 px-4 py-3">
                       <div>{row.sourceName || row.platform || 'Источник'}</div>
                       <div>{row.ratingValue ?? '—'}</div>
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="text-sm text-muted">История рейтингов пока пуста.</div>
+                <div className="text-sm text-zinc-300">История рейтингов пока пуста.</div>
               )}
             </Card>
           </div>

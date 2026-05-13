@@ -10,7 +10,7 @@ export default function Card({
   return (
     <div
       className={clsx(
-        'rounded-2xl border border-blue-300/15 bg-[#070A18]/82 shadow-[0_24px_90px_rgba(0,0,0,0.46),0_0_46px_rgba(37,99,235,0.12),inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-xl',
+        'rounded-[28px] border border-white/10 bg-[#060b16]/82 shadow-[0_18px_70px_rgba(0,0,0,0.42),0_0_34px_rgba(59,130,246,0.08)] backdrop-blur-xl',
         className
       )}
     >

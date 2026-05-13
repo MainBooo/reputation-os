@@ -67,7 +67,7 @@ export default function MentionCard({ mention }: MentionCardProps) {
             <Link
               href={mention.url}
               target="_blank"
-              className="rounded-xl border border-cyan-400/20 bg-cyan-400/10 px-3 py-2 text-xs text-cyan-100 transition hover:bg-cyan-400/15"
+              className="rounded-xl border border-violet-400/40 bg-cyan-400/10 px-3 py-2 text-xs text-blue-100 transition hover:bg-cyan-400/15"
             >
               Открыть источник
             </Link>

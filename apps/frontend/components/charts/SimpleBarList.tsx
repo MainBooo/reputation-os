@@ -11,7 +11,7 @@ export default function SimpleBarList({
         <div key={item.label}>
           <div className="mb-1 flex items-center justify-between text-sm">
             <span className="text-brand">{item.label}</span>
-            <span className="text-muted">{item.value}</span>
+            <span className="text-zinc-300">{item.value}</span>
           </div>
           <div className="h-2 overflow-hidden rounded-full bg-white/5">
             <div

@@ -11,9 +11,9 @@ export default function StatCard({
 }) {
   return (
     <Card className="p-5">
-      <div className="text-sm text-muted">{label}</div>
+      <div className="text-sm text-zinc-300">{label}</div>
       <div className="mt-3 text-3xl font-semibold tracking-tight text-brand">{value}</div>
-      {hint ? <div className="mt-2 text-xs text-muted">{hint}</div> : null}
+      {hint ? <div className="mt-2 text-xs text-zinc-300">{hint}</div> : null}
     </Card>
   )
 }
