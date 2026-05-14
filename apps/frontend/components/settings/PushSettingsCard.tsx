@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import { getWorkspaces } from '@/lib/api/companies'
-import { getWebPushPublicKey, getWebPushSubscriptions, sendTestWebPush, subscribeWebPush, unsubscribeWebPush } from '@/lib/api/push'
+import { getWebPushPublicKey, getWebPushSubscriptions, subscribeWebPush, unsubscribeWebPush } from '@/lib/api/push'
 
 type Workspace = {
   id: string
@@ -41,7 +41,7 @@ function normalizeAlertSentiments(value: unknown) {
 function getPushSupportLabel() {
   if (typeof window === 'undefined') return 'Проверка поддержки...'
   if (!('serviceWorker' in navigator)) return 'Service Worker не поддерживается'
-  if (!('PushManager' in window)) return 'Push API не поддерживается'
+  if (!('PushManager' in window)) return 'Доступно в установленном PWA'
   if (!('Notification' in window)) return 'Notifications API не поддерживается'
   return 'Push поддерживается'
 }
@@ -199,19 +199,6 @@ export default function PushSettingsCard() {
     }
   }
 
-  async function sendTest() {
-    setLoading(true)
-    setMessage('')
-
-    try {
-      const result = await sendTestWebPush({ workspaceId: workspaceId || undefined })
-      setMessage(`Тест отправлен: ${result.sent}/${result.subscriptions}. Ошибок: ${result.failed}.`)
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Не удалось отправить тестовый push.')
-    } finally {
-      setLoading(false)
-    }
-  }
 
   return (
     <Card className="p-5">
@@ -258,22 +245,6 @@ export default function PushSettingsCard() {
           </div>
         </div>
 
-        {workspaces.length > 1 ? (
-          <label className="block">
-            <span className="mb-1 block text-xs uppercase tracking-[0.16em] text-zinc-300">Workspace</span>
-            <select
-              value={workspaceId}
-              onChange={(event) => setWorkspaceId(event.target.value)}
-              className="h-11 w-full rounded-xl border border-line bg-[#050816] px-3 text-sm text-brand outline-none"
-            >
-              {workspaces.map((workspace) => (
-                <option key={workspace.id} value={workspace.id}>
-                  {workspace.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : null}
       </div>
 
       {message ? (
@@ -285,10 +256,6 @@ export default function PushSettingsCard() {
       <div className="mt-4 flex flex-col gap-2 sm:flex-row">
         <Button type="button" onClick={enablePush} disabled={loading || !canUsePush}>
           {loading ? 'Подождите...' : subscribed ? 'Обновить подписку' : 'Включить push'}
-        </Button>
-
-        <Button type="button" variant="secondary" onClick={sendTest} disabled={loading || !subscribed}>
-          Тест push
         </Button>
 
         <Button type="button" variant="ghost" onClick={disablePush} disabled={loading || !subscribed}>

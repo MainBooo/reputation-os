@@ -9,7 +9,7 @@ export default function SettingsPage() {
         subtitle="Рабочие параметры уведомлений и мониторинга."
       />
 
-      <div className="max-w-2xl">
+      <div className="w-full max-w-none">
         <PushSettingsCard />
       </div>
     </div>
