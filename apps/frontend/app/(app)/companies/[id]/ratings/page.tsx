@@ -1,7 +1,7 @@
 import PageHeader from '@/components/ui/PageHeader'
 import StatCard from '@/components/ui/StatCard'
 import Card from '@/components/ui/Card'
-import EmptyState from '@/components/ui/EmptyState'
+import PageState from '@/components/ui/PageState'
 import { getRatingsOverview, getRatingsHistory } from '@/lib/api/ratings'
 
 export default async function CompanyRatingsPage({ params }: { params: { id: string } }) {
@@ -24,7 +24,7 @@ export default async function CompanyRatingsPage({ params }: { params: { id: str
       />
 
       {authRequired ? (
-        <EmptyState
+        <PageState
           title="Требуется авторизация"
           description="Войдите в систему, чтобы загрузить данные рейтингов из API."
         />

@@ -1,7 +1,7 @@
 import PageHeader from '@/components/ui/PageHeader'
 import StatCard from '@/components/ui/StatCard'
 import Card from '@/components/ui/Card'
-import EmptyState from '@/components/ui/EmptyState'
+import PageState from '@/components/ui/PageState'
 import { getAnalyticsOverview, getAnalyticsSentiment, getAnalyticsPlatforms } from '@/lib/api/analytics'
 
 export default async function CompanyAnalyticsPage({ params }: { params: { id: string } }) {
@@ -26,7 +26,7 @@ export default async function CompanyAnalyticsPage({ params }: { params: { id: s
       />
 
       {authRequired ? (
-        <EmptyState
+        <PageState
           title="Требуется авторизация"
           description="Войдите в систему, чтобы загрузить аналитику из API."
         />
