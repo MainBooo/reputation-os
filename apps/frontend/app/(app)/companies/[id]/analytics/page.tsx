@@ -52,7 +52,10 @@ export default async function CompanyAnalyticsPage({ params }: { params: { id: s
                   ))}
                 </div>
               ) : (
-                <div className="text-sm text-zinc-300">Данных по тональности пока нет.</div>
+                <PageState
+                  title="Нет данных по тональности"
+                  description="После появления отзывов и упоминаний здесь появится распределение настроений."
+                />
               )}
             </Card>
 
@@ -68,7 +71,10 @@ export default async function CompanyAnalyticsPage({ params }: { params: { id: s
                   ))}
                 </div>
               ) : (
-                <div className="text-sm text-zinc-300">Данных по площадкам пока нет.</div>
+                <PageState
+                  title="Нет данных по источникам"
+                  description="После подключения и синхронизации источников здесь появится распределение по площадкам."
+                />
               )}
             </Card>
           </div>
