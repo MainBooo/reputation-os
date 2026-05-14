@@ -576,6 +576,22 @@ export default async function DashboardPage() {
     return (priority[b.meta] || 0) - (priority[a.meta] || 0)
   })
 
+  const dayRisk = attentionItems[0]?.meta || 'Низкий'
+  const dayRiskTone =
+    dayRisk === 'Высокий'
+      ? 'border-red-400/25 bg-red-500/10 text-red-200'
+      : dayRisk === 'Средний'
+        ? 'border-amber-400/25 bg-amber-500/10 text-amber-100'
+        : 'border-emerald-400/25 bg-emerald-500/10 text-emerald-200'
+
+  const dayNegativeCount = recent24h.filter((mention) => getMentionSentiment(mention) === 'NEGATIVE').length
+  const ratingDelta =
+    current7dRating !== null && previous7dRating !== null
+      ? current7dRating - previous7dRating
+      : null
+  const ratingDeltaLabel =
+    ratingDelta === null ? '—' : `${ratingDelta >= 0 ? '+' : ''}${ratingDelta.toFixed(1)}`
+
   return (
     <div className="relative">
       <div className="pointer-events-none absolute -top-10 left-0 right-0 h-44 bg-[radial-gradient(circle_at_28%_0%,rgba(34,211,238,0.28),transparent_42%)]" />
@@ -593,6 +609,46 @@ export default async function DashboardPage() {
           </p>
         </div>
       </div>
+
+      <Card className="relative mb-5 overflow-hidden rounded-[30px] border-white/10 bg-[radial-gradient(circle_at_0%_0%,rgba(34,211,238,0.16),transparent_34%),#0b111c]/95 p-5 shadow-[0_22px_70px_rgba(0,0,0,0.34),0_0_44px_rgba(34,211,238,0.06)] sm:p-6">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.28em] text-cyan-300">Итог дня</div>
+            <div className="mt-1 text-sm text-slate-400">Короткая сводка по новым репутационным сигналам.</div>
+          </div>
+          <span className={`inline-flex rounded-full border px-3 py-1.5 text-xs font-semibold ${dayRiskTone}`}>
+            Риск: {dayRisk.toLowerCase()}
+          </span>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-3">
+          <div className="rounded-[22px] border border-white/10 bg-white/[0.035] p-4">
+            <div className="flex items-center gap-2 text-sm text-slate-400">
+              <AlertTriangle className="h-4 w-4 text-amber-200" />
+              Риск
+            </div>
+            <div className="mt-2 text-2xl font-semibold text-white">{dayRisk}</div>
+          </div>
+
+          <div className="rounded-[22px] border border-white/10 bg-white/[0.035] p-4">
+            <div className="flex items-center gap-2 text-sm text-slate-400">
+              <MessageSquareText className="h-4 w-4 text-red-200" />
+              Новых негативных
+            </div>
+            <div className="mt-2 text-2xl font-semibold text-white">{formatNumber(dayNegativeCount)}</div>
+          </div>
+
+          <div className="rounded-[22px] border border-white/10 bg-white/[0.035] p-4">
+            <div className="flex items-center gap-2 text-sm text-slate-400">
+              <Star className="h-4 w-4 text-amber-200" />
+              Рейтинг
+            </div>
+            <div className={ratingDelta !== null && ratingDelta < 0 ? 'mt-2 text-2xl font-semibold text-red-200' : 'mt-2 text-2xl font-semibold text-emerald-200'}>
+              {ratingDeltaLabel}
+            </div>
+          </div>
+        </div>
+      </Card>
 
       <div className="relative grid grid-cols-2 gap-4 xl:grid-cols-4">
         <KpiCard
