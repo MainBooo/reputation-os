@@ -585,6 +585,16 @@ export default async function DashboardPage() {
         : 'border-emerald-400/25 bg-emerald-500/10 text-emerald-200'
 
   const dayNegativeCount = recent24h.filter((mention) => getMentionSentiment(mention) === 'NEGATIVE').length
+  const dayNewMentions = recent24h.length
+  const requiresAttentionCount = newUnprocessed24h.length
+  const criticalSignalsCount = lowRating24h.length
+  const aiSummary =
+    dayRisk === 'Высокий'
+      ? 'Обнаружен рост негативных упоминаний за последние 24 часа.'
+      : dayRisk === 'Средний'
+        ? 'Есть сигналы, требующие внимания и проверки.'
+        : 'Репутационный фон стабилен.'
+
   const ratingDelta =
     current7dRating !== null && previous7dRating !== null
       ? current7dRating - previous7dRating
@@ -635,7 +645,7 @@ export default async function DashboardPage() {
               <MessageSquareText className="h-4 w-4 text-red-200" />
               Новых негативных
             </div>
-            <div className="mt-2 text-2xl font-semibold text-white">{formatNumber(dayNegativeCount)}</div>
+            <div className="mt-2 text-3xl font-semibold text-red-200">{formatNumber(dayNegativeCount)}</div>
           </div>
 
           <div className="rounded-[22px] border border-white/10 bg-white/[0.035] p-4">
@@ -643,14 +653,14 @@ export default async function DashboardPage() {
               <Star className="h-4 w-4 text-amber-200" />
               Рейтинг
             </div>
-            <div className={ratingDelta !== null && ratingDelta < 0 ? 'mt-2 text-2xl font-semibold text-red-200' : 'mt-2 text-2xl font-semibold text-emerald-200'}>
+            <div className={ratingDelta !== null && ratingDelta < 0 ? 'mt-2 text-3xl font-semibold text-red-200' : 'mt-2 text-3xl font-semibold text-emerald-200'}>
               {ratingDeltaLabel}
             </div>
           </div>
         </div>
       </Card>
 
-      <div className="relative grid grid-cols-2 gap-4 xl:grid-cols-4">
+      <div className="relative grid grid-cols-2 gap-3 xl:grid-cols-4">
         <KpiCard
           Icon={BriefcaseBusiness}
           label="Компании"
