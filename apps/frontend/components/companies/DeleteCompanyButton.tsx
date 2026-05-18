@@ -2,13 +2,24 @@
 
 import { MouseEvent, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Trash2 } from 'lucide-react'
 import Button from '@/components/ui/Button'
 import { deleteCompany } from '@/lib/api/companies'
+import { useWorkspaceAccess } from '@/lib/hooks/useWorkspaceAccess'
 
-export default function DeleteCompanyButton({ id, name }: { id: string; name: string }) {
+export default function DeleteCompanyButton({
+  id,
+  name,
+  workspaceId
+}: {
+  id: string
+  name: string
+  workspaceId?: string | null
+}) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
+  const { canWrite, loading: accessLoading } = useWorkspaceAccess(workspaceId)
+
+  if (accessLoading || !canWrite) return null
 
   async function onDelete(event: MouseEvent<HTMLButtonElement>) {
     event.preventDefault()

@@ -38,7 +38,7 @@ export default function RegisterPage() {
         document.cookie = `accessToken=${encodeURIComponent(result.accessToken)}; path=/; max-age=${60 * 60 * 24 * 7}; samesite=lax`
       }
 
-      router.replace('/dashboard')
+      router.replace('/companies?onboarding=1')
       router.refresh()
     } catch (err: any) {
       const msg = err?.message || 'Не удалось создать аккаунт. Проверьте введённые данные.'

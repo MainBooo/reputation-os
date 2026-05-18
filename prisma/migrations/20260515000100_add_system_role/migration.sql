@@ -1,0 +1,8 @@
+DO $$ BEGIN
+  CREATE TYPE "SystemRole" AS ENUM ('USER', 'SUPER_ADMIN');
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
+
+ALTER TABLE "User"
+ADD COLUMN IF NOT EXISTS "systemRole" "SystemRole" NOT NULL DEFAULT 'USER';

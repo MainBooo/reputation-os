@@ -1,5 +1,24 @@
 import Card from '@/components/ui/Card'
 
+
+function relativeTimeLabel(value?: string | Date | null) {
+  if (!value) return '—'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '—'
+
+  const diffMs = Date.now() - date.getTime()
+  const diffMinutes = Math.max(0, Math.floor(diffMs / 60000))
+
+  if (diffMinutes < 1) return 'только что'
+  if (diffMinutes < 60) return `${diffMinutes} мин назад`
+
+  const diffHours = Math.floor(diffMinutes / 60)
+  if (diffHours < 24) return `${diffHours} ч назад`
+
+  const diffDays = Math.floor(diffHours / 24)
+  return `${diffDays} дн назад`
+}
+
 function formatDateTime(value?: string | Date | null) {
   if (!value) return '—'
   const date = new Date(value)
@@ -129,7 +148,7 @@ export default function CompanySyncStatusCard({ status }: { status: any }) {
               </div>
 
               <div className="mt-3 text-xs text-zinc-300">
-                <div>Последний сбор: {formatDateTime(latestLog?.createdAt || latestLog?.finishedAt)}</div>
+                <div>Последний сбор: {formatDateTime(latestLog?.createdAt || latestLog?.finishedAt)} · {relativeTimeLabel(latestLog?.createdAt || latestLog?.finishedAt)}</div>
                 <div className="mt-1">{state === 'FAILED' ? 'Источник временно недоступен. Повторим позже.' : logSummary(latestLog)}</div>
                   {row.href ? (
                     <a href={row.href} className="mt-3 inline-flex text-xs font-semibold text-blue-100 hover:text-blue-100">

@@ -4,12 +4,22 @@ import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import Button from '@/components/ui/Button'
 import { startCompanySync } from '@/lib/api/companies'
+import { useWorkspaceAccess } from '@/lib/hooks/useWorkspaceAccess'
 
-export default function CompanyManualSyncButton({ companyId }: { companyId: string }) {
+export default function CompanyManualSyncButton({
+  companyId,
+  workspaceId
+}: {
+  companyId: string
+  workspaceId?: string | null
+}) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
+  const { canWrite, loading: accessLoading } = useWorkspaceAccess(workspaceId)
+
+  if (accessLoading || !canWrite) return null
 
   async function handleClick() {
     if (loading) return

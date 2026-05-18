@@ -1,4 +1,4 @@
-import { ForbiddenException, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common'
+import { BadRequestException, ForbiddenException, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common'
 import { Queue } from 'bullmq'
 import { Prisma } from '@prisma/client'
 import { PrismaService } from '../../common/prisma/prisma.service'
@@ -10,6 +10,8 @@ import { UpdateCompanyDto } from './dto/update-company.dto'
 import { CreateCompanyAliasDto } from './dto/create-company-alias.dto'
 import { CreateCompanySourceTargetDto } from './dto/create-company-source-target.dto'
 import { UpdateCompanySourceTargetDto } from './dto/update-company-source-target.dto'
+
+const WORKSPACE_COMPANIES_LIMIT = 3
 
 @Injectable()
 export class CompaniesService {
@@ -123,7 +125,20 @@ export class CompaniesService {
     return value as Prisma.InputJsonValue | undefined
   }
 
-  private async assertWorkspaceAccess(userId: string, workspaceId: string) {
+  private async assertWorkspaceAccess(
+    userId: string,
+    workspaceId: string,
+    access: 'read' | 'write' = 'read'
+  ) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { systemRole: true, isActive: true }
+    })
+
+    if (user?.isActive && user.systemRole === 'SUPER_ADMIN') {
+      return { role: 'OWNER' as const }
+    }
+
     const member = await this.prisma.workspaceMember.findFirst({
       where: { userId, workspaceId }
     })
@@ -131,6 +146,16 @@ export class CompaniesService {
     if (!member) {
       throw new ForbiddenException('No access to workspace')
     }
+
+    if (
+      access === 'write' &&
+      member.role !== 'OWNER' &&
+      member.role !== 'ADMIN'
+    ) {
+      throw new ForbiddenException('No write access to workspace')
+    }
+
+    return member
   }
 
   private async ensureTwoGisSource(workspaceId: string) {
@@ -465,11 +490,31 @@ export class CompaniesService {
   }
 
   async findAll(userId: string) {
+    const currentUser = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { systemRole: true }
+    })
+
     const companies = await this.prisma.company.findMany({
-      where: { workspace: { members: { some: { userId } } } },
+      where: currentUser?.systemRole === 'SUPER_ADMIN'
+        ? {}
+        : { workspace: { members: { some: { userId } } } },
       include: {
         aliases: true,
         sourceTargets: true,
+        workspace: {
+          include: {
+            members: {
+              where: { role: 'OWNER' },
+              take: 1,
+              include: {
+                user: {
+                  select: { id: true, email: true, fullName: true }
+                }
+              }
+            }
+          }
+        },
         _count: { select: { mentions: true, ratingSnapshots: true } }
       },
       orderBy: { createdAt: 'desc' }
@@ -489,7 +534,15 @@ export class CompaniesService {
   }
 
   async create(userId: string, dto: CreateCompanyDto) {
-    await this.assertWorkspaceAccess(userId, dto.workspaceId)
+    await this.assertWorkspaceAccess(userId, dto.workspaceId, 'write')
+
+    const companiesCount = await this.prisma.company.count({
+      where: { workspaceId: dto.workspaceId }
+    })
+
+    if (companiesCount >= WORKSPACE_COMPANIES_LIMIT) {
+      throw new BadRequestException(`Workspace company limit reached: ${WORKSPACE_COMPANIES_LIMIT}`)
+    }
 
     this.logger.log(
       `[CompanyCreate] start workspaceId=${dto.workspaceId} name="${dto.name}" yandexUrl="${dto.yandexUrl?.trim() || ''}"`
@@ -586,7 +639,7 @@ export class CompaniesService {
       throw new NotFoundException('Company not found')
     }
 
-    await this.assertWorkspaceAccess(userId, company.workspaceId)
+    await this.assertWorkspaceAccess(userId, company.workspaceId, 'write')
 
     const logoRows = await this.prisma.$queryRawUnsafe<Array<{ logoUrl: string | null }>>(
       'select "logoUrl" from "Company" where "id" = $1 limit 1',
@@ -606,7 +659,7 @@ export class CompaniesService {
       throw new NotFoundException('Company not found')
     }
 
-    await this.assertWorkspaceAccess(userId, company.workspaceId)
+    await this.assertWorkspaceAccess(userId, company.workspaceId, 'write')
 
     const updatedCompany = await this.prisma.company.update({
       where: { id },
@@ -790,7 +843,7 @@ export class CompaniesService {
       throw new NotFoundException('Company not found')
     }
 
-    await this.assertWorkspaceAccess(userId, company.workspaceId)
+    await this.assertWorkspaceAccess(userId, company.workspaceId, 'write')
 
     await this.prisma.companyAlias.deleteMany({ where: { companyId: id } })
     await this.prisma.companySourceTarget.deleteMany({ where: { companyId: id } })
@@ -809,7 +862,7 @@ export class CompaniesService {
       throw new NotFoundException('Company not found')
     }
 
-    await this.assertWorkspaceAccess(userId, company.workspaceId)
+    await this.assertWorkspaceAccess(userId, company.workspaceId, 'write')
 
     return this.prisma.companyAlias.create({
       data: {
@@ -829,7 +882,7 @@ export class CompaniesService {
       throw new NotFoundException('Company not found')
     }
 
-    await this.assertWorkspaceAccess(userId, company.workspaceId)
+    await this.assertWorkspaceAccess(userId, company.workspaceId, 'write')
 
     return this.prisma.companyAlias.delete({
       where: { id: aliasId }
@@ -1128,7 +1181,7 @@ export class CompaniesService {
       throw new NotFoundException('Company not found')
     }
 
-    await this.assertWorkspaceAccess(userId, company.workspaceId)
+    await this.assertWorkspaceAccess(userId, company.workspaceId, 'write')
 
     let sourceId: string | null = dto.sourceId || null
 
@@ -1195,7 +1248,7 @@ export class CompaniesService {
       throw new NotFoundException('Company not found')
     }
 
-    await this.assertWorkspaceAccess(userId, company.workspaceId)
+    await this.assertWorkspaceAccess(userId, company.workspaceId, 'write')
 
     const target = await this.prisma.companySourceTarget.findUnique({
       where: { id: targetId },
@@ -1249,7 +1302,7 @@ export class CompaniesService {
       throw new NotFoundException('Company not found')
     }
 
-    await this.assertWorkspaceAccess(userId, company.workspaceId)
+    await this.assertWorkspaceAccess(userId, company.workspaceId, 'write')
 
     const target = await this.prisma.companySourceTarget.findUnique({
       where: { id: targetId },

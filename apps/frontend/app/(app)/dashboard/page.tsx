@@ -4,6 +4,7 @@ import Card from '@/components/ui/Card'
 import EmptyState from '@/components/ui/EmptyState'
 import DashboardCharts from '@/components/dashboard/DashboardCharts'
 import { getCompanies } from '@/lib/api/companies'
+import { me } from '@/lib/api/auth'
 import { getCompanyMentions } from '@/lib/api/mentions'
 import { BriefcaseBusiness, Radar, MessageSquareText, Star, BellRing, Activity, Inbox, Plus, Building2, ArrowRight, AlertTriangle, ShieldCheck, Clock3, ExternalLink, type LucideIcon } from 'lucide-react'
 
@@ -340,6 +341,8 @@ export default async function DashboardPage() {
   let authRequired = false
 
   try {
+    await me()
+
     const companiesResult = await getCompanies()
     companies = Array.isArray(companiesResult) ? companiesResult : []
 
@@ -351,8 +354,8 @@ export default async function DashboardPage() {
         : []
       dashboardMeta = mentionsResult?.meta || dashboardMeta
     }
-  } catch {
-    authRequired = true
+  } catch (error) {
+    console.error('[DashboardPage]', error)
   }
 
   if (authRequired) {

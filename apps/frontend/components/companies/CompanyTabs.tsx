@@ -3,14 +3,15 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import clsx from 'clsx'
-import { BarChart3, Building2, Globe2, Inbox, Star } from 'lucide-react'
+import { BarChart3, Building2, Clock3, Globe2, Inbox, Star } from 'lucide-react'
 
 const items = [
   { href: '', label: 'Обзор', icon: Building2, tone: 'cyan' },
   { href: '/inbox', label: 'Inbox', icon: Inbox, tone: 'violet' },
   { href: '/web', label: 'Сеть', icon: Globe2, tone: 'cyan' },
   { href: '/analytics', label: 'Аналитика', icon: BarChart3, tone: 'violet' },
-  { href: '/ratings', label: 'Рейтинги', icon: Star, tone: 'cyan' }
+  { href: '/ratings', label: 'Рейтинги', icon: Star, tone: 'cyan' },
+  { href: '/sync-history', label: 'Синхр.', icon: Clock3, tone: 'violet' }
 ]
 
 export default function CompanyTabs({ companyId }: { companyId: string }) {
@@ -22,7 +23,7 @@ export default function CompanyTabs({ companyId }: { companyId: string }) {
       <div className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-cyan-200 to-fuchsia-300" />
       <div className="pointer-events-none absolute inset-x-10 bottom-0 h-px bg-gradient-to-r from-transparent via-cyan-400/70 to-fuchsia-400/70" />
 
-      <div className="grid grid-cols-5 gap-1.5">
+      <div className="grid grid-cols-3 gap-1.5 lg:grid-cols-6">
         {items.map((item) => {
           const href = `${base}${item.href}`
           const active = pathname === href
@@ -33,7 +34,7 @@ export default function CompanyTabs({ companyId }: { companyId: string }) {
               key={href}
               href={href}
               className={clsx(
-                'group relative flex min-w-0 items-center justify-center gap-2 overflow-hidden rounded-[26px] border px-2 py-4 text-sm font-semibold transition-all duration-200 sm:gap-3 sm:px-5 sm:py-5 sm:text-lg',
+                'group relative flex min-w-0 items-center justify-center gap-2 overflow-hidden rounded-[26px] border px-2.5 py-3.5 text-[13px] font-semibold transition-all duration-200  sm:gap-3 sm:px-5 sm:py-5 sm:text-lg',
                 active
                   ? 'border-cyan-300/55 bg-cyan-500/[0.20] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.14),0_0_44px_rgba(34,211,238,0.34)]'
                   : 'border-transparent bg-transparent text-slate-300 hover:border-cyan-300/25 hover:bg-cyan-500/[0.08] hover:text-white'

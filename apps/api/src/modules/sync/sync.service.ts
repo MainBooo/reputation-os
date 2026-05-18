@@ -19,7 +19,7 @@ export class SyncService {
     private readonly reconcileQueue: Queue
   ) {}
 
-  private async assertCompanyAccess(userId: string, companyId: string) {
+  private async assertCompanyAccess(userId: string, companyId: string, mode: 'read' | 'write' = 'read') {
     const company = await this.prisma.company.findUnique({
       where: { id: companyId },
       select: { id: true, workspaceId: true }
@@ -29,19 +29,33 @@ export class SyncService {
       throw new NotFoundException('Company not found')
     }
 
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { systemRole: true, isActive: true }
+    })
+
+    if (user?.isActive && user.systemRole === 'SUPER_ADMIN') {
+      return company
+    }
+
     const member = await this.prisma.workspaceMember.findFirst({
-      where: { userId, workspaceId: company.workspaceId }
+      where: { userId, workspaceId: company.workspaceId },
+      select: { role: true }
     })
 
     if (!member) {
       throw new ForbiddenException('No access to company')
     }
 
+    if (mode === 'write' && member.role === 'MEMBER') {
+      throw new ForbiddenException('Only OWNER or ADMIN can start sync jobs')
+    }
+
     return company
   }
 
   async discoverSources(userId: string, companyId: string) {
-    await this.assertCompanyAccess(userId, companyId)
+    await this.assertCompanyAccess(userId, companyId, 'write')
 
     const job = await this.sourceDiscoveryQueue.add(
       'source.discovery',
@@ -80,7 +94,7 @@ export class SyncService {
   }
 
   async startSync(userId: string, companyId: string) {
-    await this.assertCompanyAccess(userId, companyId)
+    await this.assertCompanyAccess(userId, companyId, 'write')
 
     const requestedAt = new Date().toISOString()
 
@@ -123,8 +137,8 @@ export class SyncService {
   }
 
   async startWebSync(userId: string, companyId: string) {
+    await this.assertCompanyAccess(userId, companyId, 'write')
     await this.ensureWebBootstrapTarget(companyId)
-    await this.assertCompanyAccess(userId, companyId)
 
     const requestedAt = new Date().toISOString()
 

@@ -7,7 +7,7 @@ import Button from '@/components/ui/Button'
 import Card from '@/components/ui/Card'
 import EmptyState from '@/components/ui/EmptyState'
 import InboxPendingRefresh from '@/components/inbox/InboxPendingRefresh'
-import { deleteMention, getCompanyMentions } from '@/lib/api/mentions'
+import { deleteMention, getCompanyMentions, updateMentionStatus } from '@/lib/api/mentions'
 
 const PAGE_LIMIT = 20
 const PLATFORM_FILTERS = ['YANDEX', 'TWOGIS', 'WEB']
@@ -24,6 +24,14 @@ function sentimentLabel(value: string) {
   if (value === 'NEGATIVE') return 'Негатив'
   if (value === 'POSITIVE') return 'Позитив'
   if (value === 'NEUTRAL') return 'Нейтрал'
+  return value
+}
+
+function inboxStatusLabel(value: string) {
+  if (value === 'ALL') return 'Все'
+  if (value === 'NEW') return 'Новые'
+  if (value === 'REVIEWED') return 'Обработанные'
+  if (value === 'ARCHIVED') return 'Архив'
   return value
 }
 
@@ -59,8 +67,10 @@ function mentionMatchesFilters(
     rating: number | null
     from: string
     to: string
+      statusFilter: string
   }
 ) {
+    if (filters.statusFilter && filters.statusFilter !== 'ALL' && mention?.status !== filters.statusFilter) return false
   if (filters.platform && mention?.platform !== filters.platform) return false
 
   const numericRating =
@@ -147,6 +157,9 @@ export default function InboxMentionsList({
   const [rating, setRating] = useState<number | null>(initialFilters?.rating || null)
   const [from, setFrom] = useState(initialFilters?.from || '')
   const [to, setTo] = useState(initialFilters?.to || '')
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'NEW' | 'REVIEWED' | 'ARCHIVED'>('ALL')
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [bulkLoading, setBulkLoading] = useState<'REVIEWED' | 'ARCHIVED' | ''>('')
   const [filtersOpen, setFiltersOpen] = useState(Boolean(
     initialFilters?.platform ||
     initialFilters?.sentiment ||
@@ -172,13 +185,16 @@ export default function InboxMentionsList({
     return `?${params.toString()}`
   }, [platform, sentiment, rating, from, to])
 
-  const hasActiveFilters = Boolean(platform || sentiment || rating || from || to)
-  const activeFilterCount = [platform, sentiment, rating, from || to].filter(Boolean).length
+  const hasActiveFilters = Boolean(platform || sentiment || rating || from || to || statusFilter !== 'ALL')
+  const activeFilterCount = [platform, sentiment, rating, from || to, statusFilter !== 'ALL'].filter(Boolean).length
   const visibleMentions = useMemo(
-    () => mentions.filter((mention) => mentionMatchesFilters(mention, { platform, sentiment, rating, from, to })),
-    [mentions, platform, sentiment, rating, from, to]
+    () => mentions.filter((mention) => mentionMatchesFilters(mention, { platform, sentiment, rating, from, to, statusFilter })),
+    [mentions, platform, sentiment, rating, from, to, statusFilter]
   )
   const visibleCount = visibleMentions.length
+  const visibleIds = visibleMentions.map((mention) => mention?.id).filter(Boolean)
+  const selectedVisibleIds = selectedIds.filter((id) => visibleIds.includes(id))
+  const allVisibleSelected = visibleIds.length > 0 && selectedVisibleIds.length === visibleIds.length
   const hasMore = useMemo(() => mentions.length < totalCount, [mentions.length, totalCount])
 
   useEffect(() => {
@@ -286,12 +302,53 @@ export default function InboxMentionsList({
     }
   }
 
+  function toggleMentionSelection(mentionId: string) {
+    if (!mentionId || bulkLoading) return
+    setSelectedIds((current) =>
+      current.includes(mentionId)
+        ? current.filter((id) => id !== mentionId)
+        : [...current, mentionId]
+    )
+  }
+
+  function toggleVisibleSelection() {
+    if (bulkLoading) return
+    setSelectedIds((current) => {
+      if (allVisibleSelected) return current.filter((id) => !visibleIds.includes(id))
+      return Array.from(new Set([...current, ...visibleIds]))
+    })
+  }
+
+  async function handleBulkStatus(status: 'REVIEWED' | 'ARCHIVED') {
+    const ids = selectedIds.filter(Boolean)
+    if (!ids.length || bulkLoading) return
+
+    setBulkLoading(status)
+    setError('')
+
+    try {
+      await Promise.all(ids.map((id) => updateMentionStatus(id, status)))
+
+      setMentions((current) =>
+        current.map((item) => ids.includes(item?.id) ? { ...item, status } : item)
+      )
+
+      setSelectedIds([])
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Не удалось выполнить bulk-действие')
+    } finally {
+      setBulkLoading('')
+    }
+  }
+
   function resetFilters() {
     setPlatform('')
     setSentiment('')
     setRating(null)
     setFrom('')
     setTo('')
+    setStatusFilter('ALL')
+    setSelectedIds([])
   }
 
   const ratingLabel = averageRating === null ? '—' : `${averageRating.toFixed(1)} ★`
@@ -364,6 +421,24 @@ export default function InboxMentionsList({
             </button>
           ) : null}
 
+            {(['ALL', 'NEW', 'REVIEWED', 'ARCHIVED'] as const).map((item) => (
+              <button
+                key={item}
+                type="button"
+                onClick={() => {
+                  setStatusFilter(item)
+                  setSelectedIds([])
+                }}
+                className={clsx(
+                  'rounded-full border px-3 py-2 text-sm font-semibold transition-all',
+                  statusFilter === item
+                    ? 'border-cyan-400/30 bg-cyan-500/15 text-blue-100'
+                    : 'border-white/10 bg-white/[0.04] text-zinc-300 hover:text-brand'
+                )}
+              >
+                {inboxStatusLabel(item)}
+              </button>
+            ))}
           {hasActiveFilters ? (
             <button type="button" onClick={resetFilters} className="ml-auto text-sm font-medium text-blue-300 hover:text-white">
               Сбросить все
@@ -453,25 +528,39 @@ export default function InboxMentionsList({
           }
         />
       ) : (
-        <>
-          <div className="space-y-3">
-            {visibleMentions.map((mention: any) => (
-              <MentionRow
-                key={mention.id}
-                mention={mention}
-                actions={
-                  <button
-                    type="button"
-                    disabled={removingId === mention.id}
-                    onClick={() => handleDelete(mention.id)}
-                    className="inline-flex items-center justify-center rounded-md border border-red-500/20 bg-red-500/10 px-2.5 py-1 text-xs text-red-300 transition-all hover:bg-red-500/20 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {removingId === mention.id ? 'Удаление...' : 'Удалить'}
-                  </button>
-                }
-              />
-            ))}
-          </div>
+          <>
+            <Card className="mb-3 border-white/10 bg-[#050816]/80 p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <button type="button" disabled={!visibleIds.length || Boolean(bulkLoading)} onClick={toggleVisibleSelection} className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-semibold text-zinc-200 transition hover:border-cyan-400/30 hover:text-white disabled:cursor-not-allowed disabled:opacity-50">
+                  {allVisibleSelected ? 'Снять выбор' : 'Выбрать все'}
+                </button>
+                <span className="rounded-full border border-white/10 bg-white/[0.035] px-3 py-2 text-xs font-semibold text-zinc-400">Выбрано: {selectedIds.length}</span>
+                <button type="button" disabled={!selectedIds.length || Boolean(bulkLoading)} onClick={() => handleBulkStatus('REVIEWED')} className="rounded-full border border-emerald-400/25 bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-50">
+                  {bulkLoading === 'REVIEWED' ? 'Обработка...' : 'Отметить обработанным'}
+                </button>
+                <button type="button" disabled={!selectedIds.length || Boolean(bulkLoading)} onClick={() => handleBulkStatus('ARCHIVED')} className="rounded-full border border-amber-400/25 bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-100 transition hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-50">
+                  {bulkLoading === 'ARCHIVED' ? 'Архивация...' : 'Архивировать'}
+                </button>
+              </div>
+            </Card>
+
+            <div className="space-y-3">
+              {visibleMentions.map((mention: any) => (
+                <div key={mention.id} className="grid gap-2 sm:grid-cols-[auto_1fr] sm:items-start">
+                  <label className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] transition hover:border-cyan-400/30">
+                    <input type="checkbox" checked={selectedIds.includes(mention.id)} onChange={() => toggleMentionSelection(mention.id)} className="h-4 w-4 accent-cyan-400" />
+                  </label>
+                  <MentionRow
+                    mention={mention}
+                    actions={
+                      <button type="button" disabled={removingId === mention.id} onClick={() => handleDelete(mention.id)} className="inline-flex items-center justify-center rounded-md border border-red-500/20 bg-red-500/10 px-2.5 py-1 text-xs text-red-300 transition-all hover:bg-red-500/20 hover:text-white disabled:cursor-not-allowed disabled:opacity-60">
+                        {removingId === mention.id ? 'Удаление...' : 'Удалить'}
+                      </button>
+                    }
+                  />
+                </div>
+              ))}
+            </div>
 
           {error ? <div className="mt-4 text-sm text-red-400">{error}</div> : null}
 

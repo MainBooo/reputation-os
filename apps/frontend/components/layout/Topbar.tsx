@@ -70,6 +70,26 @@ export default function Topbar() {
   const [user, setUser] = useState<AuthMe | null>(null)
   const [loading, setLoading] = useState(true)
 
+  const visibleNavItems = user?.systemRole === 'SUPER_ADMIN'
+    ? [
+        ...navItems,
+        {
+          href: '/team',
+          label: 'Команда',
+          description: 'Доступы',
+          icon: ShieldCheck,
+          tone: 'violet'
+        },
+        {
+          href: '/admin',
+          label: 'Админка',
+          description: 'Платформа',
+          icon: ShieldCheck,
+          tone: 'cyan'
+        }
+      ]
+    : navItems
+
   useEffect(() => {
     let mounted = true
     ;(async () => {
@@ -95,7 +115,7 @@ export default function Topbar() {
   }
 
   return (
-    <header className="sticky top-0 z-30 overflow-hidden border-b border-cyan-300/10 bg-[#050d18]/78 shadow-[0_18px_80px_rgba(0,0,0,0.35)] backdrop-blur-2xl">
+    <header className="sticky top-0 z-30 print:hidden overflow-hidden border-b border-cyan-300/10 bg-[#050d18]/78 shadow-[0_18px_80px_rgba(0,0,0,0.35)] backdrop-blur-2xl">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_14%_0%,rgba(59,130,246,0.26),transparent_38%),radial-gradient(circle_at_78%_10%,rgba(139,92,246,0.14),transparent_32%)]" />
       <div className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-cyan-300/35 to-transparent" />
 
@@ -153,8 +173,8 @@ export default function Topbar() {
             </div>
           </div>
 
-          <div className="mt-5 grid gap-3 sm:grid-cols-3">
-            {navItems.map((item) => {
+          <div className="mt-5 grid gap-3 sm:grid-cols-3 xl:grid-cols-5">
+            {visibleNavItems.map((item) => {
               const Icon = item.icon
               const active = pathname === item.href || pathname.startsWith(item.href + '/')
 

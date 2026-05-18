@@ -15,18 +15,27 @@ type ExternalMention = {
 export class YandexAdapter {
   private normalizeReviewsUrl(url: string) {
     const trimmed = url.trim()
-    const orgMatch = trimmed.match(/https?:\/\/yandex\.ru\/maps\/org\/[^/?#]+\/\d+/i)
+
+    const normalizedDomain = trimmed
+      .replace('yandex.com', 'yandex.ru')
+      .split('?')[0]
+      .split('#')[0]
+
+    const orgMatch = normalizedDomain.match(
+      /https?:\/\/yandex\.(ru|com)\/maps\/org\/[^/?#]+\/\d+/i
+    )
 
     if (orgMatch?.[0]) {
       return `${orgMatch[0].replace(/\/$/, '')}/reviews/`
     }
 
     const oidMatch = trimmed.match(/[?&]oid=(\d+)/)
+
     if (oidMatch?.[1]) {
       return `https://yandex.ru/maps/org/placeholder/${oidMatch[1]}/reviews/`
     }
 
-    return trimmed
+    return normalizedDomain
   }
 
   private async ensureNewestSort(page: any) {
@@ -627,7 +636,7 @@ export class YandexAdapter {
               }
             })
             .filter((item) => item.content && item.content.trim().length >= 2)
-            .slice(0, 50)
+            .slice(0, 200)
         },
         { externalUrl: normalizedUrl, targetId: target.id }
       )
@@ -769,7 +778,7 @@ export class YandexAdapter {
 
           return safeBTime - safeATime
         })
-        .slice(0, 50)
+        .slice(0, 200)
 
 
       if (sortedReviews.length === 0) {

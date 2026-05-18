@@ -5,7 +5,10 @@ import EmptyState from '@/components/ui/EmptyState'
 import { getCompanies } from '@/lib/api/companies'
 import CompaniesCreateForm from '@/components/companies/CompaniesCreateForm'
 import DeleteCompanyButton from '@/components/companies/DeleteCompanyButton'
+import CompaniesOnboarding from '@/components/companies/CompaniesOnboarding'
 import { CheckCircle2, Database, Globe, Inbox, KeyRound, MapPin, MessageSquare, PanelsTopLeft, Tag } from 'lucide-react'
+
+export const dynamic = 'force-dynamic'
 
 type CompanyStatus = 'active' | 'pending' | 'draft'
 
@@ -132,9 +135,17 @@ function CompanyCard({ company, featured = false }: { company: any; featured?: b
                 <div className="truncate text-[28px] font-semibold leading-[0.95] tracking-[-0.04em] text-white sm:text-[32px]">
                   {company.name}
                 </div>
-                <span className={`mt-2 inline-flex w-fit rounded-full border px-4 py-2 text-sm font-semibold ${statusClasses.badge}`}>
-                  {statusLabel}
-                </span>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <span className={`inline-flex w-fit rounded-full border px-4 py-2 text-sm font-semibold ${statusClasses.badge}`}>
+                      {statusLabel}
+                    </span>
+
+                    {company.workspace?.name ? (
+                      <span className="inline-flex max-w-full truncate rounded-full border border-cyan-400/20 bg-cyan-500/10 px-4 py-2 text-sm font-semibold text-cyan-100">
+                        {company.workspace.name}
+                      </span>
+                    ) : null}
+                  </div>
               </div>
             </div>
           </Link>
@@ -196,7 +207,7 @@ function CompanyCard({ company, featured = false }: { company: any; featured?: b
             </Link>
           </div>
 
-          <DeleteCompanyButton id={company.id} name={company.name} />
+          <DeleteCompanyButton id={company.id} name={company.name} workspaceId={company.workspaceId} />
         </div>
       </div>
     </Card>
@@ -208,8 +219,8 @@ export default async function CompaniesPage() {
 
   try {
     companies = await getCompanies()
-  } catch {
-    authRequired = true
+  } catch (error) {
+    console.error('[CompaniesPage] Failed to load companies', error)
     companies = []
   }
 
@@ -234,6 +245,8 @@ export default async function CompaniesPage() {
           Добавить компанию
         </a>
       </div>
+
+        {!authRequired ? <CompaniesOnboarding companies={sortedCompanies} /> : null}
 
       {authRequired ? (
         <EmptyState

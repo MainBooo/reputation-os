@@ -195,7 +195,12 @@ export default async function CompanyPage({ params }: { params: { id: string } }
               </div>
             </div>
 
-            <CompanyManualSyncButton companyId={company.id} />
+            <div className="flex flex-wrap gap-2">
+              <Link href={`/companies/${company.id}/report`} className="inline-flex h-11 items-center justify-center rounded-full border border-cyan-400/25 bg-cyan-500/10 px-4 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-500/20">
+                Скачать отчёт
+              </Link>
+              <CompanyManualSyncButton companyId={company.id} workspaceId={company.workspaceId} />
+            </div>
           </div>
         </Card>
 

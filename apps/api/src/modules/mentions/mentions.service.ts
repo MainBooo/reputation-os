@@ -12,6 +12,13 @@ export class MentionsService {
     const company = await this.prisma.company.findUnique({ where: { id: companyId }, select: { id: true, workspaceId: true } })
     if (!company) throw new NotFoundException('Company not found')
 
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { systemRole: true, isActive: true }
+    })
+
+    if (user?.isActive && user.systemRole === 'SUPER_ADMIN') return company
+
     const member = await this.prisma.workspaceMember.findFirst({
       where: { userId, workspaceId: company.workspaceId }
     })

@@ -1,11 +1,14 @@
 'use client'
 
 import Link from 'next/link'
+import { useEffect, useMemo, useState } from 'react'
 import { usePathname } from 'next/navigation'
 import clsx from 'clsx'
-import { LayoutDashboard, Building2, Settings, Sparkles } from 'lucide-react'
+import { LayoutDashboard, Building2, Settings, Sparkles, Shield, Users } from 'lucide-react'
+import { me, type AuthMe } from '@/lib/api/auth'
+import { getWorkspaces } from '@/lib/api/companies'
 
-const items = [
+const baseItems = [
   { href: '/dashboard', label: 'Дашборд', icon: LayoutDashboard },
   { href: '/companies', label: 'Компании', icon: Building2 },
   { href: '/settings', label: 'Настройки', icon: Settings }
@@ -13,9 +16,53 @@ const items = [
 
 export default function Sidebar() {
   const pathname = usePathname()
+  const [user, setUser] = useState<AuthMe | null>(null)
+  const [canManageTeam, setCanManageTeam] = useState(false)
+
+  useEffect(() => {
+    let mounted = true
+
+    async function loadAccess() {
+      try {
+        const [userData, workspaces] = await Promise.all([me(), getWorkspaces()])
+        if (!mounted) return
+
+        setUser(userData)
+
+        const list = Array.isArray(workspaces) ? workspaces : []
+        const allowed = list.some((workspace: any) =>
+          Array.isArray(workspace?.members) &&
+          workspace.members.some((member: any) =>
+            member?.userId === userData.id && ['OWNER', 'ADMIN'].includes(member?.role)
+          )
+        )
+
+        setCanManageTeam(allowed)
+      } catch {}
+    }
+
+    loadAccess()
+
+    return () => {
+      mounted = false
+    }
+  }, [])
+
+  const items = useMemo(() => {
+    const nextItems = canManageTeam
+      ? [...baseItems, { href: '/team', label: 'Команда', icon: Users }]
+      : baseItems
+
+    if (user?.systemRole !== 'SUPER_ADMIN') return nextItems
+
+    return [
+      ...nextItems,
+      { href: '/admin', label: 'Админка', icon: Shield }
+    ]
+  }, [canManageTeam, user?.systemRole])
 
   return (
-    <aside className="hidden w-80 border-r border-cyan-300/10 bg-[#06101b]/95 shadow-[inset_-1px_0_0_rgba(255,255,255,0.04),0_0_80px_rgba(34,211,238,0.05)] backdrop-blur-2xl lg:block">
+    <aside className="hidden w-80 print:hidden border-r border-cyan-300/10 bg-[#06101b]/95 shadow-[inset_-1px_0_0_rgba(255,255,255,0.04),0_0_80px_rgba(34,211,238,0.05)] backdrop-blur-2xl lg:block">
       <div className="flex h-full flex-col p-5">
         <div className="rounded-[30px] border border-cyan-400/15 bg-[radial-gradient(circle_at_15%_0%,rgba(34,211,238,0.12),transparent_38%),rgba(255,255,255,0.035)] p-6 shadow-[0_0_52px_rgba(59,130,246,0.14)]">
           <div className="text-[11px] uppercase tracking-[0.35em] text-blue-100/70">Reputation OS</div>

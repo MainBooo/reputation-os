@@ -1,6 +1,5 @@
 import PageHeader from '@/components/ui/PageHeader'
 import PushSettingsCard from '@/components/settings/PushSettingsCard'
-import WorkspaceTeamCard from '@/components/settings/WorkspaceTeamCard'
 
 export default function SettingsPage() {
   return (

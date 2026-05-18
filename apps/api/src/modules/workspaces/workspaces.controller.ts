@@ -6,6 +6,8 @@ import { AuthUser } from '../../common/auth/auth-user.type'
 import { CreateWorkspaceDto } from './dto/create-workspace.dto'
 import { AddWorkspaceMemberDto } from './dto/add-workspace-member.dto'
 import { UpdateWorkspaceMemberRoleDto } from './dto/update-workspace-member-role.dto'
+import { CreateWorkspaceInviteDto } from './dto/create-workspace-invite.dto'
+import { AcceptWorkspaceInviteDto } from './dto/accept-workspace-invite.dto'
 
 @UseGuards(JwtAuthGuard)
 @Controller('workspaces')
@@ -45,6 +47,28 @@ export class WorkspacesController {
   @Delete(':id/members/:memberId')
   removeMember(@CurrentUser() user: AuthUser, @Param('id') id: string, @Param('memberId') memberId: string) {
     return this.workspacesService.removeMember(user.id, id, memberId)
+  }
+
+  @Get(':id/invites')
+  findInvites(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.workspacesService.findInvites(user.id, id)
+  }
+
+  @Post(':id/invites')
+  createInvite(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() dto: CreateWorkspaceInviteDto
+  ) {
+    return this.workspacesService.createInvite(user.id, id, dto)
+  }
+
+  @Post('invites/accept')
+  acceptInvite(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: AcceptWorkspaceInviteDto
+  ) {
+    return this.workspacesService.acceptInvite(user.id, dto.token)
   }
 
   @Get(':id')

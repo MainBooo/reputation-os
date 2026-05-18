@@ -21,6 +21,7 @@ const ROLE_LABELS: Record<WorkspaceRole, string> = {
 }
 
 const ROLE_OPTIONS: WorkspaceRole[] = ['OWNER', 'ADMIN', 'MEMBER']
+const INVITE_ROLE_OPTIONS: WorkspaceRole[] = ['ADMIN', 'MEMBER']
 
 type Workspace = {
   id: string
@@ -221,7 +222,7 @@ export default function WorkspaceTeamCard() {
             >
               <div className="min-w-0">
                 <div className="truncate text-sm font-semibold text-white">
-                  {member.user?.fullName || member.user?.email || member.userId}
+                  {member.user?.fullName || member.user?.email || member.id}
                 </div>
                 <div className="mt-1 truncate text-xs text-zinc-400">
                   {member.user?.email || 'email не указан'} · {ROLE_LABELS[member.role] || member.role}

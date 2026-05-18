@@ -58,6 +58,38 @@ function getDomainLabel(hostname?: string | null) {
   return hostname.slice(0, 1).toUpperCase()
 }
 
+function sourceTypeLabel(mention: any, hostname?: string | null) {
+  const type = String(mention?.type || '').toUpperCase()
+  const platform = String(mention?.platform || '').toUpperCase()
+  const host = String(hostname || '').toLowerCase()
+
+  if (platform === 'YANDEX' || platform === 'TWOGIS') return 'Отзыв'
+
+  if (
+    host.includes('tripadvisor') ||
+    host.includes('zoon') ||
+    host.includes('restoclub') ||
+    host.includes('restaurantguru') ||
+    host.includes('flamp')
+  ) {
+    return 'Справочник'
+  }
+
+  if (
+    type.includes('ARTICLE') ||
+    host.includes('vc.ru') ||
+    host.includes('dzen') ||
+    host.includes('habr') ||
+    host.includes('medium')
+  ) {
+    return 'Статья'
+  }
+
+  if (type.includes('REVIEW')) return 'Отзыв'
+
+  return 'Упоминание'
+}
+
 function getFaviconUrl(sourceUrl?: string | null) {
   const hostname = getSourceHostname(sourceUrl)
   if (!hostname) return null
@@ -105,6 +137,7 @@ export default function MentionRow({
 
   const faviconUrl = getFaviconUrl(sourceUrl)
   const sourceHostname = getSourceHostname(sourceUrl)
+  const readableSourceType = sourceTypeLabel(mention, sourceHostname)
 
   const ratingBadgeClass =
     numericRating !== null && Number.isFinite(numericRating)
@@ -118,11 +151,11 @@ export default function MentionRow({
   const visibleBadges = hideMetaBadges
     ? []
     : [
-        { tone: mention.platform, label: platformLabel(mention.platform) },
+        mention.platform !== 'WEB' ? { tone: mention.platform, label: platformLabel(mention.platform) } : null,
         { tone: effectiveSentiment, label: sentimentLabel(effectiveSentiment) },
         { tone: mention.status, label: statusLabel(mention.status) },
         { tone: undefined, label: typeLabel(mention.type) }
-      ].filter((item) => item.label)
+      ].filter((item): item is { tone: any; label: string } => Boolean(item?.label))
 
   return (
     <div className="rounded-2xl border border-line bg-[#050816] p-4 sm:p-5">
@@ -131,24 +164,34 @@ export default function MentionRow({
           {visibleBadges.length > 0 || (numericRating !== null && Number.isFinite(numericRating)) ? (
             <div className="flex flex-wrap items-center gap-2">
                 {sourceHostname ? (
-                  <span
-                    title={sourceHostname}
-                    className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-violet-400/40 bg-cyan-400/10 text-[10px] font-bold text-blue-100 shadow-[0_0_18px_rgba(34,211,238,0.12)]"
-                  >
-                    {faviconUrl ? (
-                      <img
-                        src={faviconUrl}
-                        alt=""
-                        width={16}
-                        height={16}
-                        loading="lazy"
-                        referrerPolicy="no-referrer"
-                        className="h-4 w-4 rounded-sm"
-                      />
-                    ) : (
-                      getDomainLabel(sourceHostname)
-                    )}
-                  </span>
+                  <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1">
+                    <span
+                      title={sourceHostname}
+                      className="inline-flex h-5 w-5 shrink-0 items-center justify-center overflow-hidden rounded-full border border-violet-400/40 bg-cyan-400/10 text-[10px] font-bold text-blue-100"
+                    >
+                      {faviconUrl ? (
+                        <img
+                          src={faviconUrl}
+                          alt=""
+                          width={16}
+                          height={16}
+                          loading="lazy"
+                          referrerPolicy="no-referrer"
+                          className="h-4 w-4 rounded-sm"
+                        />
+                      ) : (
+                        getDomainLabel(sourceHostname)
+                      )}
+                    </span>
+
+                    <span className="text-xs font-medium text-zinc-200">
+                      {sourceHostname}
+                    </span>
+
+                    <span className="text-[10px] uppercase tracking-wide text-zinc-500">
+                      {readableSourceType}
+                    </span>
+                  </div>
                 ) : null}
 
               {visibleBadges.map((badge) => (

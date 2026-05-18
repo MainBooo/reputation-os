@@ -71,7 +71,7 @@ export default async function CompanyInboxPage({
   return (
     <div>
       <PageHeader
-        title="Входящие"
+        title={`Входящие${company?.name ? ` · ${company.name}` : ''}`}
         subtitle="Все отзывы и упоминания из подключённых источников в одной ленте."
       />
 

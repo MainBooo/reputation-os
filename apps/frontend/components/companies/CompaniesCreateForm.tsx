@@ -17,6 +17,14 @@ type CreatedCompany = {
   id: string
 }
 
+function formatCreateCompanyError(message: string) {
+  if (message.includes('Workspace company limit reached')) {
+    return 'Лимит тарифа: максимум 3 компании в workspace.'
+  }
+
+  return message || 'Не удалось создать компанию'
+}
+
 function normalizeKeyword(value: string) {
   return value.trim().replace(/\s+/g, ' ')
 }

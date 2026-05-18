@@ -57,6 +57,11 @@ enum WorkspaceRole {
   MEMBER
 }
 
+enum SystemRole {
+  USER
+  SUPER_ADMIN
+}
+
 enum JobStatus {
   PENDING
   RUNNING
@@ -107,11 +112,13 @@ model User {
   passwordHash String
   fullName     String?
   isActive     Boolean   @default(true)
+  systemRole   SystemRole @default(USER)
   lastLoginAt  DateTime?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
   workspaceMembers     WorkspaceMember[]
+  workspaceInvitesSent WorkspaceInvite[]
   aiReplyDrafts        AIReplyDraft[]        @relation("AIReplyDraftCreatedBy")
   jobLogsTriggered     JobLog[]              @relation("JobLogTriggeredBy")
   vkAuthSessions       VkAuthSession[]
@@ -127,6 +134,7 @@ model Workspace {
   updatedAt DateTime @updatedAt
 
   members              WorkspaceMember[]
+  invites              WorkspaceInvite[]
   companies            Company[]
   sources              Source[]
   notificationRules    NotificationRule[]
@@ -153,6 +161,26 @@ model WorkspaceMember {
   @@index([workspaceId, role])
 }
 
+
+model WorkspaceInvite {
+  id          String        @id @default(cuid())
+  workspaceId String
+  email       String
+  role        WorkspaceRole
+  token       String        @unique
+  invitedById String
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  createdAt   DateTime      @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  invitedBy User      @relation(fields: [invitedById], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([email])
+  @@index([token])
+}
+
 model Company {
   id                     String    @id @default(cuid())
   workspaceId            String
@@ -164,6 +192,7 @@ model Company {
   normalizedCity         String?
   industry               String?
   description            String?
+  logoUrl                String?
   isActive               Boolean   @default(true)
   initialSyncCompletedAt DateTime?
   lastSyncedAt           DateTime?

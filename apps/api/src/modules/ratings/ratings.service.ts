@@ -8,6 +8,14 @@ export class RatingsService {
   private async assertCompanyAccess(userId: string, companyId: string) {
     const company = await this.prisma.company.findUnique({ where: { id: companyId }, select: { workspaceId: true } })
     if (!company) throw new NotFoundException('Company not found')
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { systemRole: true, isActive: true }
+    })
+
+    if (user?.isActive && user.systemRole === 'SUPER_ADMIN') return
+
     const member = await this.prisma.workspaceMember.findFirst({ where: { workspaceId: company.workspaceId, userId } })
     if (!member) throw new ForbiddenException('No access to company')
   }
