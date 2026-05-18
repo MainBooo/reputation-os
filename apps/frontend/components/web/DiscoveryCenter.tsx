@@ -9,6 +9,7 @@ import {
   updateCompanySourceTarget
 } from '@/lib/api/companies'
 import { getCompanyMentions } from '@/lib/api/mentions'
+import { useWorkspaceAccess } from '@/lib/hooks/useWorkspaceAccess'
 
 const SCAN_INTERVALS = [
   { label: '4 часа', hours: 4, minutes: 240 },
@@ -160,14 +161,17 @@ function SourceIcon({ host }: { host: string }) {
 
 export default function DiscoveryCenter({
   companyId,
+  workspaceId,
   initialTargets,
   initialOverview
 }: {
   companyId: string
+  workspaceId?: string | null
   initialTargets: SourceTarget[]
   initialOverview?: any
 }) {
   const router = useRouter()
+  const { canWrite } = useWorkspaceAccess(workspaceId)
   const [targets, setTargets] = useState<SourceTarget[]>(
     Array.isArray(initialTargets) ? initialTargets : []
   )
@@ -458,7 +462,7 @@ export default function DiscoveryCenter({
         ) : (
           <div className="rounded-3xl border border-dashed border-white/10 bg-black/10 p-8 text-center">
             <div className="text-base font-semibold text-white">Пока нет активных WEB-источников</div>
-            <div className="mt-2 text-sm text-zinc-300">Запустите сканирование и добавьте найденные площадки в мониторинг.</div>
+            <div className="mt-2 text-sm text-zinc-300">{canWrite ? 'Запустите сканирование и добавьте найденные площадки в мониторинг.' : 'Источники появятся после настройки администратором workspace.'}</div>
           </div>
         )}
       </Card>
@@ -467,7 +471,7 @@ export default function DiscoveryCenter({
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
             <div className="text-xl font-semibold text-white">Новые найденные площадки</div>
-            <div className="mt-1 text-sm text-zinc-300">Проверьте кандидатов и добавьте нужные в регулярный мониторинг.</div>
+            <div className="mt-1 text-sm text-zinc-300">{canWrite ? 'Проверьте кандидатов и добавьте нужные в регулярный мониторинг.' : 'Найденные площадки доступны только для просмотра.'}</div>
           </div>
 
           <div className="hidden text-sm text-zinc-300 sm:block">{effectiveDiscovered.length} на проверке</div>
@@ -501,51 +505,55 @@ export default function DiscoveryCenter({
                     <div className="mt-2 text-xs text-zinc-300">
                       Найдено страниц: 1
                     </div>
+                      <div className={canWrite ? "mt-auto grid grid-cols-3 gap-2 pt-4" : "mt-auto grid grid-cols-1 gap-2 pt-4"}>
+                        {target.externalUrl ? (
+                          <a
+                            href={normalizeUrl(target.externalUrl) || '#'}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex h-10 items-center justify-center rounded-2xl border border-violet-400/40 bg-cyan-400/10 px-3 text-sm font-semibold text-blue-100 transition hover:border-cyan-300/40 hover:bg-cyan-400/15 hover:shadow-[0_0_18px_rgba(34,211,238,0.12)]"
+                          >
+                            Открыть ↗
+                          </a>
+                        ) : (
+                          <span className="inline-flex h-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.02] px-3 text-sm font-semibold text-zinc-300">
+                            Нет URL
+                          </span>
+                        )}
 
-                    <div className="mt-auto grid grid-cols-3 gap-2 pt-4">
-                      {target.externalUrl ? (
-                        <a
-                          href={normalizeUrl(target.externalUrl) || '#'}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex h-10 items-center justify-center rounded-2xl border border-violet-400/40 bg-cyan-400/10 px-3 text-sm font-semibold text-blue-100 transition hover:border-cyan-300/40 hover:bg-cyan-400/15 hover:shadow-[0_0_18px_rgba(34,211,238,0.12)]"
-                        >
-                          Открыть ↗
-                        </a>
-                      ) : (
-                        <span className="inline-flex h-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.02] px-3 text-sm font-semibold text-zinc-300">
-                          Нет URL
-                        </span>
-                      )}
+                        {canWrite ? (
+                          <>
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() => patchTarget(target, { isActive: true, syncMentionsEnabled: true })}
+                              className="inline-flex h-10 items-center justify-center rounded-2xl border border-cyan-300/35 bg-cyan-300/90 px-3 text-sm font-bold text-slate-950 transition hover:bg-cyan-200 hover:shadow-[0_0_22px_rgba(103,232,249,0.24)] disabled:opacity-60"
+                            >
+                              {busy ? <Spinner /> : 'Добавить'}
+                            </button>
 
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => patchTarget(target, { isActive: true, syncMentionsEnabled: true })}
-                        className="inline-flex h-10 items-center justify-center rounded-2xl border border-cyan-300/35 bg-cyan-300/90 px-3 text-sm font-bold text-slate-950 transition hover:bg-cyan-200 hover:shadow-[0_0_22px_rgba(103,232,249,0.24)] disabled:opacity-60"
-                      >
-                        {busy ? <Spinner /> : 'Добавить'}
-                      </button>
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() =>
+                                patchTarget(target, {
+                                  isActive: false,
+                                  syncMentionsEnabled: false,
+                                  config: {
+                                    ...(target.config || {}),
+                                    status: 'EXCLUDED',
+                                    excluded: true
+                                  }
+                                })
+                              }
+                              className="inline-flex h-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.025] px-3 text-sm font-semibold text-zinc-300 transition hover:bg-white/[0.06] disabled:opacity-60"
+                            >
+                              Скрыть
+                            </button>
+                          </>
+                        ) : null}
+                      </div>
 
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() =>
-                          patchTarget(target, {
-                            isActive: false,
-                            syncMentionsEnabled: false,
-                            config: {
-                              ...(target.config || {}),
-                              status: 'EXCLUDED',
-                              excluded: true
-                            }
-                          })
-                        }
-                        className="inline-flex h-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.025] px-3 text-sm font-semibold text-zinc-300 transition hover:bg-white/[0.06] disabled:opacity-60"
-                      >
-                        Скрыть
-                      </button>
-                    </div>
                   </div>
                 )
               })}

@@ -12,7 +12,7 @@ export default async function CompanyWebPage({ params }: { params: { id: string 
     getCompanyWebSourcesOverview(params.id)
   ])
 
-  const company = companyResult.status === 'fulfilled' ? companyResult.value : null
+  const company = companyResult.status === 'fulfilled' ? (companyResult.value as any) : null
   const targets = targetsResult.status === 'fulfilled' && Array.isArray(targetsResult.value) ? targetsResult.value : []
   const webOverview = webOverviewResult.status === 'fulfilled' ? webOverviewResult.value : null
 
@@ -32,7 +32,7 @@ export default async function CompanyWebPage({ params }: { params: { id: string 
         subtitle="Управляйте внешними источниками мониторинга. Упоминания и сигналы попадают в Inbox."
       />
 
-      <DiscoveryCenter companyId={params.id} initialTargets={targets} initialOverview={webOverview} />
+      <DiscoveryCenter companyId={params.id} workspaceId={company.workspaceId} initialTargets={targets} initialOverview={webOverview} />
     </div>
   )
 }

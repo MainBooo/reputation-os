@@ -1,9 +1,13 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common'
 import { WorkspaceRole } from '@prisma/client'
+import { randomBytes } from 'crypto'
 import { PrismaService } from '../../common/prisma/prisma.service'
 import { CreateWorkspaceDto } from './dto/create-workspace.dto'
 import { AddWorkspaceMemberDto } from './dto/add-workspace-member.dto'
 import { UpdateWorkspaceMemberRoleDto } from './dto/update-workspace-member-role.dto'
+import { CreateWorkspaceInviteDto } from './dto/create-workspace-invite.dto'
+
+const WORKSPACE_USERS_LIMIT = 2
 
 @Injectable()
 export class WorkspacesService {
@@ -79,6 +83,23 @@ export class WorkspacesService {
     }
   }
 
+  private async assertWorkspaceUserLimit(workspaceId: string) {
+    const [membersCount, pendingInvitesCount] = await Promise.all([
+      this.prisma.workspaceMember.count({ where: { workspaceId } }),
+      this.prisma.workspaceInvite.count({
+        where: {
+          workspaceId,
+          acceptedAt: null,
+          expiresAt: { gt: new Date() }
+        }
+      })
+    ])
+
+    if (membersCount + pendingInvitesCount >= WORKSPACE_USERS_LIMIT) {
+      throw new BadRequestException(`Workspace user limit reached: ${WORKSPACE_USERS_LIMIT}`)
+    }
+  }
+
   async findMembers(userId: string, workspaceId: string) {
     await this.getCurrentMember(userId, workspaceId)
 
@@ -108,8 +129,13 @@ export class WorkspacesService {
     const workspace = await this.prisma.workspace.findUnique({ where: { id: workspaceId } })
     if (!workspace) throw new NotFoundException('Workspace not found')
 
-    const user = await this.prisma.user.findUnique({
-      where: { email: dto.email.trim().toLowerCase() }
+    const user = await this.prisma.user.findFirst({
+      where: {
+        email: {
+          equals: dto.email.trim(),
+          mode: 'insensitive'
+        }
+      }
     })
     if (!user) throw new NotFoundException('User with this email not found')
 
@@ -117,6 +143,8 @@ export class WorkspacesService {
       where: { workspaceId_userId: { workspaceId, userId: user.id } }
     })
     if (existing) throw new BadRequestException('User is already a workspace member')
+
+    await this.assertWorkspaceUserLimit(workspaceId)
 
     return this.prisma.workspaceMember.create({
       data: {
@@ -192,4 +220,148 @@ export class WorkspacesService {
 
     return { ok: true }
   }
+
+
+  async findInvites(userId: string, workspaceId: string) {
+    await this.getCurrentMember(userId, workspaceId)
+
+    return this.prisma.workspaceInvite.findMany({
+      where: {
+        workspaceId,
+        acceptedAt: null
+      },
+      include: {
+        invitedBy: {
+          select: {
+            id: true,
+            email: true,
+            fullName: true
+          }
+        }
+      },
+      orderBy: {
+        createdAt: 'desc'
+      }
+    })
+  }
+
+  async createInvite(
+    userId: string,
+    workspaceId: string,
+    dto: CreateWorkspaceInviteDto
+  ) {
+    const currentMember = await this.getCurrentMember(userId, workspaceId)
+
+    this.assertCanManageMembers(currentMember.role)
+    this.assertCanManageRole(currentMember.role, dto.role)
+
+    const email = dto.email.trim().toLowerCase()
+
+    const existingUser = await this.prisma.user.findUnique({
+      where: { email }
+    })
+
+    if (existingUser) {
+      const existingMember = await this.prisma.workspaceMember.findUnique({
+        where: {
+          workspaceId_userId: {
+            workspaceId,
+            userId: existingUser.id
+          }
+        }
+      })
+
+      if (existingMember) {
+        throw new BadRequestException('User already in workspace')
+      }
+    }
+
+    const existingInvite = await this.prisma.workspaceInvite.findFirst({
+      where: {
+        workspaceId,
+        email,
+        acceptedAt: null
+      }
+    })
+
+    if (existingInvite) {
+      throw new BadRequestException('Invite already exists')
+    }
+
+    await this.assertWorkspaceUserLimit(workspaceId)
+
+    const token = randomBytes(32).toString('hex')
+
+    return this.prisma.workspaceInvite.create({
+      data: {
+        workspaceId,
+        email,
+        role: dto.role,
+        invitedById: userId,
+        token,
+        expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24)
+      }
+    })
+  }
+
+  async acceptInvite(userId: string, token: string) {
+    const invite = await this.prisma.workspaceInvite.findUnique({
+      where: { token }
+    })
+
+    if (!invite) {
+      throw new NotFoundException('Invite not found')
+    }
+
+    if (invite.acceptedAt) {
+      throw new BadRequestException('Invite already accepted')
+    }
+
+    if (invite.expiresAt < new Date()) {
+      throw new BadRequestException('Invite expired')
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId }
+    })
+
+    if (!user) {
+      throw new NotFoundException('User not found')
+    }
+
+    if (user.email.toLowerCase() !== invite.email.toLowerCase()) {
+      throw new ForbiddenException('Invite email mismatch')
+    }
+
+    const existingMember = await this.prisma.workspaceMember.findUnique({
+      where: {
+        workspaceId_userId: {
+          workspaceId: invite.workspaceId,
+          userId
+        }
+      }
+    })
+
+    if (!existingMember) {
+      await this.assertWorkspaceUserLimit(invite.workspaceId)
+
+      await this.prisma.workspaceMember.create({
+        data: {
+          workspaceId: invite.workspaceId,
+          userId,
+          role: invite.role
+        }
+      })
+    }
+
+    await this.prisma.workspaceInvite.update({
+      where: { id: invite.id },
+      data: {
+        acceptedAt: new Date()
+      }
+    })
+
+    return { ok: true }
+  }
+
 }
