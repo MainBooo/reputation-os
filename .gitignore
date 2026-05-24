@@ -89,3 +89,24 @@ dump.pm2
 # Local backups / build cache
 *.bak.*
 *.tsbuildinfo
+
+# Build/cache artifacts
+.turbo/
+**/.turbo/
+**/.next/
+**/dist/
+**/node_modules/
+*.tsbuildinfo
+
+# Runtime/debug artifacts
+storage/
+**/tmp/
+apps/worker/tmp/
+apps/worker/tmp-*.js
+apps/worker/tmp-*.ts
+cookies.txt
+*.log
+
+# Sale/audit local files
+sale-audit.txt
+scripts/sale-audit.sh
