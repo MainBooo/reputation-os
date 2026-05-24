@@ -7,7 +7,7 @@
     "build": "next build && pnpm run copy-standalone-assets",
     "start": "next start -p 4011",
     "lint": "next lint",
-    "copy-standalone-assets": "mkdir -p .next/standalone/apps/frontend/.next && rm -rf .next/standalone/apps/frontend/.next/static .next/standalone/apps/frontend/public && cp -R .next/static .next/standalone/apps/frontend/.next/static && if [ -d public ]; then cp -R public .next/standalone/apps/frontend/public; fi"
+    "copy-standalone-assets": "mkdir -p .next/standalone/apps/frontend/.next && rm -rf .next/standalone/apps/frontend/.next/static .next/standalone/apps/frontend/public && cp -R .next/static .next/standalone/apps/frontend/.next/static && rm -rf .next/standalone/apps/frontend/.next/server && cp -R .next/server .next/standalone/apps/frontend/.next/server && if [ -d public ]; then cp -R public .next/standalone/apps/frontend/public; fi"
   },
   "dependencies": {
     "clsx": "^2.1.1",

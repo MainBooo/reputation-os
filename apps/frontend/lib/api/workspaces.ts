@@ -87,3 +87,23 @@ export async function removeWorkspaceMember(
     method: 'DELETE'
   })
 }
+
+
+export async function acceptWorkspaceInviteById(inviteId: string) {
+  return apiFetch(`/workspaces/invites/${inviteId}/accept`, {
+    method: 'POST'
+  })
+}
+
+export async function declineWorkspaceInvite(inviteId: string) {
+  return apiFetch(`/workspaces/invites/${inviteId}/decline`, {
+    method: 'POST'
+  })
+}
+
+
+export async function leaveWorkspace(workspaceId: string) {
+  return apiFetch(`/workspaces/${workspaceId}/leave`, {
+    method: 'DELETE'
+  })
+}

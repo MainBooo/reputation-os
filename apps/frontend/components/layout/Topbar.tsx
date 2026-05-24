@@ -10,11 +10,13 @@ import {
   ShieldAlert,
   LayoutDashboard,
   Building2,
+  UsersRound,
   Settings,
   Sparkles,
   Radio
 } from 'lucide-react'
 import { me, logoutLocal, type AuthMe } from '@/lib/api/auth'
+import NotificationsBell from './NotificationsBell'
 
 const navItems = [
   {
@@ -30,6 +32,13 @@ const navItems = [
     description: 'Управление',
     icon: Building2,
     tone: 'violet'
+  },
+  {
+    href: '/team',
+    label: 'Команда',
+    description: 'Доступы',
+    icon: UsersRound,
+    tone: 'cyan'
   },
   {
     href: '/settings',
@@ -74,13 +83,6 @@ export default function Topbar() {
     ? [
         ...navItems,
         {
-          href: '/team',
-          label: 'Команда',
-          description: 'Доступы',
-          icon: ShieldCheck,
-          tone: 'violet'
-        },
-        {
           href: '/admin',
           label: 'Админка',
           description: 'Платформа',
@@ -115,7 +117,7 @@ export default function Topbar() {
   }
 
   return (
-    <header className="sticky top-0 z-30 print:hidden overflow-hidden border-b border-cyan-300/10 bg-[#050d18]/78 shadow-[0_18px_80px_rgba(0,0,0,0.35)] backdrop-blur-2xl">
+    <header className="sticky top-0 z-30 print:hidden border-b border-cyan-300/10 bg-[#050d18]/78 shadow-[0_18px_80px_rgba(0,0,0,0.35)] backdrop-blur-2xl">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_14%_0%,rgba(59,130,246,0.26),transparent_38%),radial-gradient(circle_at_78%_10%,rgba(139,92,246,0.14),transparent_32%)]" />
       <div className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-cyan-300/35 to-transparent" />
 
@@ -153,6 +155,8 @@ export default function Topbar() {
                 ) : null}
               </div>
 
+                {user ? <NotificationsBell /> : null}
+
               {user ? (
                 <button
                   type="button"
@@ -173,7 +177,7 @@ export default function Topbar() {
             </div>
           </div>
 
-          <div className="mt-5 grid gap-3 sm:grid-cols-3 xl:grid-cols-5">
+          <div className="mt-5 grid grid-cols-4 gap-2 sm:gap-3 xl:grid-cols-5">
             {visibleNavItems.map((item) => {
               const Icon = item.icon
               const active = pathname === item.href || pathname.startsWith(item.href + '/')
@@ -183,23 +187,23 @@ export default function Topbar() {
                   key={item.href}
                   href={item.href}
                   className={clsx(
-                    'group relative overflow-hidden rounded-[28px] border p-4 transition-all duration-200 hover:-translate-y-0.5',
+                    'group relative overflow-hidden rounded-[20px] border px-2.5 py-3 transition-all duration-200 hover:-translate-y-0.5 sm:rounded-[28px] sm:p-4',
                     navTone(item.tone, active)
                   )}
                 >
                   <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_10%_0%,rgba(255,255,255,0.10),transparent_42%)] opacity-80" />
                   <div className="pointer-events-none absolute inset-x-8 bottom-0 h-px bg-gradient-to-r from-transparent via-current to-transparent opacity-50" />
 
-                  <div className="relative flex items-center gap-4">
-                    <span className={clsx('flex h-14 w-14 shrink-0 items-center justify-center rounded-[22px] border transition', iconTone(item.tone, active))}>
-                      <Icon className="h-6 w-6" />
+                  <div className="relative flex flex-col items-center justify-center gap-2 text-center sm:flex-row sm:justify-start sm:gap-4 sm:text-left">
+                    <span className={clsx('flex h-10 w-10 shrink-0 items-center justify-center rounded-[16px] border transition sm:h-14 sm:w-14 sm:rounded-[22px]', iconTone(item.tone, active))}>
+                      <Icon className="h-5 w-5 sm:h-6 sm:w-6" />
                     </span>
 
                     <span className="min-w-0">
-                      <span className="block truncate text-[19px] font-semibold tracking-[-0.035em] text-white">
+                      <span className="block truncate text-[12px] font-semibold tracking-[-0.035em] text-white sm:text-[19px]">
                         {item.label}
                       </span>
-                      <span className="mt-1 hidden truncate text-sm text-slate-400 sm:block">
+                      <span className="mt-1 hidden truncate text-sm text-slate-400 md:block">
                         {item.description}
                       </span>
                     </span>

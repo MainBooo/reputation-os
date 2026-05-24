@@ -6,6 +6,7 @@ import DashboardCharts from '@/components/dashboard/DashboardCharts'
 import { getCompanies } from '@/lib/api/companies'
 import { me } from '@/lib/api/auth'
 import { getCompanyMentions } from '@/lib/api/mentions'
+import { filterByWorkspace, pickWorkspaceId } from '@/lib/workspace-selection'
 import { BriefcaseBusiness, Radar, MessageSquareText, Star, BellRing, Activity, Inbox, Plus, Building2, ArrowRight, AlertTriangle, ShieldCheck, Clock3, ExternalLink, type LucideIcon } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
@@ -59,6 +60,32 @@ function getDashboardCompany(companies: any[]) {
     .sort((a, b) => getMentionsCount(b) - getMentionsCount(a))[0] || null
 }
 
+function isValidDashboardMention(mention: any) {
+  const platform = String(mention?.platform || '').toUpperCase()
+  const sourceUrl = String(mention?.url || mention?.sourceUrl || '').toLowerCase()
+  const title = String(mention?.title || '').toLowerCase()
+
+  if (platform === 'VK' || platform === 'GOOGLE') return false
+  if (sourceUrl.includes('example.com')) return false
+  if (title.includes('демо отзыв')) return false
+
+  return true
+}
+
+function buildMentionsMeta(mentions: any[]) {
+  const ratings = mentions
+    .map(getMentionRating)
+    .filter((value): value is number => value !== null)
+
+  return {
+    total: mentions.length,
+    ratedCount: ratings.length,
+    averageRating: ratings.length
+      ? ratings.reduce((sum, value) => sum + value, 0) / ratings.length
+      : null
+  }
+}
+
 function getAliases(company: any) {
   return Array.isArray(company?.aliases) ? company.aliases.filter(Boolean) : []
 }
@@ -69,6 +96,18 @@ function getSourceTargets(company: any) {
 
 function getActiveSourceTargets(company: any) {
   return getSourceTargets(company).filter((target: any) => target?.isActive !== false)
+}
+
+function getSourcesCount(company: any) {
+  const activeTargets = getActiveSourceTargets(company)
+  if (activeTargets.length > 0) return activeTargets.length
+
+  return toNumber(
+    company?._count?.sourceTargets ??
+    company?._count?.sources ??
+    company?.sourcesCount ??
+    company?.sourceTargetsCount
+  )
 }
 
 function getPlatformList(company: any) {
@@ -273,6 +312,107 @@ function buildRatingTrend(mentions: any[], averageRating: number | null) {
 }
 
 
+type CompanyDashboardMentionEntry = {
+  company: any
+  mentions: any[]
+  meta: {
+    total?: number
+    averageRating?: number | null
+    ratedCount?: number
+  }
+}
+
+function buildCompanyDashboardStats(entries: CompanyDashboardMentionEntry[]) {
+  return entries.map(({ company, mentions, meta }) => {
+    const calculatedMeta = buildMentionsMeta(mentions)
+    const averageRatingRaw =
+      meta?.averageRating === null || meta?.averageRating === undefined
+        ? calculatedMeta.averageRating
+        : Number(meta.averageRating)
+
+    const averageRating =
+      averageRatingRaw === null || averageRatingRaw === undefined || !Number.isFinite(averageRatingRaw)
+        ? null
+        : averageRatingRaw
+
+    const negativeCount = mentions.filter((mention) => getMentionSentiment(mention) === 'NEGATIVE').length
+    const mentionsCount = calculatedMeta.total || toNumber(meta?.total) || getMentionsCount(company)
+    const sourcesCount = getSourcesCount(company)
+
+    return {
+      id: company.id,
+      name: company.name || 'Компания',
+      mentionsCount,
+      sourcesCount,
+      negativeCount,
+      averageRating
+    }
+  })
+    .sort((a, b) => b.mentionsCount - a.mentionsCount)
+}
+
+function CompanyStatsPanel({ stats }: { stats: ReturnType<typeof buildCompanyDashboardStats> }) {
+  return (
+    <Card className="mt-5 overflow-hidden rounded-[30px] border-white/10 bg-[#0b111c]/92 p-5 shadow-[0_22px_70px_rgba(0,0,0,0.34),0_0_44px_rgba(34,211,238,0.04)] sm:p-6">
+      <div className="mb-4 flex items-start justify-between gap-4">
+        <div>
+          <div className="text-xl font-semibold tracking-[-0.03em] text-white">Статистика по компаниям</div>
+          <div className="mt-1 text-sm leading-6 text-slate-400">Рейтинг, упоминания, источники и негатив отдельно по каждой компании.</div>
+        </div>
+        <span className="rounded-full border border-cyan-400/25 bg-cyan-500/10 px-3 py-1 text-xs font-semibold text-cyan-200">
+          {formatNumber(stats.length)}
+        </span>
+      </div>
+
+      {stats.length > 0 ? (
+        <div className="overflow-hidden rounded-[22px] border border-white/10">
+          <div className="hidden grid-cols-[1.4fr_0.7fr_0.8fr_0.8fr_0.7fr] gap-3 border-b border-white/10 bg-white/[0.035] px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 md:grid">
+            <div>Компания</div>
+            <div>Рейтинг</div>
+            <div>Упоминания</div>
+            <div>Источники</div>
+            <div>Негатив</div>
+          </div>
+
+          <div className="divide-y divide-white/10">
+            {stats.map((company) => (
+              <Link
+                key={company.id}
+                href={`/companies/${company.id}/inbox`}
+                className="grid gap-3 px-4 py-4 transition hover:bg-cyan-500/[0.035] md:grid-cols-[1.4fr_0.7fr_0.8fr_0.8fr_0.7fr] md:items-center"
+              >
+                <div className="min-w-0">
+                  <div className="truncate text-base font-semibold text-white">{company.name}</div>
+                  <div className="mt-1 text-xs text-slate-500 md:hidden">
+                    {formatNumber(company.mentionsCount)} упом. · {formatNumber(company.sourcesCount)} ист. · {formatNumber(company.negativeCount)} нег.
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between gap-3 md:block">
+                  <span className="text-xs text-slate-500 md:hidden">Рейтинг</span>
+                  <span className="inline-flex rounded-full border border-amber-400/25 bg-amber-500/10 px-3 py-1 text-sm font-semibold text-amber-100">
+                    {company.averageRating === null ? '—' : `${company.averageRating.toFixed(1)} ★`}
+                  </span>
+                </div>
+
+                <div className="hidden text-sm font-semibold text-slate-200 md:block">{formatNumber(company.mentionsCount)}</div>
+                <div className="hidden text-sm font-semibold text-slate-200 md:block">{formatNumber(company.sourcesCount)}</div>
+                <div className={company.negativeCount > 0 ? 'hidden text-sm font-semibold text-red-200 md:block' : 'hidden text-sm font-semibold text-emerald-200 md:block'}>
+                  {formatNumber(company.negativeCount)}
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4 text-sm text-slate-400">
+          Пока нет компаний для отображения статистики.
+        </div>
+      )}
+    </Card>
+  )
+}
+
 function KpiCard({
   Icon,
   label,
@@ -334,10 +474,11 @@ function KpiCard({
     </Card>
   )
 }
-export default async function DashboardPage() {
+export default async function DashboardPage({ searchParams }: { searchParams?: { workspaceId?: string } }) {
   let companies: any[] = []
   let dashboardMentions: any[] = []
   let dashboardMeta: any = { total: 0, averageRating: null, ratedCount: 0 }
+  let companyMentionEntries: CompanyDashboardMentionEntry[] = []
   let authRequired = false
 
   try {
@@ -346,16 +487,48 @@ export default async function DashboardPage() {
     const companiesResult = await getCompanies()
     companies = Array.isArray(companiesResult) ? companiesResult : []
 
-    const dashboardCompany = getDashboardCompany(companies)
-    if (dashboardCompany?.id) {
-      const mentionsResult = await getCompanyMentions(dashboardCompany.id, '?page=1&limit=250')
-      dashboardMentions = Array.isArray(mentionsResult?.data)
-        ? mentionsResult.data.filter((mention: any) => mention?.platform !== 'VK')
-        : []
-      dashboardMeta = mentionsResult?.meta || dashboardMeta
+      companyMentionEntries = await Promise.all(
+        companies.map(async (company) => {
+          if (!company?.id) {
+            return { company, mentions: [], meta: { total: 0, averageRating: null, ratedCount: 0 } }
+          }
+
+          try {
+            const mentionsResult = await getCompanyMentions(company.id, '?page=1&limit=250')
+            const mentions = Array.isArray(mentionsResult?.data)
+              ? mentionsResult.data.filter(isValidDashboardMention)
+              : []
+
+            return {
+              company,
+              mentions,
+              meta: mentionsResult?.meta || buildMentionsMeta(mentions)
+            }
+          } catch {
+            return {
+              company,
+              mentions: [],
+              meta: { total: getMentionsCount(company), averageRating: null, ratedCount: 0 }
+            }
+          }
+        })
+      )
+
+      dashboardMentions = companyMentionEntries
+        .flatMap((entry) => entry.mentions)
+        .sort((a, b) => {
+          const aDate = new Date(getMentionActivityDate(a) || 0).getTime()
+          const bDate = new Date(getMentionActivityDate(b) || 0).getTime()
+          return bDate - aDate
+        })
+
+      dashboardMeta = buildMentionsMeta(dashboardMentions)
+  } catch (error: any) {
+    if (error?.message === 'Unauthorized') {
+      authRequired = true
+    } else {
+      console.error('[DashboardPage]', error)
     }
-  } catch (error) {
-    console.error('[DashboardPage]', error)
   }
 
   if (authRequired) {
@@ -375,10 +548,16 @@ export default async function DashboardPage() {
 
   const firstCompany = getDashboardCompany(companies)
   const totalCompanies = companies.length
-  const totalSources = companies.reduce((sum, company) => sum + getActiveSourceTargets(company).length, 0)
-  const totalMentions = toNumber(
-    dashboardMeta?.total || companies.reduce((sum, company) => sum + getMentionsCount(company), 0)
-  )
+  const companyStats = buildCompanyDashboardStats(companyMentionEntries)
+  const totalSources =
+    companyStats.reduce((sum, company) => sum + company.sourcesCount, 0) ||
+    companies.reduce((sum, company) => sum + getSourcesCount(company), 0)
+
+  const totalMentions =
+    companyStats.reduce((sum, company) => sum + company.mentionsCount, 0) ||
+    toNumber(dashboardMeta?.total) ||
+    dashboardMentions.length ||
+    companies.reduce((sum, company) => sum + getMentionsCount(company), 0)
   const averageRating =
     dashboardMeta?.averageRating === null || dashboardMeta?.averageRating === undefined
       ? null
@@ -400,6 +579,7 @@ export default async function DashboardPage() {
   }
 
   const platforms = Array.from(platformCounts.entries())
+    .filter(([platform]) => !['VK', 'GOOGLE'].includes(String(platform || '').toUpperCase()))
     .map(([platform, count]) => ({ platform, count }))
     .sort((a, b) => b.count - a.count)
 
@@ -629,20 +809,9 @@ export default async function DashboardPage() {
             <div className="text-[11px] font-semibold uppercase tracking-[0.28em] text-cyan-300">Итог дня</div>
             <div className="mt-1 text-sm text-slate-400">Короткая сводка по новым репутационным сигналам.</div>
           </div>
-          <span className={`inline-flex rounded-full border px-3 py-1.5 text-xs font-semibold ${dayRiskTone}`}>
-            Риск: {dayRisk.toLowerCase()}
-          </span>
         </div>
 
-        <div className="grid gap-3 md:grid-cols-3">
-          <div className="rounded-[22px] border border-white/10 bg-white/[0.035] p-4">
-            <div className="flex items-center gap-2 text-sm text-slate-400">
-              <AlertTriangle className="h-4 w-4 text-amber-200" />
-              Риск
-            </div>
-            <div className="mt-2 text-2xl font-semibold text-white">{dayRisk}</div>
-          </div>
-
+          <div className="grid gap-3 md:grid-cols-2">
           <div className="rounded-[22px] border border-white/10 bg-white/[0.035] p-4">
             <div className="flex items-center gap-2 text-sm text-slate-400">
               <MessageSquareText className="h-4 w-4 text-red-200" />
@@ -695,6 +864,8 @@ export default async function DashboardPage() {
       </div>
 
       <div className="mt-5">
+        <CompanyStatsPanel stats={companyStats} />
+
         <DashboardCharts
           mentionTrend={mentionTrend}
           ratingTrend={ratingTrend}

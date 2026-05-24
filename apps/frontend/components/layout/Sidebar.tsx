@@ -4,7 +4,8 @@ import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { usePathname } from 'next/navigation'
 import clsx from 'clsx'
-import { LayoutDashboard, Building2, Settings, Sparkles, Shield, Users } from 'lucide-react'
+import { LayoutDashboard, Building2, Settings, Shield, Users } from 'lucide-react'
+import SidebarTasksCard from './SidebarTasksCard'
 import { me, type AuthMe } from '@/lib/api/auth'
 import { getWorkspaces } from '@/lib/api/companies'
 
@@ -101,15 +102,7 @@ export default function Sidebar() {
           })}
         </nav>
 
-        <div className="mt-7 rounded-[30px] border border-fuchsia-400/20 bg-gradient-to-br from-cyan-400/[0.10] via-white/[0.035] to-fuchsia-400/[0.10] p-6 shadow-[0_0_44px_rgba(168,85,247,0.16)]">
-          <div className="flex items-center gap-2 text-sm font-medium text-white">
-            <Sparkles size={16} className="text-blue-100" />
-            Быстрая навигация
-          </div>
-          <div className="mt-2 text-xs leading-6 text-slate-300">
-            Открой компанию и переходи между Обзором, Inbox, Аналитикой и Рейтингами без ручного ввода адреса.
-          </div>
-        </div>
+          <SidebarTasksCard />
       </div>
     </aside>
   )

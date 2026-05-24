@@ -85,6 +85,7 @@ enum NotificationType {
   DAILY_DIGEST
   VK_NEW_MENTION
   AI_REPLY_READY
+  WORKSPACE_INVITE
 }
 
 enum VkMonitoringMode {
@@ -119,6 +120,7 @@ model User {
 
   workspaceMembers     WorkspaceMember[]
   workspaceInvitesSent WorkspaceInvite[]
+  notifications        Notification[]
   aiReplyDrafts        AIReplyDraft[]        @relation("AIReplyDraftCreatedBy")
   jobLogsTriggered     JobLog[]              @relation("JobLogTriggeredBy")
   vkAuthSessions       VkAuthSession[]
@@ -171,6 +173,7 @@ model WorkspaceInvite {
   invitedById String
   expiresAt   DateTime
   acceptedAt  DateTime?
+  declinedAt  DateTime?
   createdAt   DateTime      @default(now())
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -179,6 +182,24 @@ model WorkspaceInvite {
   @@index([workspaceId])
   @@index([email])
   @@index([token])
+}
+
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  title     String
+  body      String?
+  data      Json?
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+  @@index([userId, createdAt])
+  @@index([type])
 }
 
 model Company {

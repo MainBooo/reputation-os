@@ -5,6 +5,7 @@ import { BullmqModule } from './common/queues/bullmq.module'
 import { HealthModule } from './modules/health/health.module'
 import { AuthModule } from './modules/auth/auth.module'
 import { WorkspacesModule } from './modules/workspaces/workspaces.module'
+import { NotificationsModule } from './modules/notifications/notifications.module'
 import { AdminModule } from './modules/admin/admin.module'
 import { CompaniesModule } from './modules/companies/companies.module'
 import { MentionsModule } from './modules/mentions/mentions.module'
@@ -22,6 +23,7 @@ import { PushModule } from './modules/push/push.module'
     HealthModule,
     AuthModule,
     WorkspacesModule,
+    NotificationsModule,
     AdminModule,
     CompaniesModule,
     MentionsModule,

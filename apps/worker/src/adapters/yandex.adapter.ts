@@ -235,22 +235,53 @@ export class YandexAdapter {
       await page.waitForTimeout(5000)
 
         const organizationLogoUrl = await page.evaluate(() => {
+          const normalizeLogoUrl = (value: unknown): string | null => {
+            if (typeof value !== 'string') return null
+
+            const raw = value.trim()
+            if (!raw) return null
+
+            const normalized = raw
+              .replace(/\\u002F/g, '/')
+              .replace(/\\\//g, '/')
+              .replace('%s', 'XL')
+
+            if (!normalized.startsWith('http')) return null
+            if (!normalized.includes('avatars.mds.yandex.net') && !normalized.includes('yastatic.net')) return null
+
+            return normalized
+          }
+
           const html = document.documentElement.innerHTML
-          const businessImagesIndex = html.indexOf('"businessImages"')
 
-          if (businessImagesIndex < 0) return null
+          const patterns = [
+            /"businessImages"[\s\S]{0,5000}?"logo"[\s\S]{0,1500}?"urlTemplate"\s*:\s*"([^"]+)"/,
+            /"logo"[\s\S]{0,1500}?"urlTemplate"\s*:\s*"([^"]+)"/,
+            /"urlTemplate"\s*:\s*"([^"]*avatars\.mds\.yandex\.net[^"]*)"/,
+            /"uri"\s*:\s*"([^"]*avatars\.mds\.yandex\.net[^"]*)"/
+          ]
 
-          const chunk = html.slice(businessImagesIndex, businessImagesIndex + 2000)
-          const logoIndex = chunk.indexOf('"logo"')
+          for (const pattern of patterns) {
+            const found = html.match(pattern)
+            const url = normalizeLogoUrl(found?.[1])
+            if (url) return url
+          }
 
-          if (logoIndex < 0) return null
+          const metaImage = document.querySelector('meta[property="og:image"], meta[name="twitter:image"]')?.getAttribute('content')
+          const metaUrl = normalizeLogoUrl(metaImage)
+          if (metaUrl) return metaUrl
 
-          const logoChunk = chunk.slice(logoIndex, logoIndex + 800)
-          const match = logoChunk.match(/"urlTemplate"\s*:\s*"([^"]+)"/)
+          const imageCandidates = Array.from(document.querySelectorAll('img'))
+            .map((img) => img.getAttribute('src') || img.getAttribute('data-src') || '')
+            .map(normalizeLogoUrl)
+            .filter((value): value is string => Boolean(value))
 
-          return match?.[1] ? match[1].replace("%s", "XL") : null
+          const preferred = imageCandidates.find((url) => url.includes('/get-altay/'))
+            || imageCandidates.find((url) => url.includes('avatars.mds.yandex.net'))
+            || imageCandidates[0]
+
+          return preferred || null
         }).catch(() => null)
-
       const currentUrl = page.url()
       const currentTitle = await page.title().catch(() => '')
 

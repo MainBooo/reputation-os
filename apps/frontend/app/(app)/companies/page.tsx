@@ -102,7 +102,7 @@ function CompanyCard({ company, featured = false }: { company: any; featured?: b
           }
 
   const meta = [
-    { icon: Globe, value: company.website || 'Без сайта' },
+      ...(company.website ? [{ icon: Globe, value: company.website }] : []),
     { icon: MapPin, value: company.city || 'Город не указан' },
     { icon: Tag, value: company.industry || 'Отрасль не указана' }
   ]

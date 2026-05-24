@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import Sidebar from '@/components/layout/Sidebar'
 import Topbar from '@/components/layout/Topbar'
 import MobileNav from '@/components/layout/MobileNav'
+import MobileSidebarDrawer from '@/components/layout/MobileSidebarDrawer'
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const token = cookies().get('accessToken')?.value
@@ -13,6 +14,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-[#050b12] text-white">
+        <MobileSidebarDrawer />
       <div className="flex min-h-screen overflow-x-hidden">
         <Sidebar />
         <div className="flex min-h-screen min-w-0 flex-1 flex-col overflow-x-hidden">

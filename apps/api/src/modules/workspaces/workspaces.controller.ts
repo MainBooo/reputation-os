@@ -44,6 +44,11 @@ export class WorkspacesController {
     return this.workspacesService.updateMemberRole(user.id, id, memberId, dto)
   }
 
+  @Delete(':id/leave')
+  leaveWorkspace(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.workspacesService.leaveWorkspace(user.id, id)
+  }
+
   @Delete(':id/members/:memberId')
   removeMember(@CurrentUser() user: AuthUser, @Param('id') id: string, @Param('memberId') memberId: string) {
     return this.workspacesService.removeMember(user.id, id, memberId)
@@ -69,6 +74,21 @@ export class WorkspacesController {
     @Body() dto: AcceptWorkspaceInviteDto
   ) {
     return this.workspacesService.acceptInvite(user.id, dto.token)
+  }
+
+  @Post('invites/:inviteId/accept')
+  acceptInviteById(@CurrentUser() user: AuthUser, @Param('inviteId') inviteId: string) {
+    return this.workspacesService.acceptInviteById(user.id, inviteId)
+  }
+
+  @Post('invites/:inviteId/decline')
+  declineInviteById(@CurrentUser() user: AuthUser, @Param('inviteId') inviteId: string) {
+    return this.workspacesService.declineInviteById(user.id, inviteId)
+  }
+
+  @Get('invites/mine')
+  findMyInvites(@CurrentUser() user: AuthUser) {
+    return this.workspacesService.findMyInvites(user.id)
   }
 
   @Get(':id')

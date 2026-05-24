@@ -46,13 +46,11 @@ function getReadinessScore(params: {
   keywords: string[]
   yandexUrl: string
   twoGisUrl?: string
-  website: string
 }) {
   let score = 0
-  if (params.name.trim()) score += 35
+  if (params.name.trim()) score += 40
   if (params.keywords.length > 0) score += 30
-  if (params.yandexUrl.trim() || params.twoGisUrl?.trim()) score += 25
-  if (params.website.trim()) score += 10
+  if (params.yandexUrl.trim() || params.twoGisUrl?.trim()) score += 30
   return Math.min(score, 100)
 }
 
@@ -62,7 +60,6 @@ export default function CompaniesCreateForm() {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
   const [workspaceId, setWorkspaceId] = useState('')
   const [name, setName] = useState('')
-  const [website, setWebsite] = useState('')
   const [city, setCity] = useState('')
   const [industry, setIndustry] = useState('')
   const [yandexUrl, setYandexUrl] = useState('')
@@ -96,7 +93,6 @@ export default function CompaniesCreateForm() {
   const suggestedKeywords = useMemo(() => {
     const result: string[] = []
     const companyName = normalizeKeyword(name)
-    const domain = getDomainKeyword(website)
     const cityName = normalizeKeyword(city)
     const industryName = normalizeKeyword(industry)
 
@@ -107,7 +103,6 @@ export default function CompaniesCreateForm() {
       result.push(`${companyName} отзывы`)
     }
 
-    if (domain) result.push(domain)
 
     const existing = new Set(keywords.map((item) => item.toLowerCase()))
     return result
@@ -116,11 +111,11 @@ export default function CompaniesCreateForm() {
       .filter((item, index, arr) => arr.findIndex((value) => value.toLowerCase() === item.toLowerCase()) === index)
       .filter((item) => !existing.has(item.toLowerCase()))
       .slice(0, 6)
-  }, [name, website, city, industry, keywords])
+  }, [name, city, industry, keywords])
 
   const readinessScore = useMemo(
-    () => getReadinessScore({ name, keywords, yandexUrl, twoGisUrl, website }),
-    [name, keywords, yandexUrl, twoGisUrl, website]
+    () => getReadinessScore({ name, keywords, yandexUrl, twoGisUrl }),
+    [name, keywords, yandexUrl, twoGisUrl]
   )
 
   const canSubmit = useMemo(() => {
@@ -169,7 +164,6 @@ export default function CompaniesCreateForm() {
       const company = (await createCompany({
         workspaceId,
         name: name.trim(),
-        website: website.trim() || undefined,
         city: city.trim() || undefined,
         industry: industry.trim() || undefined,
         yandexUrl: yandexUrl.trim() || undefined,
@@ -230,7 +224,6 @@ export default function CompaniesCreateForm() {
               <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Название компании" />
             </div>
 
-            <Input value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="Сайт компании" />
             <Input value={city} onChange={(e) => setCity(e.target.value)} placeholder="Город" />
             <Input value={industry} onChange={(e) => setIndustry(e.target.value)} placeholder="Отрасль / ниша" />
             <Input value={yandexUrl} onChange={(e) => setYandexUrl(e.target.value)} placeholder="Ссылка на Яндекс.Карты" />
