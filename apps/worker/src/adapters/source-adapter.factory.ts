@@ -1,6 +1,6 @@
 import { Platform } from '@prisma/client'
 import { GoogleAdapter } from './google.adapter'
-import { MockAdapter } from './mock.adapter'
+import { EmptyAdapter } from './empty.adapter'
 import { SourceAdapter } from './source-adapter.interface'
 import { WebMentionAdapter } from './webmention.adapter'
 import { TwoGisAdapter } from './twogis.adapter'
@@ -18,9 +18,9 @@ export class SourceAdapterFactory {
       case 'WEB':
         return new WebMentionAdapter()
       case 'CUSTOM':
-        return new MockAdapter()
+        return new EmptyAdapter()
       default:
-        return new MockAdapter()
+        return new EmptyAdapter()
     }
   }
 }

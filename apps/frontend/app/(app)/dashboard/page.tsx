@@ -67,7 +67,6 @@ function isValidDashboardMention(mention: any) {
 
   if (platform === 'VK' || platform === 'GOOGLE') return false
   if (sourceUrl.includes('example.com')) return false
-  if (title.includes('демо отзыв')) return false
 
   return true
 }

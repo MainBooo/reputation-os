@@ -4,6 +4,7 @@ import { PrismaService } from '../common/prisma/prisma.service'
 
 const ALLOWED_SENTIMENTS = ['NEGATIVE', 'POSITIVE', 'NEUTRAL'] as const
 const ALERT_MAX_PUBLISHED_AGE_MS = 48 * 60 * 60 * 1000
+const ALERT_INITIAL_LOOKBACK_MS = 24 * 60 * 60 * 1000
 
 function sentimentLabel(sentiment: string) {
   if (sentiment === 'NEGATIVE') return 'негативный'
@@ -52,7 +53,7 @@ export class AlertsService {
       checked += 1
 
       const sentiments = this.normalizeSentiments(subscription.alertSentiments)
-      const since = subscription.lastAlertCheckedAt || subscription.createdAt || new Date(Date.now() - 10 * 60 * 1000)
+      const since = subscription.lastAlertCheckedAt || new Date(now.getTime() - ALERT_INITIAL_LOOKBACK_MS)
       const minPublishedAt = new Date(now.getTime() - ALERT_MAX_PUBLISHED_AGE_MS)
 
       const mentions = await prismaAny.mention.findMany({

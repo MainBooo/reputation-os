@@ -1,6 +1,6 @@
 import { SourceAdapter } from './source-adapter.interface'
 
-export class GoogleAdapter implements SourceAdapter {
+export class EmptyAdapter implements SourceAdapter {
   async discoverTargets() {
     return []
   }
