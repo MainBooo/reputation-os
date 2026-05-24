@@ -671,7 +671,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
       description: `Средняя оценка за 7 дней ниже предыдущего периода на ${ratingDrop.toFixed(1)}★.`,
       meta: ratingDrop >= 0.4 ? 'Высокий' : 'Средний',
       tone: ratingDrop >= 0.4 ? 'red' : 'amber',
-      href: firstCompany ? `/companies/${firstCompany.id}/ratings` : '/companies'
+      href: firstCompany ? `/companies/${firstCompany.id}/analytics` : '/companies'
     })
   }
 

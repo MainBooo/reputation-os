@@ -163,7 +163,7 @@ export default async function CompanyPage({ params }: { params: { id: string } }
               </div>
               <div className="border-l border-white/10 p-4">
                 <div className="text-2xl font-semibold text-emerald-100">{getRatingLabel(averageRating)}</div>
-                <div className="mt-1 text-xs text-zinc-300">{ratedCount} с оценкой</div>
+                <div className="mt-1 text-xs text-zinc-300">текущий рейтинг площадок</div>
               </div>
               <div className="border-l border-white/10 p-4">
                 <div className="text-2xl font-semibold text-red-100">{negativeTotal}</div>

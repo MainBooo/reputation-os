@@ -3,14 +3,13 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import clsx from 'clsx'
-import { BarChart3, Building2, Clock3, Globe2, Inbox, Star } from 'lucide-react'
+import { BarChart3, Building2, Clock3, Globe2, Inbox } from 'lucide-react'
 
 const items = [
   { href: '', label: 'Обзор', icon: Building2, tone: 'cyan' },
   { href: '/inbox', label: 'Inbox', icon: Inbox, tone: 'violet' },
   { href: '/web', label: 'Сеть', icon: Globe2, tone: 'cyan' },
   { href: '/analytics', label: 'Аналитика', icon: BarChart3, tone: 'violet' },
-  { href: '/ratings', label: 'Рейтинги', icon: Star, tone: 'cyan' },
   { href: '/sync-history', label: 'Синхр.', icon: Clock3, tone: 'violet' }
 ]
 
