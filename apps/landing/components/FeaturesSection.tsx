@@ -1,71 +1,74 @@
-import { BellRing, CalendarDays, Filter, History, Inbox, Layers3, RefreshCw, ShieldAlert } from 'lucide-react'
-import Card from './ui/Card'
-import Container from './ui/Container'
-import Section from './ui/Section'
+import {
+  Activity,
+  BarChart3,
+  BellRing,
+  Inbox,
+  ShieldCheck,
+  TrendingUp,
+} from 'lucide-react'
 
 const features = [
   {
-    icon: Inbox,
-    title: 'Единый Inbox',
-    text: 'Отзывы, рейтинги и упоминания собираются в одну рабочую ленту.'
+    title: 'Мониторинг 24/7',
+    text: 'Следите за отзывами, упоминаниями и рейтингами на всех ключевых площадках.',
+    icon: Activity,
   },
   {
+    title: 'Аналитика и отчёты',
+    text: 'Понятные дашборды и отчёты помогают видеть динамику целиком.',
+    icon: BarChart3,
+  },
+  {
+    title: 'ИИ-аналитика и оповещения',
+    text: 'Искусственный интеллект выделяет риски и важные изменения.',
     icon: BellRing,
-    title: 'Оповещения от платформы',
-    text: 'Получайте сигнал, когда появляется новый отзыв, негативная оценка или важное упоминание.'
   },
   {
-    icon: Filter,
-    title: 'Фильтры по площадке, оценке, тональности и датам',
-    text: 'Быстро находите нужные сигналы без ручного перебора источников.'
+    title: 'Единая лента реакции',
+    text: 'Отзывы и сообщения из всех источников в одном окне.',
+    icon: Inbox,
   },
   {
-    icon: RefreshCw,
-    title: 'Автоматический сбор',
-    text: 'Платформа регулярно обновляет данные по подключённым источникам.'
+    title: 'Рост рейтинга',
+    text: 'Работайте с обратной связью и усиливайте репутацию.',
+    icon: TrendingUp,
   },
   {
-    icon: ShieldAlert,
-    title: 'Контроль негативных сигналов',
-    text: 'Негативные оценки и важные события заметнее для команды.'
+    title: 'Безопасность данных',
+    text: 'Данные защищены на уровне enterprise: шифрование, бэкапы и контроль доступа.',
+    icon: ShieldCheck,
   },
-  {
-    icon: History,
-    title: 'История источников',
-    text: 'Видно, откуда пришёл сигнал и как менялась картина.'
-  },
-  {
-    icon: Layers3,
-    title: 'Готовность к новым площадкам',
-    text: 'Архитектура рассчитана на расширение источников мониторинга.'
-  },
-  {
-    icon: CalendarDays,
-    title: 'Понятные статусы синхронизации',
-    text: 'Команда понимает, что уже собрано и что требует проверки.'
-  }
 ]
 
 export default function FeaturesSection() {
   return (
-    <Section id="features" ariaLabel="Возможности Reputation OS">
-      <Container>
-        <div>
-          <h2 className="text-3xl font-semibold tracking-tight text-white sm:text-[34px] sm:text-4xl">
-            Что получает бизнес
-          </h2>
+    <section className="section">
+      <div className="section-title">
+        <span>Возможности</span>
 
-          <div className="mt-7 grid gap-4 sm:mt-10 sm:grid-cols-2 lg:grid-cols-4">
-            {features.map((feature) => (
-              <Card key={feature.title}>
-                <feature.icon className="mb-4 text-cyan-200" size={24} />
-                <h3 className="text-base font-semibold leading-6 text-white">{feature.title}</h3>
-                <p className="mt-2 text-sm leading-6 text-slate-400">{feature.text}</p>
-              </Card>
-            ))}
-          </div>
-        </div>
-      </Container>
-    </Section>
+        <h2>
+          Вселенная вашей репутации — <span>под контролем</span>
+        </h2>
+
+        <p>
+          Все инструменты для контроля, анализа и роста вашей
+          репутации в одном пространстве.
+        </p>
+      </div>
+
+      <div className="features">
+        {features.map(({ title, text, icon: Icon }) => (
+          <article className="feature-card" key={title}>
+            <div className="feature-icon">
+              <Icon size={28} strokeWidth={1.9} />
+            </div>
+
+            <h3>{title}</h3>
+
+            <p>{text}</p>
+          </article>
+        ))}
+      </div>
+    </section>
   )
 }

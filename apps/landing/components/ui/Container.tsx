@@ -1,5 +1,4 @@
 import type { ReactNode } from 'react'
-import clsx from 'clsx'
 
 type ContainerProps = {
   children: ReactNode
@@ -7,9 +6,12 @@ type ContainerProps = {
 }
 
 export default function Container({ children, className }: ContainerProps) {
-  return (
-    <div className={clsx('mx-auto w-full max-w-[1220px] px-4 sm:px-6 lg:px-8', className)}>
-      {children}
-    </div>
-  )
+  const classes = [
+    'mx-auto w-full max-w-[1180px] px-4 sm:px-6 lg:px-8',
+    className,
+  ]
+    .filter(Boolean)
+    .join(' ')
+
+  return <div className={classes}>{children}</div>
 }

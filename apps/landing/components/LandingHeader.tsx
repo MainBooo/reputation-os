@@ -1,116 +1,88 @@
 'use client'
 
-import { useEffect } from 'react'
-import ButtonLink from './ui/ButtonLink'
-import Container from './ui/Container'
+import { useState } from 'react'
+import Link from 'next/link'
 
-const navItems = [
-  { href: '#features', label: 'Возможности' },
-  { href: '#how-it-works', label: 'Как работает' },
-  { href: '#pricing', label: 'Тарифы' },
-  { href: '#faq', label: 'FAQ' }
+const nav = [
+  ['Возможности', '#features'],
+  ['Тарифы', '#pricing'],
+  ['FAQ', '#faq'],
 ]
 
-function scrollToTopHard() {
-  window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
-
-  requestAnimationFrame(() => {
-    window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
-  })
-
-  window.setTimeout(() => {
-    window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
-  }, 80)
-
-  window.setTimeout(() => {
-    window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
-  }, 250)
-}
-
 export default function LandingHeader() {
-  useEffect(() => {
-    if ('scrollRestoration' in window.history) {
-      window.history.scrollRestoration = 'manual'
-    }
-
-    if (window.location.hash) {
-      window.history.replaceState(
-        null,
-        '',
-        `${window.location.pathname}${window.location.search}`
-      )
-    }
-
-    scrollToTopHard()
-
-    const handlePageShow = () => {
-      if ('scrollRestoration' in window.history) {
-        window.history.scrollRestoration = 'manual'
-      }
-
-      scrollToTopHard()
-    }
-
-    window.addEventListener('pageshow', handlePageShow)
-
-    return () => {
-      window.removeEventListener('pageshow', handlePageShow)
-    }
-  }, [])
-
-  function handleNavClick(event: React.MouseEvent<HTMLAnchorElement>, href: string) {
-    event.preventDefault()
-
-    const target = document.querySelector(href)
-
-    if (!target) return
-
-    target.scrollIntoView({
-      behavior: 'smooth',
-      block: 'start'
-    })
-
-    window.history.replaceState(
-      null,
-      '',
-      `${window.location.pathname}${window.location.search}`
-    )
-  }
+  const [open, setOpen] = useState(false)
 
   return (
-    <header className="sticky top-0 z-50 border-b border-white/10 bg-slate-950/60 backdrop-blur-xl">
-      <Container className="flex min-h-[64px] items-center justify-between gap-3 sm:min-h-[72px] sm:gap-4">
-        <a href="/" className="focus-ring flex items-center gap-3 rounded-xl">
-          <span className="flex h-9 w-9 items-center justify-center rounded-2xl bg-cyan-300 text-sm font-black text-slate-950">
-            R
+    <header className="sticky top-0 z-50 mx-auto w-full max-w-7xl px-4 py-4 sm:px-6 lg:px-8">
+      <div className="flex items-center justify-between gap-4 rounded-3xl border border-white/10 bg-slate-950/70 px-4 py-3 shadow-2xl backdrop-blur-xl sm:px-5">
+        <Link
+          href="/"
+          className="flex min-w-0 shrink-0 items-center gap-3"
+          aria-label="Reputation OS"
+        >
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full border border-cyan-200/20 bg-white/5">
+            <img
+              src="/images/logo/logo.png"
+              alt="Reputation OS"
+              width={44}
+              height={44}
+              className="h-full w-full object-contain"
+            />
           </span>
-          <span className="text-sm font-semibold tracking-tight sm:text-base text-white">
-            Reputation OS
+          <span className="whitespace-nowrap text-sm font-semibold tracking-[0.22em] text-white">
+            REPUTATION OS
           </span>
-        </a>
+        </Link>
 
-        <nav aria-label="Основная навигация" className="hidden items-center gap-6 md:flex">
-          {navItems.map((item) => (
-            <a
-              key={item.href}
-              href={item.href}
-              onClick={(event) => handleNavClick(event, item.href)}
-              className="focus-ring rounded-lg text-sm text-slate-300 transition hover:text-cyan-200"
-            >
-              {item.label}
+        <nav className="hidden items-center gap-8 text-sm font-medium text-slate-300 lg:flex">
+          {nav.map(([label, href]) => (
+            <a key={href} href={href} className="whitespace-nowrap transition hover:text-cyan-200">
+              {label}
             </a>
           ))}
         </nav>
 
-        <div className="flex items-center gap-2">
-          <ButtonLink href="https://reputation.generationweb.ru/login" variant="ghost" className="hidden sm:inline-flex">
-            Войти
-          </ButtonLink>
-          <ButtonLink href="https://t.me/max92pole" external>
-            Запросить демо
-          </ButtonLink>
+        <a
+          className="hidden shrink-0 rounded-2xl border border-cyan-200/20 bg-cyan-300 px-5 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-cyan-200 lg:inline-flex"
+          href="#pricing"
+        >
+          Смотреть тарифы
+        </a>
+
+        <button
+          type="button"
+          className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-xl text-white lg:hidden"
+          aria-label="Открыть меню"
+          aria-expanded={open}
+          onClick={() => setOpen((v) => !v)}
+        >
+          {open ? '×' : '☰'}
+        </button>
+      </div>
+
+      {open && (
+        <div className="mt-3 rounded-3xl border border-white/10 bg-slate-950/90 p-4 shadow-2xl backdrop-blur-xl lg:hidden">
+          <nav className="grid gap-2 text-sm font-medium text-slate-200">
+            {nav.map(([label, href]) => (
+              <a
+                key={href}
+                href={href}
+                onClick={() => setOpen(false)}
+                className="rounded-2xl px-4 py-3 transition hover:bg-white/10"
+              >
+                {label}
+              </a>
+            ))}
+            <a
+              href="#pricing"
+              onClick={() => setOpen(false)}
+              className="mt-2 rounded-2xl bg-cyan-300 px-4 py-3 text-center font-semibold text-slate-950"
+            >
+              Смотреть тарифы
+            </a>
+          </nav>
         </div>
-      </Container>
+      )}
     </header>
   )
 }
