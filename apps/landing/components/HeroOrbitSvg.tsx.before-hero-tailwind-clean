@@ -1,7 +1,7 @@
 export default function HeroOrbitSvg() {
   return (
     <svg
-      className="relative z-10 h-auto w-full max-w-3xl justify-self-center lg:justify-self-end"
+      className="hero-svg-art"
       viewBox="0 0 860 560"
       xmlns="http://www.w3.org/2000/svg"
       aria-hidden="true"

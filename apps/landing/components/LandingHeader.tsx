@@ -13,45 +13,28 @@ export default function LandingHeader() {
   const [open, setOpen] = useState(false)
 
   return (
-    <header className="sticky top-0 z-50 mx-auto w-full max-w-7xl px-4 py-4 sm:px-6 lg:px-8">
-      <div className="flex items-center justify-between gap-4 rounded-3xl border border-white/10 bg-slate-950/70 px-4 py-3 shadow-2xl backdrop-blur-xl sm:px-5">
-        <Link
-          href="/"
-          className="flex min-w-0 shrink-0 items-center gap-3"
-          aria-label="Reputation OS"
-        >
-          <span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full border border-cyan-200/20 bg-white/5">
-            <img
-              src="/images/logo/logo.png"
-              alt="Reputation OS"
-              width={44}
-              height={44}
-              className="h-full w-full object-contain"
-            />
+    <header className="site-header">
+      <div className="site-header__bar">
+        <Link href="/" className="site-header__brand" aria-label="Reputation OS">
+          <span className="site-header__logo">
+            <img src="/images/logo/logo.png" alt="Reputation OS" />
           </span>
-          <span className="whitespace-nowrap text-sm font-semibold tracking-[0.22em] text-white">
-            REPUTATION OS
-          </span>
+          <span className="site-header__title">REPUTATION OS</span>
         </Link>
 
-        <nav className="hidden items-center gap-8 text-sm font-medium text-slate-300 lg:flex">
+        <nav className="site-header__nav" aria-label="Основное меню">
           {nav.map(([label, href]) => (
-            <a key={href} href={href} className="whitespace-nowrap transition hover:text-cyan-200">
-              {label}
-            </a>
+            <a key={href} href={href}>{label}</a>
           ))}
         </nav>
 
-        <a
-          className="hidden shrink-0 rounded-2xl border border-cyan-200/20 bg-cyan-300 px-5 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-cyan-200 lg:inline-flex"
-          href="#pricing"
-        >
+        <a className="site-header__cta" href="#pricing">
           Смотреть тарифы
         </a>
 
         <button
           type="button"
-          className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-xl text-white lg:hidden"
+          className="site-header__burger"
           aria-label="Открыть меню"
           aria-expanded={open}
           onClick={() => setOpen((v) => !v)}
@@ -61,26 +44,15 @@ export default function LandingHeader() {
       </div>
 
       {open && (
-        <div className="mt-3 rounded-3xl border border-white/10 bg-slate-950/90 p-4 shadow-2xl backdrop-blur-xl lg:hidden">
-          <nav className="grid gap-2 text-sm font-medium text-slate-200">
-            {nav.map(([label, href]) => (
-              <a
-                key={href}
-                href={href}
-                onClick={() => setOpen(false)}
-                className="rounded-2xl px-4 py-3 transition hover:bg-white/10"
-              >
-                {label}
-              </a>
-            ))}
-            <a
-              href="#pricing"
-              onClick={() => setOpen(false)}
-              className="mt-2 rounded-2xl bg-cyan-300 px-4 py-3 text-center font-semibold text-slate-950"
-            >
-              Смотреть тарифы
+        <div className="site-header__mobile">
+          {nav.map(([label, href]) => (
+            <a key={href} href={href} onClick={() => setOpen(false)}>
+              {label}
             </a>
-          </nav>
+          ))}
+          <a href="#pricing" onClick={() => setOpen(false)}>
+            Смотреть тарифы
+          </a>
         </div>
       )}
     </header>
