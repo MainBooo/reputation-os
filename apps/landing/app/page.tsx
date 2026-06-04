@@ -4,7 +4,6 @@ import FAQSection, { faqs } from '@/components/FAQSection'
 import FeaturesSection from '@/components/FeaturesSection'
 import HeroSection from '@/components/HeroSection'
 import HowItWorksSection from '@/components/HowItWorksSection'
-import LandingFooter from '@/components/LandingFooter'
 import LandingHeader from '@/components/LandingHeader'
 import PricingSection from '@/components/PricingSection'
 import TrustLogosSection from '@/components/TrustLogosSection'
@@ -58,8 +57,7 @@ export default function HomePage() {
           <FAQSection />
           <CTASection />
         </main>
-        <LandingFooter />
-      </div>
+</div>
     </>
   )
 }
