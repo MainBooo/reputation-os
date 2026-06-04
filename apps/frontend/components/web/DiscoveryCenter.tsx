@@ -306,6 +306,28 @@ export default function DiscoveryCenter({
     }
   }
 
+  async function applyInterval() {
+    const primaryTarget = targets[0]
+    if (!primaryTarget || !canWrite || busyId === 'interval') return
+
+    setBusyId('interval')
+    setMessage('')
+
+    try {
+      await patchTarget(primaryTarget, {
+        config: {
+          ...(primaryTarget.config || {}),
+          scanIntervalMinutes: intervalMinutes
+        }
+      })
+      setMessage('Интервал обновлён.')
+    } catch {
+      setMessage('Не удалось обновить интервал.')
+    } finally {
+      setBusyId(null)
+    }
+  }
+
   const lastScanLabel = 'после последнего запуска'
   const currentInterval = SCAN_INTERVALS.find((item) => item.minutes === intervalMinutes) || SCAN_INTERVALS[2]
 
@@ -334,17 +356,28 @@ export default function DiscoveryCenter({
         <div className="mt-5 grid gap-3 md:grid-cols-4">
           <div className="rounded-3xl border border-white/10 bg-black/15 p-4">
             <div className="text-xs text-zinc-300">Интервал</div>
-            <select
-              value={intervalMinutes}
-              onChange={(event) => setIntervalMinutes(Number(event.target.value))}
-              className="mt-2 h-11 w-full rounded-2xl border border-white/10 bg-white/[0.04] px-3 text-sm font-semibold text-white outline-none"
-            >
-              {SCAN_INTERVALS.map((item) => (
-                <option key={item.minutes} value={item.minutes}>
-                  {item.label}
-                </option>
-              ))}
-            </select>
+              <div className="mt-2 flex gap-2">
+                <select
+                  value={intervalMinutes}
+                  onChange={(event) => setIntervalMinutes(Number(event.target.value))}
+                  disabled={!canWrite || busyId === 'interval'}
+                  className="h-11 min-w-0 flex-1 rounded-2xl border border-white/10 bg-white/[0.04] px-3 text-sm font-semibold text-white outline-none disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {SCAN_INTERVALS.map((item) => (
+                    <option key={item.minutes} value={item.minutes}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={applyInterval}
+                  disabled={!canWrite || busyId === 'interval'}
+                  className="inline-flex h-11 shrink-0 items-center justify-center rounded-2xl border border-cyan-300/30 bg-cyan-400/10 px-3 text-[11px] font-bold text-blue-100 transition hover:bg-cyan-400/20 disabled:cursor-not-allowed disabled:opacity-60 sm:px-4 sm:text-xs"
+                >
+                  {busyId === 'interval' ? '…' : 'ОК'}
+                </button>
+              </div>
           </div>
 
           <div className="rounded-3xl border border-white/10 bg-black/15 p-4">

@@ -15,7 +15,7 @@ export default function HeroSection() {
 
         <div className="mt-8 flex">
           <a
-            className="inline-flex h-14 items-center justify-center rounded-2xl bg-cyan-300 px-8 text-sm font-semibold text-slate-950 shadow-2xl transition hover:bg-cyan-200"
+            className="hero-cta-premium"
             href="https://reputation.generationweb.ru/login"
           >
             Войти в систему →

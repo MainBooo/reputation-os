@@ -24,6 +24,7 @@ type RelevanceContext = {
 }
 
 export class WebMentionAdapter implements SourceAdapter {
+  private yandexSearchDisabledByPermission = false
   async discoverTargets(input: any) {
     return [
       { externalUrl: input?.website || null, displayName: input?.name || 'Web monitor' }
@@ -124,6 +125,16 @@ export class WebMentionAdapter implements SourceAdapter {
   }
 
   private async fetchFromYandex(query: string): Promise<SearchItem[]> {
+    if (process.env.YANDEX_SEARCH_API_ENABLED !== 'true') {
+      console.warn('[WEB] Yandex Search API disabled by YANDEX_SEARCH_API_ENABLED', { query })
+      return []
+    }
+
+    if (this.yandexSearchDisabledByPermission) {
+      console.warn('[WEB] Yandex Search API skipped after permission error', { query })
+      return []
+    }
+
     const apiKey = process.env.YANDEX_SEARCH_API_KEY
     const folderId = process.env.YANDEX_SEARCH_FOLDER_ID
 

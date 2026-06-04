@@ -1,4 +1,4 @@
-import { Controller, Get, Param, UseGuards } from '@nestjs/common'
+import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common'
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard'
 import { CurrentUser } from '../../common/decorators/current-user.decorator'
 import { AuthUser } from '../../common/auth/auth-user.type'
@@ -10,8 +10,13 @@ export class AnalyticsController {
   constructor(private readonly analyticsService: AnalyticsService) {}
 
   @Get('overview')
-  overview(@CurrentUser() user: AuthUser, @Param('id') companyId: string) {
-    return this.analyticsService.overview(user.id, companyId)
+  overview(
+    @CurrentUser() user: AuthUser,
+    @Param('id') companyId: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string
+  ) {
+    return this.analyticsService.overview(user.id, companyId, from, to)
   }
 
   @Get('sentiment')
@@ -20,7 +25,12 @@ export class AnalyticsController {
   }
 
   @Get('platforms')
-  platforms(@CurrentUser() user: AuthUser, @Param('id') companyId: string) {
-    return this.analyticsService.platforms(user.id, companyId)
+  platforms(
+    @CurrentUser() user: AuthUser,
+    @Param('id') companyId: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string
+  ) {
+    return this.analyticsService.platforms(user.id, companyId, from, to)
   }
 }

@@ -118,14 +118,21 @@ export default function AnalyticsDashboard({ overview, sentiment, platforms }: P
     setPeriod(nextPeriod)
     setOpen(false)
     router.push(`${pathname}?${params.toString()}`)
+    setTimeout(() => router.refresh(), 50)
   }
 
+  const sentimentCount = (name: string) =>
+    Number(sentiment?.find((item: any) => String(item.sentiment).toUpperCase() === name)?.count || 0)
+
   const total = Number(overview?.mentionsCount || 0)
-  const positive = Number(overview?.positiveCount || 0)
-  const neutral = Number(overview?.neutralCount || 0)
-  const negative = Number(overview?.negativeCount || 0)
+  const positive = Number(overview?.positiveCount || sentimentCount('POSITIVE') || 0)
+  const neutral = Number(overview?.neutralCount || sentimentCount('NEUTRAL') || 0)
+  const negative = Number(overview?.negativeCount || sentimentCount('NEGATIVE') || 0)
   const reviews = Number(overview?.reviewsCount || 0)
-  const rating = Number(overview?.rating || 0) || 0
+
+  const platformItems = Array.isArray(platforms?.items) ? platforms.items : []
+  const yandexRating = Number(platformItems.find((item: any) => item.platform === 'YANDEX')?.avgRating || 0)
+  const rating = Number(overview?.rating || yandexRating || 0) || 0
   const positiveShare = Number(overview?.positiveShare || pct(positive, total))
   const trend = overview?.trend?.length ? overview.trend : []
   const latest = Array.isArray(overview?.latest) ? overview.latest.slice(0, 6) : []
@@ -220,9 +227,9 @@ export default function AnalyticsDashboard({ overview, sentiment, platforms }: P
             <AreaChart data={reputationTrend}>
               <CartesianGrid stroke="rgba(255,255,255,0.04)" vertical={false} />
               <XAxis dataKey="label" tick={{ fill: '#94a3b8', fontSize: 12 }} axisLine={false} tickLine={false} />
-              <YAxis domain={[1, 5]} tick={{ fill: '#94a3b8', fontSize: 12 }} axisLine={false} tickLine={false} />
+              <YAxis domain={[0, 6]} tick={{ fill: '#94a3b8', fontSize: 12 }} axisLine={false} tickLine={false} />
               <Tooltip contentStyle={{ background: '#07111f', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 14 }} />
-              <Area type="natural" dataKey="rating" stroke="#22d3ee" strokeWidth={3.2} fill="#22d3ee22" dot={false} activeDot={{ r: 5, stroke: '#a5f3fc', strokeWidth: 2, fill: '#22d3ee' }} />
+              <Area type="linear" dataKey="rating" stroke="#22d3ee" strokeWidth={3.2} fill="#22d3ee22" dot={false} activeDot={{ r: 5, stroke: '#a5f3fc', strokeWidth: 2, fill: '#22d3ee' }} />
             </AreaChart>
           </ResponsiveContainer>
         </div>
