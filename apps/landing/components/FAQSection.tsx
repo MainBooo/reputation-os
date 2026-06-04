@@ -35,24 +35,34 @@ const faqs = [
 export default function FAQSection() {
   return (
     <Section id="faq" ariaLabel="Частые вопросы">
-      <Container>
-        <h2 className="text-3xl font-semibold tracking-tight text-white sm:text-[34px] sm:text-4xl">
-          FAQ
-        </h2>
+      <div className="faq-premium">
+        <Container>
+          <div className="faq-premium__header">
+            <h2 className="faq-premium__title">FAQ</h2>
+            <div className="faq-premium__line" aria-hidden="true" />
+            <p className="faq-premium__subtitle">
+              Ответы на частые вопросы о возможностях Reputation OS
+            </p>
+          </div>
 
-        <div className="mt-7 grid gap-4 sm:mt-10 lg:grid-cols-2">
-          {faqs.map((faq) => (
-            <details key={faq.question} className="glass group rounded-3xl p-5">
-              <summary className="cursor-pointer list-none text-lg font-semibold text-white">
-                {faq.question}
-              </summary>
-              <p className="mt-4 text-sm leading-6 text-slate-400">
-                {faq.answer}
-              </p>
-            </details>
-          ))}
-        </div>
-      </Container>
+          <div className="faq-premium__grid">
+            {faqs.map((faq) => (
+              <details key={faq.question} className="faq-premium__item">
+                <summary className="faq-premium__question">
+                  <span className="faq-premium__question-text">{faq.question}</span>
+                  <span className="faq-premium__controls" aria-hidden="true">
+                    <span className="faq-premium__dot" />
+                    <span className="faq-premium__icon">+</span>
+                  </span>
+                </summary>
+                <p className="faq-premium__answer">
+                  {faq.answer}
+                </p>
+              </details>
+            ))}
+          </div>
+        </Container>
+      </div>
     </Section>
   )
 }
