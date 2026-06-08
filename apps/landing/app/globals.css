@@ -1075,3 +1075,10 @@
     line-height: 1.62;
   }
 }
+/* Mobile-only hero text safe inset */
+@media (max-width: 640px) {
+  .hero-mobile-copy {
+    padding-left: 28px !important;
+    padding-right: 20px !important;
+  }
+}

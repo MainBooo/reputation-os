@@ -198,7 +198,9 @@ export default function DashboardCharts({
 
                 <XAxis
                   dataKey="date"
-                  tickFormatter={(_, index) => mentionTrend[index]?.label || ''}
+                  tickFormatter={(value) =>
+                    mentionTrend.find((item) => item.date === value)?.label || String(value)
+                  }
                   tick={{ fill: 'rgba(226,232,240,0.58)', fontSize: 11 }}
                   axisLine={{ stroke: 'rgba(148,163,184,0.18)' }}
                   tickLine={false}
