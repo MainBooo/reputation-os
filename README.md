@@ -1,198 +1,261 @@
-# Reputation OS / Reputation Inbox
+# ReputationOS
 
-B2B SaaS for:
-- review monitoring
-- mention monitoring
-- web mentions/articles
-- ratings aggregation
-- AI-ready reply drafts
-- notification-ready architecture
-- VK monitoring
+## Описание
 
-## Monorepo structure
+ReputationOS — SaaS-платформа для управления онлайн-репутацией бизнеса.
 
-- `apps/frontend`
-- `apps/api`
-- `apps/worker`
-- `packages/shared`
-- `packages/config`
-- `prisma`
+Система объединяет мониторинг отзывов, упоминаний бренда, рейтингов, аналитику, AI-генерацию ответов, командную работу и систему уведомлений в едином интерфейсе.
 
-## Local requirements
+Основная задача платформы — помочь компаниям своевременно отслеживать репутационные сигналы, реагировать на отзывы клиентов и контролировать динамику репутации по всем подключенным объектам бизнеса.
 
-- Node.js 20+
-- pnpm 8+
-- Docker / Docker Compose
-- PostgreSQL 16
-- Redis 7
+---
 
-## Local startup
+## Основные возможности
 
-```bash
-cp .env.example .env
-cp apps/api/.env.example apps/api/.env
-cp apps/frontend/.env.example apps/frontend/.env
-cp apps/worker/.env.example apps/worker/.env
+### Dashboard
 
-docker compose up -d
-pnpm install
-pnpm prisma:generate
-pnpm prisma:migrate
-pnpm prisma:seed
-pnpm --filter api dev
-pnpm --filter worker dev
-pnpm --filter frontend dev
+- KPI по репутации
+- Средний рейтинг
+- Количество отзывов
+- Количество упоминаний
+- Динамика изменений
+- Сводка за период
+- Графики активности
+
+### Мониторинг отзывов
+
+Поддерживаемые источники:
+
+- Яндекс Карты
+- 2ГИС
+
+Возможности:
+
+- сбор отзывов
+- хранение истории
+- определение тональности
+- отображение рейтингов
+- автоматическая синхронизация
+
+### Мониторинг WEB-упоминаний
+
+Поиск и сбор:
+
+- статей
+- публикаций
+- новостей
+- форумов
+- сайтов-отзовиков
+
+Функции:
+
+- автоматический поиск новых упоминаний
+- фильтрация релевантности
+- аналитика источников
+
+### Inbox
+
+Единая лента:
+
+- отзывов
+- упоминаний
+- сигналов репутации
+
+Доступны:
+
+- фильтры
+- поиск
+- сортировка
+- группировка
+
+### AI-генерация ответов
+
+Встроенный AI помогает:
+
+- генерировать ответы на отзывы
+- учитывать тональность обращения
+- ускорять работу сотрудников поддержки
+
+### Аналитика
+
+Раздел аналитики включает:
+
+- анализ тональности
+- распределение по источникам
+- динамику рейтинга
+- тренды упоминаний
+- исторические данные
+
+### Отчёты
+
+Формирование отчётов по компании:
+
+- рейтинг
+- отзывы
+- упоминания
+- статистика
+- динамика изменений
+
+### Уведомления
+
+Поддерживаются:
+
+- внутренние уведомления
+- push-уведомления
+- уведомления о новых отзывах
+- уведомления о новых упоминаниях
+
+### Командная работа
+
+Возможности:
+
+- Workspaces
+- приглашения сотрудников
+- роли пользователей
+- совместная работа
+
+Роли:
+
+- Owner
+- Admin
+- Member
+
+### Административная панель
+
+Системный раздел включает:
+
+- пользователей
+- рабочие пространства
+- компании
+- статистику платформы
+- управление доступом
+
+---
+
+## Архитектура
+
+### Frontend
+
+- Next.js 14
+- TypeScript
+- Tailwind CSS
+
+### Backend
+
+- NestJS
+- TypeScript
+- Prisma ORM
+
+### База данных
+
+- PostgreSQL
+
+### Очереди и фоновые задачи
+
+- Redis
+- BullMQ
+
+### Инфраструктура
+
+- PM2
+- Nginx
+- Ubuntu Server
+
+---
+
+## Структура проекта
+
+```text
+apps/
+├── api
+├── frontend
+├── landing
+└── worker
+
+packages/
+├── shared
+└── config
+
+prisma/
 ```
 
-Frontend:
-- `http://localhost:3001`
+---
 
-API:
-- `http://localhost:3000/api`
+## Производственный стек
 
-## Prisma
+### Frontend
 
-Generate client:
+- reputation-frontend
 
-```bash
-pnpm prisma:generate
-```
+### API
 
-Run migrations:
+- reputation-api
 
-```bash
-pnpm prisma:migrate
-```
+### Worker
 
-Seed demo data:
+- reputation-worker
 
-```bash
-pnpm prisma:seed
-```
+### Landing
 
-## Seed/demo coverage
+- reputation-landing
 
-Seed includes:
-- demo user
-- workspace
-- 2 companies
-- aliases
-- sources
-- source targets
-- mentions/reviews
-- rating snapshots
-- AIReplyDraft example
-- NotificationRule example
-- JobLog examples
-- VK search profiles
-- VK tracked communities
-- VK tracked posts
-- VK post mention
-- VK comment mention
+Управление процессами осуществляется через PM2.
 
-This makes:
-- dashboard non-empty
-- inbox non-empty
-- ratings non-empty
-- analytics non-empty
-- VK page non-empty
+---
 
-## PM2
+## Монорепозиторий
 
-Production ecosystem file:
+Проект построен по модели Monorepo.
 
-- `infra/pm2/ecosystem.config.js`
+Содержит:
 
-Typical usage:
+- продуктовую часть
+- маркетинговый лендинг
+- API
+- worker-процессы
+- общие пакеты
 
-```bash
-pnpm --filter api build
-pnpm --filter worker build
-pnpm --filter frontend build
+---
 
-pm2 start infra/pm2/ecosystem.config.js
-pm2 save
-```
+## Безопасность
 
-## nginx
+Реализовано:
 
-Example config:
-- `infra/nginx/reputation.example.conf`
+- JWT-аутентификация
+- разграничение ролей
+- защита API
+- контроль доступа к рабочим пространствам
 
-Map:
-- `reputation.example.com` -> frontend on `3001`
-- `api.reputation.example.com` -> api on `3000`
+---
 
-## VK monitoring modes
+## Назначение продукта
 
-### BRAND_SEARCH
-- uses `VkSearchProfile`
-- discovers posts by brand queries
-- then comments for relevant posts
-- then relevance scoring
-- persists only relevant mentions/comments
+ReputationOS подходит для:
 
-### PRIORITY_COMMUNITIES
-- uses `VkTrackedCommunity` with mode `PRIORITY_COMMUNITY`
-- scans only configured communities
-- fetches posts
-- then comments for relevant posts
-- then persists relevant mentions
+- малого бизнеса
+- среднего бизнеса
+- сетевых компаний
+- агентств
+- франшиз
+- управляющих компаний
 
-### OWNED_COMMUNITY
-- uses `VkTrackedCommunity` with mode `OWNED_COMMUNITY`
-- frequent incremental sync
-- callback-ready / event-ready architecture
-- comments/posts are persisted with higher monitoring priority
+---
 
-## Current mock / stub areas
+## Статус проекта
 
-Real-world integrations may need API keys, rate limits, or anti-bot handling.
+Текущая версия представляет собой коммерчески готовую SaaS-платформу с рабочей архитектурой:
 
-Current hybrid implementation:
-- Yandex / Google / 2GIS adapters: demo/mock-backed
-- Web monitor: demo-safe Playwright-ready structure
-- VK adapter: real architecture, demo/mock data path, replaceable with real VK API integration later
-- AI replies: stub reply generator
-- notifications sending: placeholder processor
+- Frontend
+- Backend API
+- Worker-инфраструктура
+- Система аналитики
+- AI-функции
+- Командная работа
+- Уведомления
+- Мониторинг репутации
 
-## Replacing stubs later
+---
 
-### VK
-Replace `apps/worker/src/adapters/vk.adapter.ts` with:
-- real VK API client
-- pagination cursors
-- access token handling
-- comment sync windows
-- callback ingestion later
+## Copyright
 
-### External review platforms
-Replace:
-- `YandexAdapter`
-- `GoogleAdapter`
-- `TwoGisAdapter`
-- `WebMentionAdapter`
-
-with:
-- official APIs where possible
-- authenticated scraping pipelines if needed
-- proxy / anti-bot strategy
-
-## VPS deployment notes
-
-Typical layout:
-
-```bash
-/opt/reputation-os
-```
-
-Run:
-- api on `3000`
-- frontend on `3001`
-- worker as background process
-- nginx in front
-
-## Health endpoints
-
-API:
-- `GET /api/health`
+© ReputationOS
