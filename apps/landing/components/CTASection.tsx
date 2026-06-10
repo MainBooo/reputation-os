@@ -11,10 +11,13 @@ export default function CTASection() {
         />
       </span>
       <div>
-        <h2>Готовы взять репутацию под контроль?</h2>
-        <p>Попробуйте Reputation OS бесплатно 14 дней. Без карты. Без обязательств.</p>
+        <h2>Начните мониторинг репутации сегодня</h2>
+        <p>14 дней бесплатно. Без карты. Без обязательств. Подключите первую компанию за 5 минут.</p>
       </div>
-      <a className="btn btn-gradient btn-xl" href="https://reputation.generationweb.ru/register">Запустить бесплатно →</a>
+      <div style={{display:'flex', gap:'12px', flexWrap:'wrap', justifyContent:'center'}}>
+        <a className="btn btn-gradient btn-xl" href="https://reputation.generationweb.ru/register">Попробовать бесплатно →</a>
+        <a className="btn btn-glass btn-xl" href="https://t.me/max92pole">Написать в Telegram</a>
+      </div>
     </section>
   )
 }
