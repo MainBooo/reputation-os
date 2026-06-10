@@ -1,5 +1,6 @@
 import CTASection from '@/components/CTASection'
 import CommandCenterSection from '@/components/CommandCenterSection'
+import DemoAccessSection from '@/components/DemoAccessSection'
 import FAQSection, { faqs } from '@/components/FAQSection'
 import FeaturesSection from '@/components/FeaturesSection'
 import HeroSection from '@/components/HeroSection'
@@ -54,6 +55,7 @@ export default function HomePage() {
           <CommandCenterSection />
           <HowItWorksSection />
           <PricingSection />
+          <DemoAccessSection />
           <FAQSection />
           <CTASection />
         </main>
