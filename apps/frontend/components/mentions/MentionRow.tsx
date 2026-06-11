@@ -8,7 +8,6 @@ import { generateReply } from '@/lib/api/mentions'
 function platformLabel(value?: string | null) {
   if (value === 'YANDEX') return 'Яндекс'
   if (value === 'TWOGIS') return '2GIS'
-  if (value === 'VK') return 'VK'
   if (value === 'WEB') return 'Сеть'
   return value || null
 }
@@ -38,7 +37,6 @@ function typeLabel(value?: string | null) {
   ])
 
   if (hiddenTypes.has(value.toUpperCase())) return null
-  if (value === 'VK_COMMENT') return 'Комментарий VK'
 
   return value
     .toLowerCase()

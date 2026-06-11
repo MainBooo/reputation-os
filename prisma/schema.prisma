@@ -13,7 +13,6 @@ enum Platform {
   TWOGIS
   WEB
   CUSTOM
-  VK
 }
 
 enum SourceType {
@@ -21,9 +20,6 @@ enum SourceType {
   RATING_FEED
   WEB_MENTION_FEED
   CUSTOM_FEED
-  VK_BRAND_SEARCH
-  VK_PRIORITY_COMMUNITIES
-  VK_OWNED_COMMUNITY
 }
 
 enum MentionType {
@@ -32,8 +28,6 @@ enum MentionType {
   WEB_MENTION
   SOCIAL_MENTION
   COMMENT
-  VK_POST
-  VK_COMMENT
 }
 
 enum MentionStatus {
@@ -83,28 +77,8 @@ enum NotificationType {
   NEW_REVIEW
   RATING_DROP
   DAILY_DIGEST
-  VK_NEW_MENTION
   AI_REPLY_READY
   WORKSPACE_INVITE
-}
-
-enum VkMonitoringMode {
-  BRAND_SEARCH
-  PRIORITY_COMMUNITIES
-  OWNED_COMMUNITY
-}
-
-enum VkTrackedCommunityMode {
-  PRIORITY_COMMUNITY
-  OWNED_COMMUNITY
-}
-
-enum VkPostDiscoveryStatus {
-  DISCOVERED
-  RELEVANT
-  IRRELEVANT
-  COMMENTS_SYNCED
-  MENTIONS_EXTRACTED
 }
 
 model User {
@@ -123,8 +97,6 @@ model User {
   notifications        Notification[]
   aiReplyDrafts        AIReplyDraft[]        @relation("AIReplyDraftCreatedBy")
   jobLogsTriggered     JobLog[]              @relation("JobLogTriggeredBy")
-  vkAuthSessions       VkAuthSession[]
-  vkConnectAttempts    VkConnectAttempt[]
   webPushSubscriptions WebPushSubscription[]
 }
 
@@ -140,8 +112,6 @@ model Workspace {
   companies            Company[]
   sources              Source[]
   notificationRules    NotificationRule[]
-  vkAuthSessions       VkAuthSession[]
-  vkConnectAttempts    VkConnectAttempt[]
   webPushSubscriptions WebPushSubscription[]
 
   @@index([slug])
@@ -163,7 +133,6 @@ model WorkspaceMember {
   @@index([workspaceId, role])
 }
 
-
 model WorkspaceInvite {
   id          String        @id @default(cuid())
   workspaceId String
@@ -183,7 +152,6 @@ model WorkspaceInvite {
   @@index([email])
   @@index([token])
 }
-
 
 model Notification {
   id        String           @id @default(cuid())
@@ -228,11 +196,6 @@ model Company {
   aiReplyDrafts        AIReplyDraft[]
   notificationRules    NotificationRule[]
   jobLogs              JobLog[]
-  vkSearchProfiles     VkSearchProfile[]
-  vkTrackedCommunities VkTrackedCommunity[]
-  vkTrackedPosts       VkTrackedPost[]
-  vkConnectAttempts    VkConnectAttempt[]
-  vkPostSearchConfig   Json?
 
   @@index([workspaceId])
   @@index([workspaceId, isActive])
@@ -317,7 +280,6 @@ model Mention {
   type                  MentionType
   sourceId              String
   companySourceTargetId String?
-  vkTrackedPostId       String?
 
   externalMentionId String?
   url               String?
@@ -346,7 +308,6 @@ model Mention {
   company             Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
   source              Source               @relation(fields: [sourceId], references: [id], onDelete: Restrict)
   companySourceTarget CompanySourceTarget? @relation(fields: [companySourceTargetId], references: [id], onDelete: SetNull)
-  vkTrackedPost       VkTrackedPost?       @relation(fields: [vkTrackedPostId], references: [id], onDelete: SetNull)
 
   duplicateOf Mention?  @relation("MentionDuplicateLink", fields: [duplicateOfId], references: [id], onDelete: SetNull)
   duplicates  Mention[] @relation("MentionDuplicateLink")
@@ -362,7 +323,6 @@ model Mention {
   @@index([companyId, sentiment, publishedAt(sort: Desc)])
   @@index([sourceId, publishedAt(sort: Desc)])
   @@index([companySourceTargetId])
-  @@index([vkTrackedPostId])
   @@index([externalMentionId])
   @@index([hash])
   @@index([duplicateOfId])
@@ -507,132 +467,4 @@ model JobLog {
   @@index([jobStatus])
   @@index([queueName, jobName])
   @@index([createdAt(sort: Desc)])
-}
-
-model VkSearchProfile {
-  id              String           @id @default(cuid())
-  companyId       String
-  query           String
-  normalizedQuery String
-  priority        Int              @default(100)
-  isActive        Boolean          @default(true)
-  mode            VkMonitoringMode
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
-
-  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
-
-  @@unique([companyId, normalizedQuery, mode])
-  @@index([companyId])
-  @@index([companyId, isActive, priority])
-  @@index([normalizedQuery])
-}
-
-model VkTrackedCommunity {
-  id            String                 @id @default(cuid())
-  companyId     String
-  mode          VkTrackedCommunityMode
-  vkCommunityId String
-  screenName    String?
-  title         String?
-  url           String?
-  isActive      Boolean                @default(true)
-  lastSyncedAt  DateTime?
-  createdAt     DateTime               @default(now())
-  updatedAt     DateTime               @updatedAt
-
-  company      Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  trackedPosts VkTrackedPost[]
-
-  @@unique([companyId, vkCommunityId, mode])
-  @@index([companyId])
-  @@index([companyId, mode, isActive])
-  @@index([vkCommunityId])
-  @@index([screenName])
-}
-
-model VkTrackedPost {
-  id                 String                @id @default(cuid())
-  companyId          String
-  trackedCommunityId String?
-  ownerId            String
-  postId             String
-  postKey            String
-  text               String?
-  url                String?
-  publishedAt        DateTime
-  commentsCount      Int?
-  commentsSyncedAt   DateTime?
-  discoveryStatus    VkPostDiscoveryStatus @default(DISCOVERED)
-  relevanceScore     Decimal?              @db.Decimal(5, 2)
-  rawPayload         Json?
-  metadata           Json?
-  createdAt          DateTime              @default(now())
-  updatedAt          DateTime              @updatedAt
-
-  company          Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  trackedCommunity VkTrackedCommunity? @relation(fields: [trackedCommunityId], references: [id], onDelete: SetNull)
-  mentions         Mention[]
-
-  @@unique([companyId, postKey])
-  @@index([companyId])
-  @@index([trackedCommunityId])
-  @@index([companyId, publishedAt(sort: Desc)])
-  @@index([companyId, discoveryStatus, publishedAt(sort: Desc)])
-  @@index([ownerId, postId])
-  @@index([postKey])
-}
-
-model VkConnectAttempt {
-  id               String    @id @default(cuid())
-  workspaceId      String
-  companyId        String
-  userId           String
-  status           String    @default("PENDING")
-  attemptToken     String    @unique
-  displayNum       Int?
-  vncPort          Int?
-  noVncPort        Int?
-  debugPort        Int?
-  xvfbPid          Int?
-  x11vncPid        Int?
-  websockifyPid    Int?
-  browserPid       Int?
-  userDataDir      String?
-  browserUrl       String?
-  storageStatePath String?
-  errorMessage     String?
-  expiresAt        DateTime?
-  completedAt      DateTime?
-  lastSeenAt       DateTime?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
-
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  company   Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([workspaceId])
-  @@index([companyId])
-  @@index([userId])
-  @@index([workspaceId, status])
-  @@index([companyId, status])
-  @@index([attemptToken])
-  @@index([expiresAt])
-}
-
-model VkAuthSession {
-  id               String   @id @default(cuid())
-  workspaceId      String
-  userId           String
-  status           String   @default("ACTIVE")
-  storageStatePath String
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([workspaceId])
-  @@index([userId])
 }

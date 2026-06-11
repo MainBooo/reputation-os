@@ -3,8 +3,6 @@ import {
   MentionType,
   Platform,
   Sentiment,
-  VkMonitoringMode,
-  VkTrackedCommunityMode
 } from '../enums'
 
 export interface AuthUser {
@@ -32,20 +30,4 @@ export interface MentionFilters {
   from?: string
   to?: string
   type?: MentionType
-}
-
-export interface VkPostsFilters {
-  mode?: VkMonitoringMode
-  communityId?: string
-  discoveredFrom?: string
-  discoveredTo?: string
-}
-
-export interface CreateVkTrackedCommunityInput {
-  mode: VkTrackedCommunityMode
-  vkCommunityId: string
-  screenName?: string
-  title?: string
-  url?: string
-  isActive?: boolean
 }

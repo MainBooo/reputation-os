@@ -33,11 +33,11 @@ export class MentionsService {
     const limit = query.limit || 20
     const skip = (page - 1) * limit
 
-    const platformFilter = query.platform === 'VK' ? undefined : query.platform
+    const platformFilter = query.platform
 
     const where: Prisma.MentionWhereInput = {
       companyId,
-      ...(platformFilter ? { platform: platformFilter } : { platform: { not: 'VK' } }),
+      ...(platformFilter ? { platform: platformFilter } : {}),
       ...(query.status ? { status: query.status } : {}),
       ...(query.type ? { type: query.type } : {}),
       ...(query.rating ? { ratingValue: query.rating } : {}),

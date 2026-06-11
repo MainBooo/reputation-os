@@ -114,26 +114,6 @@ async function main() {
     }
   }).catch(async () => prisma.source.findFirstOrThrow({ where: { workspaceId: workspace.id, name: 'Web Monitor' } }))
 
-  const vkBrandSource = await prisma.source.create({
-    data: {
-      workspaceId: workspace.id,
-      name: 'VK Brand Search',
-      platform: 'VK',
-      type: 'VK_BRAND_SEARCH',
-      isEnabled: true
-    }
-  }).catch(async () => prisma.source.findFirstOrThrow({ where: { workspaceId: workspace.id, name: 'VK Brand Search' } }))
-
-  const vkOwnedSource = await prisma.source.create({
-    data: {
-      workspaceId: workspace.id,
-      name: 'VK Owned Community',
-      platform: 'VK',
-      type: 'VK_OWNED_COMMUNITY',
-      isEnabled: true
-    }
-  }).catch(async () => prisma.source.findFirstOrThrow({ where: { workspaceId: workspace.id, name: 'VK Owned Community' } }))
-
   const acmeYandexTarget = await prisma.companySourceTarget.create({
     data: {
       companyId: companyOne.id,
@@ -175,84 +155,6 @@ async function main() {
       isActive: true
     }
   }).catch(async () => prisma.companySourceTarget.findFirstOrThrow({ where: { companyId: companyTwo.id, sourceId: webSource.id } }))
-
-  const brandProfileOne = await prisma.vkSearchProfile.create({
-    data: {
-      companyId: companyOne.id,
-      query: 'Acme',
-      normalizedQuery: 'acme',
-      priority: 10,
-      isActive: true,
-      mode: 'BRAND_SEARCH'
-    }
-  }).catch(async () => prisma.vkSearchProfile.findFirstOrThrow({ where: { companyId: companyOne.id, normalizedQuery: 'acme', mode: 'BRAND_SEARCH' } }))
-
-  await prisma.vkSearchProfile.create({
-    data: {
-      companyId: companyOne.id,
-      query: 'Acme Corp',
-      normalizedQuery: 'acme corp',
-      priority: 20,
-      isActive: true,
-      mode: 'BRAND_SEARCH'
-    }
-  }).catch(() => null)
-
-  const priorityCommunity = await prisma.vkTrackedCommunity.create({
-    data: {
-      companyId: companyOne.id,
-      mode: 'PRIORITY_COMMUNITY',
-      vkCommunityId: 'club123456',
-      screenName: 'startup_reviews',
-      title: 'Startup Reviews',
-      url: 'https://vk.com/startup_reviews',
-      isActive: true
-    }
-  }).catch(async () => prisma.vkTrackedCommunity.findFirstOrThrow({ where: { companyId: companyOne.id, vkCommunityId: 'club123456', mode: 'PRIORITY_COMMUNITY' } }))
-
-  const ownedCommunity = await prisma.vkTrackedCommunity.create({
-    data: {
-      companyId: companyOne.id,
-      mode: 'OWNED_COMMUNITY',
-      vkCommunityId: 'club999999',
-      screenName: 'acme_official',
-      title: 'Acme Official',
-      url: 'https://vk.com/acme_official',
-      isActive: true
-    }
-  }).catch(async () => prisma.vkTrackedCommunity.findFirstOrThrow({ where: { companyId: companyOne.id, vkCommunityId: 'club999999', mode: 'OWNED_COMMUNITY' } }))
-
-  const vkTrackedPostOne = await prisma.vkTrackedPost.create({
-    data: {
-      companyId: companyOne.id,
-      trackedCommunityId: priorityCommunity.id,
-      ownerId: '-123456',
-      postId: '101',
-      postKey: 'vk:-123456:101',
-      text: 'Кто пользовался услугами Acme? Как впечатления?',
-      url: 'https://vk.com/wall-123456_101',
-      publishedAt: new Date(Date.now() - 1000 * 60 * 60 * 5),
-      commentsCount: 12,
-      discoveryStatus: 'RELEVANT',
-      relevanceScore: 4.5
-    }
-  }).catch(async () => prisma.vkTrackedPost.findFirstOrThrow({ where: { companyId: companyOne.id, postKey: 'vk:-123456:101' } }))
-
-  const vkTrackedPostTwo = await prisma.vkTrackedPost.create({
-    data: {
-      companyId: companyOne.id,
-      trackedCommunityId: ownedCommunity.id,
-      ownerId: '-999999',
-      postId: '202',
-      postKey: 'vk:-999999:202',
-      text: 'Официальный пост Acme про новый релиз',
-      url: 'https://vk.com/wall-999999_202',
-      publishedAt: new Date(Date.now() - 1000 * 60 * 60 * 2),
-      commentsCount: 4,
-      discoveryStatus: 'COMMENTS_SYNCED',
-      relevanceScore: 5.0
-    }
-  }).catch(async () => prisma.vkTrackedPost.findFirstOrThrow({ where: { companyId: companyOne.id, postKey: 'vk:-999999:202' } }))
 
   const mentionOne = await prisma.mention.create({
     data: {
@@ -316,47 +218,26 @@ async function main() {
     }
   }).catch(() => null)
 
-  await prisma.mention.create({
+  const negativeMention = await prisma.mention.create({
     data: {
       companyId: companyOne.id,
-      platform: 'VK',
-      type: 'VK_POST',
-      sourceId: vkBrandSource.id,
-      vkTrackedPostId: vkTrackedPostOne.id,
-      externalMentionId: 'vk:post:-123456:101',
-      url: 'https://vk.com/wall-123456_101',
-      title: 'VK post mention',
-      content: 'Кто пользовался услугами Acme? Как впечатления?',
-      normalizedContent: 'кто пользовался услугами acme как впечатления',
-      author: 'vk_user_1',
-      publishedAt: new Date(Date.now() - 1000 * 60 * 60 * 5),
-      sentiment: 'NEUTRAL',
-      status: 'NEW',
-      hash: 'seed-hash-4',
-      metadata: { mode: 'PRIORITY_COMMUNITIES' }
-    }
-  }).catch(() => null)
-
-  const vkCommentMention = await prisma.mention.create({
-    data: {
-      companyId: companyOne.id,
-      platform: 'VK',
-      type: 'VK_COMMENT',
-      sourceId: vkOwnedSource.id,
-      vkTrackedPostId: vkTrackedPostTwo.id,
-      externalMentionId: 'vk:comment:-999999:202:501',
-      url: 'https://vk.com/wall-999999_202?reply=501',
-      title: 'VK comment mention',
+      platform: 'YANDEX',
+      type: 'REVIEW',
+      sourceId: yandexSource.id,
+      companySourceTargetId: acmeYandexTarget.id,
+      externalMentionId: 'yandex:review:2',
+      url: 'https://yandex.ru/maps/org/acme/reviews/2',
+      title: 'Задержали доставку',
       content: 'Не рекомендую, задержали доставку и ответили не сразу.',
       normalizedContent: 'не рекомендую задержали доставку и ответили не сразу',
-      author: 'vk_user_2',
+      author: 'Дмитрий',
       publishedAt: new Date(Date.now() - 1000 * 60 * 45),
+      ratingValue: 2,
       sentiment: 'NEGATIVE',
       status: 'NEW',
-      hash: 'seed-hash-5',
-      metadata: { mode: 'OWNED_COMMUNITY' }
+      hash: 'seed-hash-5'
     }
-  }).catch(async () => prisma.mention.findFirstOrThrow({ where: { externalMentionId: 'vk:comment:-999999:202:501' } }))
+  }).catch(async () => prisma.mention.findFirstOrThrow({ where: { externalMentionId: 'yandex:review:2' } }))
 
   await prisma.mention.create({
     data: {
@@ -405,7 +286,7 @@ async function main() {
   await prisma.aIReplyDraft.create({
     data: {
       companyId: companyOne.id,
-      mentionId: vkCommentMention.id,
+      mentionId: negativeMention.id,
       createdByUserId: user.id,
       languageCode: 'ru',
       tone: 'professional',
@@ -424,7 +305,6 @@ async function main() {
       isActive: true,
       channel: 'IN_APP',
       type: 'NEW_NEGATIVE_MENTION',
-      platformFilter: 'VK',
       sentimentFilter: 'NEGATIVE'
     }
   }).catch(() => null)
@@ -433,10 +313,10 @@ async function main() {
     data: [
       {
         companyId: companyOne.id,
-        sourceId: vkBrandSource.id,
+        sourceId: webSource.id,
         triggeredByUserId: user.id,
-        queueName: 'vk_brand_search_discovery',
-        jobName: 'vk.brand-search',
+        queueName: 'source_discovery',
+        jobName: 'source.discovery',
         jobStatus: 'SUCCESS',
         startedAt: new Date(Date.now() - 1000 * 60 * 20),
         finishedAt: new Date(Date.now() - 1000 * 60 * 19),

@@ -65,7 +65,7 @@ function isValidDashboardMention(mention: any) {
   const sourceUrl = String(mention?.url || mention?.sourceUrl || '').toLowerCase()
   const title = String(mention?.title || '').toLowerCase()
 
-  if (platform === 'VK' || platform === 'GOOGLE') return false
+  if (platform === 'GOOGLE') return false
   if (sourceUrl.includes('example.com')) return false
 
   return true
@@ -578,7 +578,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
   }
 
   const platforms = Array.from(platformCounts.entries())
-    .filter(([platform]) => !['VK', 'GOOGLE'].includes(String(platform || '').toUpperCase()))
+    .filter(([platform]) => !['GOOGLE'].includes(String(platform || '').toUpperCase()))
     .map(([platform, count]) => ({ platform, count }))
     .sort((a, b) => b.count - a.count)
 

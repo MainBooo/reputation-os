@@ -2,7 +2,7 @@ const cols = [
   ['Продукт', 'Возможности', 'Тарифы', 'Интеграции', 'Roadmap'],
   ['Компания', 'О нас', 'Блог', 'Карьера', 'Контакты'],
   ['Поддержка', 'FAQ', 'Документация', 'Связаться с нами', 'Статус системы'],
-  ['Мы в соцсетях', 'Telegram', 'VK', 'YouTube', 'Instagram']
+  ['Мы в соцсетях', 'Telegram', 'YouTube', 'Instagram']
 ]
 
 export default function LandingFooter() {
