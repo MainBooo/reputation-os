@@ -82,15 +82,15 @@ enum NotificationType {
 }
 
 model User {
-  id           String    @id @default(cuid())
-  email        String    @unique
+  id           String     @id @default(cuid())
+  email        String     @unique
   passwordHash String
   fullName     String?
-  isActive     Boolean   @default(true)
+  isActive     Boolean    @default(true)
   systemRole   SystemRole @default(USER)
   lastLoginAt  DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
 
   workspaceMembers     WorkspaceMember[]
   workspaceInvitesSent WorkspaceInvite[]
@@ -112,6 +112,9 @@ model Workspace {
   companies            Company[]
   sources              Source[]
   notificationRules    NotificationRule[]
+  subscription         Subscription?
+  payments             Payment[]
+  featureOverrides     FeatureOverride[]
   webPushSubscriptions WebPushSubscription[]
 
   @@index([slug])
@@ -188,14 +191,18 @@ model Company {
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
 
-  workspace            Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  aliases              CompanyAlias[]
-  sourceTargets        CompanySourceTarget[]
-  mentions             Mention[]
-  ratingSnapshots      RatingSnapshot[]
-  aiReplyDrafts        AIReplyDraft[]
-  notificationRules    NotificationRule[]
-  jobLogs              JobLog[]
+  workspace         Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  aliases           CompanyAlias[]
+  sourceTargets     CompanySourceTarget[]
+  mentions          Mention[]
+  ratingSnapshots   RatingSnapshot[]
+  aiReplyDrafts     AIReplyDraft[]
+  notificationRules NotificationRule[]
+  subscription      Subscription?         @relation(fields: [subscriptionId], references: [id])
+  payments          Payment[]
+  featureOverrides  FeatureOverride[]
+  jobLogs           JobLog[]
+  subscriptionId    String?
 
   @@index([workspaceId])
   @@index([workspaceId, isActive])
@@ -411,21 +418,21 @@ model NotificationRule {
 }
 
 model WebPushSubscription {
-  id          String    @id @default(cuid())
+  id          String  @id @default(cuid())
   workspaceId String
   userId      String
-  endpoint    String    @unique
+  endpoint    String  @unique
   p256dh      String
   auth        String
   userAgent   String?
-  isActive    Boolean   @default(true)
+  isActive    Boolean @default(true)
 
-  alertSentiments       String[]  @default(["NEGATIVE"])
-  lastAlertCheckedAt    DateTime?
-  lastUsedAt            DateTime?
+  alertSentiments    String[]  @default(["NEGATIVE"])
+  lastAlertCheckedAt DateTime?
+  lastUsedAt         DateTime?
 
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -467,4 +474,101 @@ model JobLog {
   @@index([jobStatus])
   @@index([queueName, jobName])
   @@index([createdAt(sort: Desc)])
+}
+
+// ============================================
+// BILLING
+// ============================================
+
+enum PlanCode {
+  FREE
+  START
+  PRO
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  EXPIRED
+}
+
+enum PaymentStatus {
+  PENDING
+  WAITING_FOR_CAPTURE
+  SUCCEEDED
+  CANCELED
+}
+
+enum BillingProvider {
+  MOCK
+  YOOKASSA
+}
+
+model Plan {
+  id           String   @id @default(cuid())
+  code         PlanCode @unique
+  name         String
+  priceMonthly Int // рубли в месяц
+  isActive     Boolean  @default(true)
+  limits       Json // { maxCompanies, maxAiRepliesPerMonth, platforms[], telegramNotifications, advancedAnalytics }
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  subscriptions Subscription[]
+}
+
+model Subscription {
+  id                String             @id @default(cuid())
+  workspaceId       String             @unique
+  planId            String
+  status            SubscriptionStatus @default(ACTIVE)
+  currentPeriodEnd  DateTime
+  cancelAtPeriodEnd Boolean            @default(false)
+  provider          BillingProvider    @default(MOCK)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  plan      Plan      @relation(fields: [planId], references: [id])
+  Company   Company[]
+
+  @@index([status, currentPeriodEnd])
+}
+
+model Payment {
+  id                String          @id @default(cuid())
+  workspaceId       String
+  planCode          PlanCode
+  amount            Int // рубли
+  currency          String          @default("RUB")
+  status            PaymentStatus   @default(PENDING)
+  provider          BillingProvider @default(MOCK)
+  providerPaymentId String?         @unique
+  rawPayload        Json?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  Company   Company?  @relation(fields: [companyId], references: [id])
+  companyId String?
+
+  @@index([workspaceId])
+  @@index([status])
+}
+
+model FeatureOverride {
+  id          String   @id @default(cuid())
+  workspaceId String
+  featureKey  String // 'telegramNotifications' | 'advancedAnalytics' | 'maxCompanies' | 'maxAiRepliesPerMonth' | 'platforms'
+  value       Json // true/false или число/массив для лимитов
+  note        String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  Company   Company?  @relation(fields: [companyId], references: [id])
+  companyId String?
+
+  @@unique([workspaceId, featureKey])
 }
