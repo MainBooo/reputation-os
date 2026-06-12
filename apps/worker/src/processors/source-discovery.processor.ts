@@ -37,12 +37,29 @@ export class SourceDiscoveryProcessor implements OnModuleInit, OnModuleDestroy {
       const adapter = SourceAdapterFactory.getAdapter(source.platform)
       const targets = await adapter.discoverTargets(company)
       for (const target of targets) {
+        const externalPlaceId = target.externalPlaceId || null
+        const externalUrl = target.externalUrl || null
+
+        // NULL externalPlaceId bypasses the @@unique constraint in Postgres,
+        // so we must check for an existing target explicitly to avoid duplicates.
+        const existing = await this.prisma.companySourceTarget.findFirst({
+          where: {
+            companyId,
+            sourceId: source.id,
+            externalPlaceId,
+            externalUrl
+          },
+          select: { id: true }
+        })
+
+        if (existing) continue
+
         await this.prisma.companySourceTarget.create({
           data: {
             companyId,
             sourceId: source.id,
-            externalPlaceId: target.externalPlaceId || null,
-            externalUrl: target.externalUrl || null,
+            externalPlaceId,
+            externalUrl,
             displayName: target.displayName || null
           }
         }).catch(() => null)

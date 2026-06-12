@@ -54,7 +54,7 @@ export class WebMentionAdapter implements SourceAdapter {
     const seenFingerprints = new Set<string>()
     const hostCounts = new Map<string, number>()
 
-    for (const query of queries.slice(0, 4)) {
+    for (const query of queries.slice(0, 2)) {
       const items = await this.fetchFromYandex(query)
 
       for (const item of items) {
