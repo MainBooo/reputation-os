@@ -1186,6 +1186,19 @@ export class CompaniesService {
 
     await this.assertWorkspaceAccess(userId, company.workspaceId, 'write')
 
+    const targetPlatform = dto.platform || (dto.sourceId
+      ? (await this.prisma.source.findUnique({ where: { id: dto.sourceId }, select: { platform: true } }))?.platform
+      : null)
+
+    if (targetPlatform) {
+      const { limits } = await this.entitlements.getForWorkspace(company.workspaceId)
+      const allowedPlatforms = Array.isArray(limits.platforms) ? limits.platforms : []
+
+      if (!allowedPlatforms.includes(targetPlatform)) {
+        throw new ForbiddenException({ code: 'PLAN_LIMIT', feature: 'platforms', platform: targetPlatform })
+      }
+    }
+
     let sourceId: string | null = dto.sourceId || null
 
     if (!sourceId && dto.platform) {

@@ -12,7 +12,7 @@ export interface WorkspaceEntitlements {
   currentPeriodEnd: Date | null
   limits: PlanLimits
   overrides: Partial<Record<FeatureKey, unknown>>
-  usage: { companies: number }
+  usage: { companies: number; aiRepliesThisMonth: number }
 }
 
 @Injectable()
@@ -39,13 +39,20 @@ export class EntitlementsService {
   }
 
   async getForWorkspace(workspaceId: string): Promise<WorkspaceEntitlements> {
-    const [subscription, overrides, companies] = await Promise.all([
+    const monthStart = new Date()
+    monthStart.setUTCDate(1)
+    monthStart.setUTCHours(0, 0, 0, 0)
+
+    const [subscription, overrides, companies, aiRepliesThisMonth] = await Promise.all([
       this.prisma.subscription.findUnique({
         where: { workspaceId },
         include: { plan: true }
       }),
       this.prisma.featureOverride.findMany({ where: { workspaceId } }),
-      this.prisma.company.count({ where: { workspaceId } })
+      this.prisma.company.count({ where: { workspaceId } }),
+      this.prisma.aIReplyDraft.count({
+        where: { company: { workspaceId }, createdAt: { gte: monthStart } }
+      })
     ])
 
     let planCode: PlanCode = PlanCode.FREE
@@ -83,7 +90,7 @@ export class EntitlementsService {
       currentPeriodEnd: subscription?.currentPeriodEnd ?? null,
       limits,
       overrides: overrideMap,
-      usage: { companies }
+      usage: { companies, aiRepliesThisMonth }
     }
   }
 
