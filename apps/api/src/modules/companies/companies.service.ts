@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, Inject, Injectable, Logger, No
 import { Queue } from 'bullmq'
 import { Prisma } from '@prisma/client'
 import { PrismaService } from '../../common/prisma/prisma.service'
+import { EntitlementsService } from '../billing/entitlements.service'
 import { QUEUES } from '../../common/queues/queue.names'
 import { JOBS } from '../../common/queues/job.names'
 import { SYNC_JOB_OPTIONS, CRON_JOB_OPTIONS } from '../../common/queues/job-options'
@@ -11,14 +12,13 @@ import { CreateCompanyAliasDto } from './dto/create-company-alias.dto'
 import { CreateCompanySourceTargetDto } from './dto/create-company-source-target.dto'
 import { UpdateCompanySourceTargetDto } from './dto/update-company-source-target.dto'
 
-const WORKSPACE_COMPANIES_LIMIT = 3
-
 @Injectable()
 export class CompaniesService {
   private readonly logger = new Logger(CompaniesService.name)
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly entitlements: EntitlementsService,
     @Inject(`QUEUE_${QUEUES.REVIEWS_SYNC}`) private readonly reviewsSyncQueue: Queue,
     @Inject(`QUEUE_${QUEUES.RATING_REFRESH}`) private readonly ratingRefreshQueue: Queue,
       @Inject(`QUEUE_${QUEUES.MENTIONS_SYNC}`) private readonly mentionsSyncQueue: Queue
@@ -540,8 +540,11 @@ export class CompaniesService {
       where: { workspaceId: dto.workspaceId }
     })
 
-    if (companiesCount >= WORKSPACE_COMPANIES_LIMIT) {
-      throw new BadRequestException(`Workspace company limit reached: ${WORKSPACE_COMPANIES_LIMIT}`)
+    const { limits } = await this.entitlements.getForWorkspace(dto.workspaceId)
+    const maxCompanies = Number(limits.maxCompanies)
+
+    if (maxCompanies >= 0 && companiesCount >= maxCompanies) {
+      throw new ForbiddenException({ code: 'PLAN_LIMIT', feature: 'maxCompanies', limit: maxCompanies })
     }
 
     this.logger.log(
