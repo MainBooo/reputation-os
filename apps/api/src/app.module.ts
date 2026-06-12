@@ -14,6 +14,7 @@ import { AnalyticsModule } from './modules/analytics/analytics.module'
 import { AiReplyDraftsModule } from './modules/ai-reply-drafts/ai-reply-drafts.module'
 import { SyncModule } from './modules/sync/sync.module'
 import { PushModule } from './modules/push/push.module'
+import { BillingModule } from './modules/billing/billing.module'
 
 @Module({
   imports: [
@@ -31,7 +32,8 @@ import { PushModule } from './modules/push/push.module'
     AnalyticsModule,
     AiReplyDraftsModule,
     SyncModule,
-    PushModule
+    PushModule,
+    BillingModule
   ]
 })
 export class AppModule {}
