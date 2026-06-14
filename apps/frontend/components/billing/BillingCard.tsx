@@ -15,7 +15,6 @@ import {
 const PLATFORM_LABELS: Record<string, string> = {
   YANDEX: 'Яндекс Карты',
   TWO_GIS: '2ГИС',
-  VK: 'VK',
 }
 
 function formatPrice(price: number) {
