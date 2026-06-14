@@ -1,0 +1,46 @@
+// ============================================================
+// PATCH: apps/worker/src/notifications/notifications.processor.ts
+// (или alerts.service.ts — где сейчас обрабатываются IN_APP уведомления)
+// ============================================================
+//
+// 1. Заинжектить TelegramNotificationsService:
+//    constructor(
+//      ...
+//      private readonly telegramNotifications: TelegramNotificationsService,
+//    ) {}
+//
+// 2. Найти место, где отправляются уведомления (примерно такой код):
+//
+//    for (const rule of matchingRules) {
+//      if (rule.channel === 'IN_APP') {
+//        // существующая логика
+//      }
+//      // ⬇️ ДОБАВИТЬ:
+//      if (rule.channel === 'TELEGRAM') {
+//        const user = await this.prisma.user.findUnique({
+//          where: { id: rule.userId },
+//          select: { telegramChatId: true },
+//        })
+//
+//        if (user?.telegramChatId) {
+//          await this.telegramNotifications.sendReviewNotification(
+//            user.telegramChatId,
+//            {
+//              id: review.id,
+//              content: review.content,
+//              ratingValue: review.ratingValue,
+//              sentiment: review.sentiment,
+//              source: review.source,
+//              company: review.company,
+//            },
+//          )
+//        }
+//      }
+//    }
+//
+// 3. Убедиться что NotificationRule fetch включает channel:
+//    const matchingRules = await this.prisma.notificationRule.findMany({
+//      where: { companyId: review.companyId, eventType: ... },
+//      // channel уже есть в модели
+//    })
+// ============================================================
