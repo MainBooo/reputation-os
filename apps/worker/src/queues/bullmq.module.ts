@@ -12,7 +12,7 @@ const queueNames = Object.values(QUEUES)
     {
       provide: 'BULLMQ_CONNECTION',
       useFactory: () => {
-        const redisUrl = process.env.REDIS_URL || 'redis://127.0.0.1:6380'
+        const redisUrl = process.env.REDIS_URL || 'redis://127.0.0.1:6379'
 
         return new IORedis(redisUrl, {
           maxRetriesPerRequest: null,
