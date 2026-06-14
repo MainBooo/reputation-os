@@ -484,6 +484,7 @@ enum PlanCode {
   FREE
   START
   PRO
+  AGENCY
 }
 
 enum SubscriptionStatus {
