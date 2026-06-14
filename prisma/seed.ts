@@ -6,6 +6,7 @@ const prisma = new PrismaClient()
 async function main() {
   const passwordHash = await bcrypt.hash('demo123', 10)
 
+  // ─── Demo user ───────────────────────────────────────────────────────────
   const user = await prisma.user.upsert({
     where: { email: 'demo@reputation.local' },
     update: {},
@@ -17,6 +18,7 @@ async function main() {
     }
   })
 
+  // ─── Demo workspace ──────────────────────────────────────────────────────
   const workspace = await prisma.workspace.upsert({
     where: { slug: 'demo-workspace' },
     update: {},
@@ -41,50 +43,10 @@ async function main() {
     }
   })
 
-  const companyOne = await prisma.company.create({
-    data: {
-      workspaceId: workspace.id,
-      name: 'Acme Corp',
-      normalizedName: 'acme corp',
-      website: 'https://acme.example.com',
-      normalizedWebsite: 'acme.example.com',
-      city: 'Moscow',
-      normalizedCity: 'moscow',
-      industry: 'Tech',
-      description: 'B2B service company',
-      isActive: true
-    }
-  }).catch(async () => {
-    return prisma.company.findFirstOrThrow({ where: { workspaceId: workspace.id, name: 'Acme Corp' } })
-  })
-
-  const companyTwo = await prisma.company.create({
-    data: {
-      workspaceId: workspace.id,
-      name: 'Northwind Market',
-      normalizedName: 'northwind market',
-      website: 'https://northwind.example.com',
-      normalizedWebsite: 'northwind.example.com',
-      city: 'Saint Petersburg',
-      normalizedCity: 'saint petersburg',
-      industry: 'Retail',
-      description: 'Retail and marketplace brand',
-      isActive: true
-    }
-  }).catch(async () => {
-    return prisma.company.findFirstOrThrow({ where: { workspaceId: workspace.id, name: 'Northwind Market' } })
-  })
-
-  await prisma.companyAlias.createMany({
-    data: [
-      { companyId: companyOne.id, value: 'Acme', normalizedValue: 'acme', priority: 10, isPrimary: true },
-      { companyId: companyOne.id, value: 'Acme Corp', normalizedValue: 'acme corp', priority: 20, isPrimary: false },
-      { companyId: companyTwo.id, value: 'Northwind', normalizedValue: 'northwind', priority: 10, isPrimary: true }
-    ],
-    skipDuplicates: true
-  })
-
-  const yandexSource = await prisma.source.create({
+  // ─── Sources (idempotent) ────────────────────────────────────────────────
+  const yandexSource = await prisma.source.findFirst({
+    where: { workspaceId: workspace.id, platform: 'YANDEX' }
+  }) ?? await prisma.source.create({
     data: {
       workspaceId: workspace.id,
       name: 'Yandex Reviews',
@@ -92,258 +54,331 @@ async function main() {
       type: 'REVIEW_FEED',
       isEnabled: true
     }
-  }).catch(async () => prisma.source.findFirstOrThrow({ where: { workspaceId: workspace.id, name: 'Yandex Reviews' } }))
+  })
 
-  const googleSource = await prisma.source.create({
+  const twogisSource = await prisma.source.findFirst({
+    where: { workspaceId: workspace.id, platform: 'TWOGIS' }
+  }) ?? await prisma.source.create({
     data: {
       workspaceId: workspace.id,
-      name: 'Google Reviews',
-      platform: 'GOOGLE',
+      name: '2ГИС Reviews',
+      platform: 'TWOGIS',
       type: 'REVIEW_FEED',
       isEnabled: true
     }
-  }).catch(async () => prisma.source.findFirstOrThrow({ where: { workspaceId: workspace.id, name: 'Google Reviews' } }))
+  })
 
-  const webSource = await prisma.source.create({
+  // ─── Company: Руки Вверх Бар ─────────────────────────────────────────────
+  const rukiVverh = await prisma.company.findFirst({
+    where: { workspaceId: workspace.id, name: 'Руки Вверх Бар' }
+  }) ?? await prisma.company.create({
     data: {
       workspaceId: workspace.id,
-      name: 'Web Monitor',
-      platform: 'WEB',
-      type: 'WEB_MENTION_FEED',
-      isEnabled: true
+      name: 'Руки Вверх Бар',
+      normalizedName: 'руки вверх бар',
+      city: 'Москва',
+      normalizedCity: 'москва',
+      industry: 'Бары, клубы',
+      isActive: true
     }
-  }).catch(async () => prisma.source.findFirstOrThrow({ where: { workspaceId: workspace.id, name: 'Web Monitor' } }))
+  })
 
-  const acmeYandexTarget = await prisma.companySourceTarget.create({
+  await prisma.companyAlias.createMany({
+    data: [
+      { companyId: rukiVverh.id, value: 'Руки Вверх', normalizedValue: 'руки вверх', priority: 10, isPrimary: true },
+      { companyId: rukiVverh.id, value: 'Руки Вверх Бар', normalizedValue: 'руки вверх бар', priority: 20, isPrimary: false }
+    ],
+    skipDuplicates: true
+  })
+
+  const rukiYandexTarget = await prisma.companySourceTarget.findFirst({
+    where: { companyId: rukiVverh.id, sourceId: yandexSource.id }
+  }) ?? await prisma.companySourceTarget.create({
     data: {
-      companyId: companyOne.id,
+      companyId: rukiVverh.id,
       sourceId: yandexSource.id,
-      externalPlaceId: 'acme-yandex-place',
-      externalUrl: 'https://yandex.ru/maps/org/acme/123',
-      displayName: 'Acme on Yandex',
+      externalPlaceId: 'ruki-vverh-yandex-place',
+      externalUrl: 'https://yandex.ru/maps/org/ruki_vverh_bar/123',
+      displayName: 'Руки Вверх Бар на Яндекс',
       isActive: true
     }
-  }).catch(async () => prisma.companySourceTarget.findFirstOrThrow({ where: { companyId: companyOne.id, sourceId: yandexSource.id } }))
+  })
 
-  const acmeGoogleTarget = await prisma.companySourceTarget.create({
+  const rukiTwogisTarget = await prisma.companySourceTarget.findFirst({
+    where: { companyId: rukiVverh.id, sourceId: twogisSource.id }
+  }) ?? await prisma.companySourceTarget.create({
     data: {
-      companyId: companyOne.id,
-      sourceId: googleSource.id,
-      externalPlaceId: 'acme-google-place',
-      externalUrl: 'https://maps.google.com/?cid=acme',
-      displayName: 'Acme on Google',
+      companyId: rukiVverh.id,
+      sourceId: twogisSource.id,
+      externalPlaceId: 'ruki-vverh-2gis-place',
+      externalUrl: 'https://2gis.ru/moscow/firm/ruki-vverh-bar',
+      displayName: 'Руки Вверх Бар на 2ГИС',
       isActive: true
     }
-  }).catch(async () => prisma.companySourceTarget.findFirstOrThrow({ where: { companyId: companyOne.id, sourceId: googleSource.id } }))
+  })
 
-  const acmeWebTarget = await prisma.companySourceTarget.create({
-    data: {
-      companyId: companyOne.id,
-      sourceId: webSource.id,
-      externalUrl: 'https://acme.example.com',
-      displayName: 'Acme Web Monitor',
-      isActive: true
-    }
-  }).catch(async () => prisma.companySourceTarget.findFirstOrThrow({ where: { companyId: companyOne.id, sourceId: webSource.id } }))
-
-  const northwindWebTarget = await prisma.companySourceTarget.create({
-    data: {
-      companyId: companyTwo.id,
-      sourceId: webSource.id,
-      externalUrl: 'https://northwind.example.com',
-      displayName: 'Northwind Web Monitor',
-      isActive: true
-    }
-  }).catch(async () => prisma.companySourceTarget.findFirstOrThrow({ where: { companyId: companyTwo.id, sourceId: webSource.id } }))
-
-  const mentionOne = await prisma.mention.create({
-    data: {
-      companyId: companyOne.id,
-      platform: 'YANDEX',
-      type: 'REVIEW',
-      sourceId: yandexSource.id,
-      companySourceTargetId: acmeYandexTarget.id,
-      externalMentionId: 'yandex:review:1',
-      url: 'https://yandex.ru/maps/org/acme/reviews/1',
-      title: 'Понравился сервис',
-      content: 'Отличный сервис, быстро решили вопрос и помогли с настройкой.',
-      normalizedContent: 'отличный сервис быстро решили вопрос и помогли с настройкой',
-      author: 'Ирина',
-      publishedAt: new Date(Date.now() - 1000 * 60 * 60 * 24),
-      ratingValue: 5,
-      sentiment: 'POSITIVE',
-      status: 'NEW',
-      hash: 'seed-hash-1'
-    }
-  }).catch(async () => prisma.mention.findFirstOrThrow({ where: { externalMentionId: 'yandex:review:1' } }))
-
-  await prisma.mention.create({
-    data: {
-      companyId: companyOne.id,
-      platform: 'GOOGLE',
-      type: 'REVIEW',
-      sourceId: googleSource.id,
-      companySourceTargetId: acmeGoogleTarget.id,
-      externalMentionId: 'google:review:1',
-      url: 'https://maps.google.com/review/acme-1',
-      title: 'Есть нюансы',
-      content: 'В целом неплохо, но сроки чуть затянулись.',
-      normalizedContent: 'в целом неплохо но сроки чуть затянулись',
-      author: 'Alex',
-      publishedAt: new Date(Date.now() - 1000 * 60 * 60 * 18),
-      ratingValue: 3,
-      sentiment: 'NEUTRAL',
-      status: 'NEW',
-      hash: 'seed-hash-2'
-    }
-  }).catch(() => null)
-
-  await prisma.mention.create({
-    data: {
-      companyId: companyOne.id,
-      platform: 'WEB',
-      type: 'WEB_MENTION',
-      sourceId: webSource.id,
-      companySourceTargetId: acmeWebTarget.id,
-      externalMentionId: 'web:article:1',
-      url: 'https://news.example.com/acme-growth',
-      title: 'Acme в обзоре B2B рынка',
-      content: 'Компания Acme получила сильные отзывы от клиентов и улучшила показатели поддержки.',
-      normalizedContent: 'компания acme получила сильные отзывы от клиентов и улучшила показатели поддержки',
-      author: 'Industry Media',
-      publishedAt: new Date(Date.now() - 1000 * 60 * 60 * 12),
-      sentiment: 'POSITIVE',
-      status: 'REVIEWED',
-      hash: 'seed-hash-3'
-    }
-  }).catch(() => null)
-
-  const negativeMention = await prisma.mention.create({
-    data: {
-      companyId: companyOne.id,
-      platform: 'YANDEX',
-      type: 'REVIEW',
-      sourceId: yandexSource.id,
-      companySourceTargetId: acmeYandexTarget.id,
-      externalMentionId: 'yandex:review:2',
-      url: 'https://yandex.ru/maps/org/acme/reviews/2',
-      title: 'Задержали доставку',
-      content: 'Не рекомендую, задержали доставку и ответили не сразу.',
-      normalizedContent: 'не рекомендую задержали доставку и ответили не сразу',
-      author: 'Дмитрий',
-      publishedAt: new Date(Date.now() - 1000 * 60 * 45),
-      ratingValue: 2,
-      sentiment: 'NEGATIVE',
-      status: 'NEW',
-      hash: 'seed-hash-5'
-    }
-  }).catch(async () => prisma.mention.findFirstOrThrow({ where: { externalMentionId: 'yandex:review:2' } }))
-
-  await prisma.mention.create({
-    data: {
-      companyId: companyTwo.id,
-      platform: 'WEB',
-      type: 'ARTICLE',
-      sourceId: webSource.id,
-      companySourceTargetId: northwindWebTarget.id,
-      externalMentionId: 'web:article:2',
-      url: 'https://retail.example.com/northwind',
-      title: 'Northwind в отраслевом обзоре',
-      content: 'Northwind Market упоминается как быстрорастущий retail-проект.',
-      normalizedContent: 'northwind market упоминается как быстрорастущий retail проект',
-      author: 'Retail Observer',
-      publishedAt: new Date(Date.now() - 1000 * 60 * 60 * 20),
-      sentiment: 'POSITIVE',
-      status: 'NEW',
-      hash: 'seed-hash-6'
-    }
-  }).catch(() => null)
+  // Отзывы для Руки Вверх Бар
+  await prisma.mention.createMany({
+    data: [
+      {
+        companyId: rukiVverh.id,
+        platform: 'YANDEX',
+        type: 'REVIEW',
+        sourceId: yandexSource.id,
+        companySourceTargetId: rukiYandexTarget.id,
+        externalMentionId: 'demo:ruki:yandex:1',
+        url: 'https://yandex.ru/maps/org/ruki_vverh/reviews/1',
+        title: 'Отличное место!',
+        content: 'Атмосфера супер, музыка живая, персонал вежливый. Обязательно вернёмсэ!',
+        normalizedContent: 'атмосфера супер музыка живая персонал вежливый обязательно вернёмсэ',
+        author: 'Анастасия К.',
+        publishedAt: new Date(Date.now() - 1000 * 60 * 60 * 5),
+        ratingValue: 5,
+        sentiment: 'POSITIVE',
+        status: 'NEW',
+        hash: 'demo-ruki-yandex-1'
+      },
+      {
+        companyId: rukiVverh.id,
+        platform: 'YANDEX',
+        type: 'REVIEW',
+        sourceId: yandexSource.id,
+        companySourceTargetId: rukiYandexTarget.id,
+        externalMentionId: 'demo:ruki:yandex:2',
+        url: 'https://yandex.ru/maps/org/ruki_vverh/reviews/2',
+        title: 'Долго ждали столик',
+        content: 'Место классное, но в выходные очередь на час. Стоит бронировать заранее.',
+        normalizedContent: 'место классное но в выходные очередь на час стоит бронировать заранее',
+        author: 'Игорь П.',
+        publishedAt: new Date(Date.now() - 1000 * 60 * 60 * 26),
+        ratingValue: 3,
+        sentiment: 'NEUTRAL',
+        status: 'NEW',
+        hash: 'demo-ruki-yandex-2'
+      },
+      {
+        companyId: rukiVverh.id,
+        platform: 'YANDEX',
+        type: 'REVIEW',
+        sourceId: yandexSource.id,
+        companySourceTargetId: rukiYandexTarget.id,
+        externalMentionId: 'demo:ruki:yandex:3',
+        url: 'https://yandex.ru/maps/org/ruki_vverh/reviews/3',
+        title: 'Грубый охранник',
+        content: 'Не понравилось отношение на входе. Охранник был груб без повода.',
+        normalizedContent: 'не понравилось отношение на входе охранник был груб без повода',
+        author: 'Максим Д.',
+        publishedAt: new Date(Date.now() - 1000 * 60 * 30),
+        ratingValue: 2,
+        sentiment: 'NEGATIVE',
+        status: 'NEW',
+        hash: 'demo-ruki-yandex-3'
+      },
+      {
+        companyId: rukiVverh.id,
+        platform: 'TWOGIS',
+        type: 'REVIEW',
+        sourceId: twogisSource.id,
+        companySourceTargetId: rukiTwogisTarget.id,
+        externalMentionId: 'demo:ruki:2gis:1',
+        url: 'https://2gis.ru/moscow/firm/ruki-vverh-bar/reviews/1',
+        title: 'Лучший бар района',
+        content: 'Коктейли отменные, цены адекватные. Диджей по пятницам — огонь.',
+        normalizedContent: 'коктейли отменные цены адекватные диджей по пятницам огонь',
+        author: 'Светлана Р.',
+        publishedAt: new Date(Date.now() - 1000 * 60 * 60 * 10),
+        ratingValue: 5,
+        sentiment: 'POSITIVE',
+        status: 'NEW',
+        hash: 'demo-ruki-2gis-1'
+      }
+    ],
+    skipDuplicates: true
+  })
 
   await prisma.ratingSnapshot.createMany({
     data: [
       {
-        companyId: companyOne.id,
+        companyId: rukiVverh.id,
         sourceId: yandexSource.id,
-        companySourceTargetId: acmeYandexTarget.id,
+        companySourceTargetId: rukiYandexTarget.id,
         platform: 'YANDEX',
-        ratingValue: 4.8,
-        reviewsCount: 128,
-        capturedAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 2)
+        ratingValue: 4.5,
+        reviewsCount: 323,
+        capturedAt: new Date(Date.now() - 1000 * 60 * 60 * 3)
       },
       {
-        companyId: companyOne.id,
-        sourceId: googleSource.id,
-        companySourceTargetId: acmeGoogleTarget.id,
-        platform: 'GOOGLE',
-        ratingValue: 4.3,
-        reviewsCount: 84,
-        capturedAt: new Date(Date.now() - 1000 * 60 * 60 * 24)
+        companyId: rukiVverh.id,
+        sourceId: twogisSource.id,
+        companySourceTargetId: rukiTwogisTarget.id,
+        platform: 'TWOGIS',
+        ratingValue: 4.7,
+        reviewsCount: 187,
+        capturedAt: new Date(Date.now() - 1000 * 60 * 60 * 3)
       }
     ],
     skipDuplicates: false
   }).catch(() => null)
 
-  await prisma.aIReplyDraft.create({
-    data: {
-      companyId: companyOne.id,
-      mentionId: negativeMention.id,
-      createdByUserId: user.id,
-      languageCode: 'ru',
-      tone: 'professional',
-      promptVersion: 'mvp-v1',
-      draftText: 'Спасибо за обратную связь. Нам жаль, что у вас был такой опыт. Мы уже передали информацию в поддержку и свяжемся с вами.',
-      status: 'READY',
-      modelName: 'stub-reply-model'
-    }
-  }).catch(() => null)
-
-  await prisma.notificationRule.create({
+  // ─── Company: Stereopeople ────────────────────────────────────────────────
+  const stereopeople = await prisma.company.findFirst({
+    where: { workspaceId: workspace.id, name: 'Stereopeople' }
+  }) ?? await prisma.company.create({
     data: {
       workspaceId: workspace.id,
-      companyId: companyOne.id,
-      name: 'Negative mention alerts',
-      isActive: true,
-      channel: 'IN_APP',
-      type: 'NEW_NEGATIVE_MENTION',
-      sentimentFilter: 'NEGATIVE'
+      name: 'Stereopeople',
+      normalizedName: 'stereopeople',
+      city: 'Москва',
+      normalizedCity: 'москва',
+      industry: 'Клубы',
+      isActive: true
     }
-  }).catch(() => null)
+  })
 
-  await prisma.jobLog.createMany({
+  await prisma.companyAlias.createMany({
+    data: [
+      { companyId: stereopeople.id, value: 'Stereopeople', normalizedValue: 'stereopeople', priority: 10, isPrimary: true }
+    ],
+    skipDuplicates: true
+  })
+
+  const stereoYandexTarget = await prisma.companySourceTarget.findFirst({
+    where: { companyId: stereopeople.id, sourceId: yandexSource.id }
+  }) ?? await prisma.companySourceTarget.create({
+    data: {
+      companyId: stereopeople.id,
+      sourceId: yandexSource.id,
+      externalPlaceId: 'stereopeople-yandex-place',
+      externalUrl: 'https://yandex.ru/maps/org/stereopeople/456',
+      displayName: 'Stereopeople на Яндекс',
+      isActive: true
+    }
+  })
+
+  const stereoTwogisTarget = await prisma.companySourceTarget.findFirst({
+    where: { companyId: stereopeople.id, sourceId: twogisSource.id }
+  }) ?? await prisma.companySourceTarget.create({
+    data: {
+      companyId: stereopeople.id,
+      sourceId: twogisSource.id,
+      externalPlaceId: 'stereopeople-2gis-place',
+      externalUrl: 'https://2gis.ru/moscow/firm/stereopeople',
+      displayName: 'Stereopeople на 2ГИС',
+      isActive: true
+    }
+  })
+
+  // Отзывы для Stereopeople
+  await prisma.mention.createMany({
     data: [
       {
-        companyId: companyOne.id,
-        sourceId: webSource.id,
-        triggeredByUserId: user.id,
-        queueName: 'source_discovery',
-        jobName: 'source.discovery',
-        jobStatus: 'SUCCESS',
-        startedAt: new Date(Date.now() - 1000 * 60 * 20),
-        finishedAt: new Date(Date.now() - 1000 * 60 * 19),
-        itemsDiscovered: 4,
-        itemsCreated: 2,
-        itemsUpdated: 1,
-        itemsDeduped: 0
+        companyId: stereopeople.id,
+        platform: 'YANDEX',
+        type: 'REVIEW',
+        sourceId: yandexSource.id,
+        companySourceTargetId: stereoYandexTarget.id,
+        externalMentionId: 'demo:stereo:yandex:1',
+        url: 'https://yandex.ru/maps/org/stereopeople/reviews/1',
+        title: 'Крутой звук',
+        content: 'Звук на концерте был невероятный. Артист отработал на 100%.',
+        normalizedContent: 'звук на концерте был невероятный артист отработал на 100%',
+        author: 'Олег В.',
+        publishedAt: new Date(Date.now() - 1000 * 60 * 60 * 8),
+        ratingValue: 5,
+        sentiment: 'POSITIVE',
+        status: 'NEW',
+        hash: 'demo-stereo-yandex-1'
       },
       {
-        companyId: companyOne.id,
+        companyId: stereopeople.id,
+        platform: 'YANDEX',
+        type: 'REVIEW',
         sourceId: yandexSource.id,
-        triggeredByUserId: user.id,
-        queueName: 'reviews_sync',
-        jobName: 'reviews.sync',
-        jobStatus: 'SUCCESS',
-        startedAt: new Date(Date.now() - 1000 * 60 * 50),
-        finishedAt: new Date(Date.now() - 1000 * 60 * 49),
-        itemsDiscovered: 3,
-        itemsCreated: 2,
-        itemsUpdated: 0,
-        itemsDeduped: 1
+        companySourceTargetId: stereoYandexTarget.id,
+        externalMentionId: 'demo:stereo:yandex:2',
+        url: 'https://yandex.ru/maps/org/stereopeople/reviews/2',
+        title: 'Дорогие напитки',
+        content: 'Атмосфера хорошая, но цены на баре завышены 600р за коктейль — ьноговато.',
+        normalizedContent: 'атмосфера хорошая но цены на баре завышены 600р за коктейль многовато',
+        author: 'Наталья С.',
+        publishedAt: new Date(Date.now() - 1000 * 60 * 60 * 30),
+        ratingValue: 3,
+        sentiment: 'NEUTRAL',
+        status: 'NEW',
+        hash: 'demo-stereo-yandex-2'
+      },
+      {
+        companyId: stereopeople.id,
+        platform: 'TWOGIS',
+        type: 'REVIEW',
+        sourceId: twogisSource.id,
+        companySourceTargetId: stereoTwogisTarget.id,
+        externalMentionId: 'demo:stereo:2gis:1',
+        url: 'https://2gis.ru/moscow/firm/stereopeople/reviews/1',
+        title: 'Не пустили без маски',
+        content: 'Фейсконтроль странный. Не объяснили причину отказа.',
+        normalizedContent: 'фейсконтроль странный не объяснили причину отказа',
+        author: 'Артём К.',
+        publishedAt: new Date(Date.now() - 1000 * 60 * 50),
+        ratingValue: 1,
+        sentiment: 'NEGATIVE',
+        status: 'NEW',
+        hash: 'demo-stereo-2gis-1'
+      }
+    ],
+    skipDuplicates: true
+  })
+
+  await prisma.ratingSnapshot.createMany({
+    data: [
+      {
+        companyId: stereopeople.id,
+        sourceId: yandexSource.id,
+        companySourceTargetId: stereoYandexTarget.id,
+        platform: 'YANDEX',
+        ratingValue: 4.2,
+        reviewsCount: 122,
+        capturedAt: new Date(Date.now() - 1000 * 60 * 60 * 3)
+      },
+      {
+        companyId: stereopeople.id,
+        sourceId: twogisSource.id,
+        companySourceTargetId: stereoTwogisTarget.id,
+        platform: 'TWOGIS',
+        ratingValue: 4.0,
+        reviewsCount: 98,
+        capturedAt: new Date(Date.now() - 1000 * 60 * 60 * 3)
       }
     ],
     skipDuplicates: false
   }).catch(() => null)
 
-  console.log('Seed complete')
+  // ─── Notification rule ───────────────────────────────────────────────────
+  await prisma.notificationRule.createMany({
+    data: [
+      {
+        workspaceId: workspace.id,
+        companyId: rukiVverh.id,
+        name: 'Негативные отзывы — Руки Жверх',
+        isActive: true,
+        channel: 'IN_APP',
+        type: 'NEW_NEGATIVE_MENTION',
+        sentimentFilter: 'NEGATIVE'
+      },
+      {
+        workspaceId: workspace.id,
+        companyId: stereopeople.id,
+        name: 'Негативные отзывы — Stereopeople',
+        isActive: true,
+        channel: 'IN_APP',
+        type: 'NEW_NEGATIVE_MENTION',
+        sentimentFilter: 'NEGATIVE'
+      }
+    ],
+    skipDuplicates: true
+  }).catch(() => null)
+
+  console.log('✅ Demo seed complete: Руки Жверх Бар + Stereopeople')
 }
 
 main()
