@@ -1,5 +1,5 @@
 import { Logger, UseGuards } from '@nestjs/common'
-import { Action, Command, Ctx, Update } from 'nestjs-telegraf'
+import { Action, Command, Ctx, On, Update } from 'nestjs-telegraf'
 import { Context, Markup } from 'telegraf'
 import { CompaniesService } from './companies.service'
 import { TelegramAuthGuard } from '../../common/guards/telegram-auth.guard'
@@ -133,8 +133,24 @@ export class CompaniesUpdate {
   }
 
   // ── Wizard: обработка текстового ввода ──────────────────────
-  // Этот хендлер подключается через on('text') в bot.module
-  // Здесь — шаги 2 и 3 через callback_query, текст ловим в on('text')
+  @On('text')
+  @UseGuards(TelegramAuthGuard, PlanFeatureGuard)
+  async onText(@Ctx() ctx: Context & { state: { user: any } }) {
+    const chatId = ctx.from!.id
+    const state = wizardState.get(chatId)
+    if (!state) return
+    const msg = (ctx.message as any)?.text ?? ''
+    if (state.step === 1) {
+      wizardState.set(chatId, { ...state, step: 2, name: msg })
+      await this.showPlatformStep(ctx, [])
+      return
+    }
+    if (state.step === 3) {
+      await this.finishWizard(ctx, msg.startsWith('http') ? msg : undefined)
+      return
+    }
+  }
+
   @Action(/^company:platforms:(.+)$/)
   async onSelectPlatform(@Ctx() ctx: Context & { state: { user: any }; match: RegExpMatchArray }) {
     await ctx.answerCbQuery()
