@@ -3,13 +3,12 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
+import { apiFetch } from '@/lib/api/client'
 
 interface TelegramStatus {
   linked: boolean
   linkedAt: string | null
 }
-
-const API_BASE = '/api/telegram'
 
 export function TelegramConnectSection() {
   const [status, setStatus] = useState<TelegramStatus | null>(null)
@@ -19,12 +18,9 @@ export function TelegramConnectSection() {
 
   const fetchStatus = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/status`, { credentials: 'include' })
-      if (res.ok) {
-        const data = await res.json()
-        setStatus(data)
-        return data as TelegramStatus
-      }
+      const data = await apiFetch<TelegramStatus>('/telegram/status')
+      setStatus(data)
+      return data
     } catch {
       // ignore
     }
@@ -58,12 +54,7 @@ export function TelegramConnectSection() {
   const handleConnect = async () => {
     setLoading(true)
     try {
-      const res = await fetch(`${API_BASE}/link-token`, {
-        method: 'POST',
-        credentials: 'include',
-      })
-      if (!res.ok) throw new Error('error')
-      const { url } = await res.json()
+      const { url } = await apiFetch<{ url: string }>('/telegram/link-token', { method: 'POST' })
       window.open(url, '_blank', 'noopener,noreferrer')
       setConnecting(true)
       startPolling()
@@ -78,7 +69,7 @@ export function TelegramConnectSection() {
     if (!confirm('Отвязать Telegram?')) return
     setLoading(true)
     try {
-      await fetch(`${API_BASE}/unlink`, { method: 'DELETE', credentials: 'include' })
+      await apiFetch('/telegram/unlink', { method: 'DELETE' })
       setStatus({ linked: false, linkedAt: null })
     } catch {
       alert('Ошибка отвязки.')
