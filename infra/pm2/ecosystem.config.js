@@ -38,6 +38,15 @@ module.exports = {
         PORT: 4012,
         HOSTNAME: '0.0.0.0'
       }
+    },
+    {
+      name: 'reputation-bot',
+      cwd: '/opt/reputation-os/apps/bot',
+      script: 'dist/main.js',
+      env_file: '/opt/reputation-os/apps/bot/.env',
+      env: {
+        NODE_ENV: 'production'
+      }
     }
   ]
 }
