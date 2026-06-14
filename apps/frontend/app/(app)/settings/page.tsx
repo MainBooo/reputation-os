@@ -1,5 +1,6 @@
 import PageHeader from '@/components/ui/PageHeader'
 import PushSettingsCard from '@/components/settings/PushSettingsCard'
+import BillingCard from '@/components/billing/BillingCard'
 
 export default function SettingsPage() {
   return (
@@ -10,6 +11,8 @@ export default function SettingsPage() {
       />
 
       <div className="w-full max-w-none">
+        <BillingCard />
+        <div className="mt-4" />
         <PushSettingsCard />
       </div>
     </div>

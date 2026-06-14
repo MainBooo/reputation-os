@@ -11,8 +11,9 @@ export interface WorkspaceEntitlements {
   subscriptionStatus: SubscriptionStatus | null
   currentPeriodEnd: Date | null
   limits: PlanLimits
+  effective: PlanLimits
   overrides: Partial<Record<FeatureKey, unknown>>
-  usage: { companies: number; aiRepliesThisMonth: number }
+  usage: { companies: number; companiesCount: number; aiRepliesThisMonth: number }
 }
 
 @Injectable()
@@ -89,8 +90,9 @@ export class EntitlementsService {
       subscriptionStatus: subscription?.status ?? null,
       currentPeriodEnd: subscription?.currentPeriodEnd ?? null,
       limits,
+      effective: limits,
       overrides: overrideMap,
-      usage: { companies, aiRepliesThisMonth }
+      usage: { companies, companiesCount: companies, aiRepliesThisMonth }
     }
   }
 

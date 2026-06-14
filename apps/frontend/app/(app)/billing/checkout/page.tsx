@@ -10,7 +10,7 @@ import {
 } from '@/lib/api/billing'
 
 function formatPrice(price: number) {
-  return price.toLocaleString('ru-RU') + ' ₵ / месяц'
+  return price.toLocaleString('ru-RU') + ' ₽/мес'
 }
 
 const PLATFORM_LABELS: Record<string, string> = {
@@ -48,7 +48,7 @@ function PlanCard({
         <div>
           {plan.limits.maxAiRepliesPerMonth === -1
             ? 'Безлимит AI-ответов'
-            : `${plan.limits.maxAiRepliesPerMonth} AI-ответоп/мес`}
+            : `${plan.limits.maxAiRepliesPerMonth} AI-ответов/мес`}
         </div>
         <div>
           {plan.limits.platforms.map((p) => PLATFORM_LABELS[p] ?? p).join(', ')}
@@ -122,7 +122,7 @@ function CheckoutInner() {
           <div className="mt-2 text-sm text-zinc-400">
             Тариф{' '}
             <span className="font-medium text-cyan-100">{selected?.name ?? selectedCode}</span>{' '}
-            гспешно подключён.
+            успешно подключён.
           </div>
           <button
             type="button"
