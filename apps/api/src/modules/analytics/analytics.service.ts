@@ -1,9 +1,13 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common'
 import { PrismaService } from '../../common/prisma/prisma.service'
+import { EntitlementsService } from '../billing/entitlements.service'
 
 @Injectable()
 export class AnalyticsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly entitlements: EntitlementsService
+  ) {}
 
   private async assertCompanyAccess(userId: string, companyId: string) {
     const company = await this.prisma.company.findUnique({ where: { id: companyId }, select: { workspaceId: true } })
@@ -95,6 +99,11 @@ export class AnalyticsService {
 
   async sentiment(userId: string, companyId: string) {
     await this.assertCompanyAccess(userId, companyId)
+
+    const company = await this.prisma.company.findUnique({ where: { id: companyId }, select: { workspaceId: true } })
+    if (company && !await this.entitlements.can(company.workspaceId, 'advancedAnalytics')) {
+      throw new ForbiddenException({ code: 'PLAN_LIMIT', feature: 'advancedAnalytics' })
+    }
     const grouped = await this.prisma.mention.groupBy({
       by: ['sentiment'],
       where: { companyId },
@@ -104,6 +113,10 @@ export class AnalyticsService {
   }
 
   async platforms(userId: string, companyId: string, from?: string, to?: string) {
+    const company = await this.prisma.company.findUnique({ where: { id: companyId }, select: { workspaceId: true } })
+    if (company && !await this.entitlements.can(company.workspaceId, 'advancedAnalytics')) {
+      throw new ForbiddenException({ code: 'PLAN_LIMIT', feature: 'advancedAnalytics' })
+    }
     await this.assertCompanyAccess(userId, companyId)
 
     const startDate = from ? new Date(`${from}T00:00:00.000Z`) : new Date()
