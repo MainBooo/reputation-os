@@ -15,46 +15,78 @@ function formatPrice(price: number) {
 
 const PLATFORM_LABELS: Record<string, string> = {
   YANDEX: 'Яндекс Карты',
-  TWO_GIS: '2ГИС',
-  VK: 'VK',
+  TWOGIS: '2ГИС',
+  GOOGLE: 'Google',
+  WEB: 'Веб-поиск',
 }
 
 function PlanCard({
   plan,
   selected,
   onSelect,
+  isCurrent,
 }: {
   plan: BillingPlan
   selected: boolean
   onSelect: () => void
+  isCurrent?: boolean
 }) {
+  const platforms = plan.limits.platforms.map((p) => PLATFORM_LABELS[p] ?? p).join(', ')
+
   return (
     <button
       type="button"
       onClick={onSelect}
-      className={`rounded-[1.35rem] border p-4 text-left transition ${
+      className={`relative flex flex-col gap-3 rounded-2xl border p-5 text-left transition-all ${
         selected
-          ? 'border-cyan-300/40 bg-cyan-400/[0.08] shadow-[0_0_0_1px_rgba(34,211,238,0.25)]'
-          : 'border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.05]'
+          ? 'border-cyan-300/40 bg-[linear-gradient(135deg,rgba(34,211,238,0.07),rgba(79,70,229,0.07))] shadow-[0_0_0_1px_rgba(34,211,238,0.20),0_8px_32px_rgba(34,211,238,0.08)]'
+          : 'border-white/10 bg-white/[0.02] hover:border-white/20 hover:bg-white/[0.04]'
       }`}
     >
-      <div className="text-sm font-semibold text-white">{plan.name}</div>
-      <div className="mt-1 text-lg font-bold text-cyan-100">{formatPrice(plan.priceMonthly)}</div>
-      <div className="mt-2 space-y-1 text-xs text-zinc-500">
-        <div>
-          {plan.limits.maxCompanies === -1 ? '∞' : plan.limits.maxCompanies}{' '}
-          {plan.limits.maxCompanies === 1 ? 'компания' : 'компании'}
+      {isCurrent && (
+        <span className="absolute right-3 top-3 rounded-full border border-white/10 bg-white/[0.06] px-2 py-0.5 text-[10px] text-zinc-500">
+          Текущий
+        </span>
+      )}
+
+      <div>
+        <div className="text-xs font-medium uppercase tracking-wider text-zinc-500">{plan.name}</div>
+        <div className="mt-1 text-2xl font-bold text-white">{formatPrice(plan.priceMonthly)}</div>
+      </div>
+
+      <div className="h-px w-full bg-white/[0.06]" />
+
+      <div className="space-y-1.5 text-sm">
+        <div className="flex items-center gap-2 text-zinc-300">
+          <span className="text-cyan-400">◆</span>
+          <span>
+            {plan.limits.maxCompanies === -1 ? '∞ компаний' : `${plan.limits.maxCompanies} ${plan.limits.maxCompanies === 1 ? 'компания' : 'компании'}`}
+          </span>
         </div>
-        <div>
-          {plan.limits.maxAiRepliesPerMonth === -1
-            ? 'Безлимит AI-ответов'
-            : `${plan.limits.maxAiRepliesPerMonth} AI-ответов/мес`}
+        <div className="flex items-center gap-2 text-zinc-300">
+          <span className="text-cyan-400">◆</span>
+          <span>
+            {plan.limits.maxAiRepliesPerMonth === -1
+              ? 'Безлимит AI-ответов'
+              : `${plan.limits.maxAiRepliesPerMonth} AI-ответог/мес`}
+          </span>
         </div>
-        <div>
-          {plan.limits.platforms.map((p) => PLATFORM_LABELS[p] ?? p).join(', ')}
+        <div className="flex items-center gap-2 text-zinc-300">
+          <span className="text-cyan-400">◆</span>
+          <span>{platforms}</span>
         </div>
-        {plan.limits.telegramNotifications && <div>✓ Telegram-уведомления</div>}
-        {plan.limits.advancedAnalytics && <div>✓ Расширенная аналитика</div>}
+        {plan.limits.telegramNotifications && (
+          <div className="flex items-center gap-2 text-emerald-300/80">
+            <span>✓</span>
+            <span>Telegram-уведомления</span>
+          </div>
+        )}
+        {plan.limits.advancedAnalytics && (
+          <div className="flex items-center gap-2 text-emerald-300/80">
+            <span>✓</span>
+            <span>Расширенная аналитика</span>
+          </div>
+        )}
       </div>
     </button>
   )
@@ -138,12 +170,13 @@ function CheckoutInner() {
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-10">
-      <div className="mb-6">
+      <div className="mb-8">
         <div className="text-2xl font-bold text-white">Выбор тарифа</div>
         <div className="mt-1 text-sm text-zinc-400">
           Выберите план и подтвердите оплату.
         </div>
       </div>
+
       <div className="mb-6 grid gap-3 sm:grid-cols-3">
         {plans.map((plan) => (
           <PlanCard
@@ -154,11 +187,11 @@ function CheckoutInner() {
           />
         ))}
       </div>
+
       <Card className="p-5">
         <div className="flex items-center justify-between gap-4">
           <div>
-            <div className="text-sm font-semibold text-white">{selected?.name ?? '—'}
-               </div>
+            <div className="text-sm font-semibold text-white">{selected?.name ?? '—'}</div>
             {selected && (
               <div className="mt-0.5 text-xs text-zinc-500">{formatPrice(selected.priceMonthly)}</div>
             )}
@@ -181,6 +214,7 @@ function CheckoutInner() {
           Оплата через Yandex Pay · Тестовый режим
         </div>
       </Card>
+
       <button
         type="button"
         onClick={() => router.back()}
