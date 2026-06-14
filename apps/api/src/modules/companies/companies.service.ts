@@ -569,7 +569,11 @@ export class CompaniesService {
     const normalizedYandexUrl = this.normalizeYandexUrl(dto.yandexUrl)
     const normalizedTwoGisUrl = this.normalizeTwoGisUrl(dto.twoGisUrl)
 
-    if (normalizedYandexUrl) {
+    const allowedPlatforms = Array.isArray(limits.platforms) ? limits.platforms : []
+
+    if (normalizedYandexUrl && !allowedPlatforms.includes('YANDEX')) {
+      this.logger.log(`[CompanyCreate] skip yandex init companyId=${company.id} reason=platform_not_allowed`)
+    } else if (normalizedYandexUrl) {
       const yandexSource = await this.ensureYandexSource(dto.workspaceId)
 
       const target = await this.prisma.companySourceTarget.create({
@@ -596,7 +600,9 @@ export class CompaniesService {
       this.logger.log(`[CompanyCreate] skip yandex init companyId=${company.id} reason=no_yandex_url`)
     }
 
-    if (normalizedTwoGisUrl) {
+    if (normalizedTwoGisUrl && !allowedPlatforms.includes('TWOGIS')) {
+      this.logger.log(`[CompanyCreate] skip 2gis init companyId=${company.id} reason=platform_not_allowed`)
+    } else if (normalizedTwoGisUrl) {
       const twoGisSource = await this.ensureTwoGisSource(dto.workspaceId)
 
       const target = await this.prisma.companySourceTarget.create({
