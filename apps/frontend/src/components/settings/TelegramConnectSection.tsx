@@ -67,20 +67,20 @@ export function TelegramConnectSection() {
       setConnecting(true)
       startPolling()
     } catch {
-      alert('\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u0441\u043e\u0437\u0434\u0430\u0442\u044c \u0441\u0441\u044b\u043b\u043a\u0443. \u041f\u043e\u043f\u0440\u043e\u0431\u0443\u0439\u0442\u0435 \u043f\u043e\u0437\u0436\u0435.')
+      alert('Не удалось создать ссылку. Попробуйте позже.')
     } finally {
       setLoading(false)
     }
   }
 
   const handleUnlink = async () => {
-    if (!confirm('\u041e\u0442\u0432\u044f\u0437\u0430\u0442\u044c Telegram? \u0412\u044b \u043f\u0435\u0440\u0435\u0441\u0442\u0430\u043d\u0451\u0442\u0435 \u043f\u043e\u043b\u0443\u0447\u0430\u0442\u044c \u0443\u0432\u0435\u0434\u043e\u043c\u043b\u0435\u043d\u0438\u044f.')) return
+    if (!confirm('Отвязать Telegram? Вы перестанёте получать уведомления.')) return
     setLoading(true)
     try {
       await apiFetch<void>(`${TG_PATH}/unlink`, { method: 'DELETE' })
       setStatus({ linked: false, linkedAt: null })
     } catch {
-      alert('\u041e\u0448\u0438\u0431\u043a\u0430 \u043e\u0442\u0432\u044f\u0437\u043a\u0438. \u041f\u043e\u043f\u0440\u043e\u0431\u0443\u0439\u0442\u0435 \u043f\u043e\u0437\u0436\u0435.')
+      alert('Ошибка отвязки. Попробуйте позже.')
     } finally {
       setLoading(false)
     }
@@ -88,9 +88,9 @@ export function TelegramConnectSection() {
 
   return (
     <Card className="p-5">
-      <div className="text-base font-semibold text-brand">Telegram-\u0443\u0432\u0435\u0434\u043e\u043c\u043b\u0435\u043d\u0438\u044f</div>
+      <div className="text-base font-semibold text-brand">Telegram-уведомления</div>
       <div className="mt-2 text-sm leading-6 text-zinc-300">
-        \u041f\u043e\u043b\u0443\u0447\u0430\u0439\u0442\u0435 \u043c\u0433\u043d\u043e\u0432\u0435\u043d\u043d\u044b\u0435 \u0443\u0432\u0435\u0434\u043e\u043c\u043b\u0435\u043d\u0438\u044f \u043e \u043d\u043e\u0432\u044b\u0445 \u043e\u0442\u0437\u044b\u0432\u0430\u0445 \u043f\u0440\u044f\u043c\u043e \u0432 Telegram.
+        Получайте мгновенные уведомления о новых отзывах прямо в Telegram.
       </div>
 
       {status === null ? (
@@ -99,12 +99,12 @@ export function TelegramConnectSection() {
         <>
           <div className="mt-4 space-y-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm">
             <div className="flex items-center justify-between gap-3">
-              <span className="text-zinc-300">\u0421\u0442\u0430\u0442\u0443\u0441</span>
-              <span className="text-emerald-300">\u041f\u043e\u0434\u043a\u043b\u044e\u0447\u0451\u043d &#x2713;</span>
+              <span className="text-zinc-300">Статус</span>
+              <span className="text-emerald-300">Подключён ✓</span>
             </div>
             {status.linkedAt && (
               <div className="flex items-center justify-between gap-3">
-                <span className="text-zinc-300">\u041f\u0440\u0438\u0432\u044f\u0437\u0430\u043d</span>
+                <span className="text-zinc-300">Привязан</span>
                 <span className="text-brand">
                   {new Date(status.linkedAt).toLocaleDateString('ru-RU')}
                 </span>
@@ -113,7 +113,7 @@ export function TelegramConnectSection() {
           </div>
           <div className="mt-4">
             <Button type="button" variant="ghost" onClick={handleUnlink} disabled={loading}>
-              {loading ? '\u041e\u0442\u043a\u043b\u044e\u0447\u0435\u043d\u0438\u0435...' : '\u041e\u0442\u0432\u044f\u0437\u0430\u0442\u044c Telegram'}
+              {loading ? 'Отключение...' : 'Отвязать Telegram'}
             </Button>
           </div>
         </>
@@ -121,8 +121,8 @@ export function TelegramConnectSection() {
         <>
           <div className="mt-4 space-y-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm">
             <div className="flex items-center justify-between gap-3">
-              <span className="text-zinc-300">\u0421\u0442\u0430\u0442\u0443\u0441</span>
-              <span className="text-zinc-400">\u041d\u0435 \u043f\u043e\u0434\u043a\u043b\u044e\u0447\u0451\u043d</span>
+              <span className="text-zinc-300">Статус</span>
+              <span className="text-zinc-400">Не подключён</span>
             </div>
           </div>
 
@@ -130,21 +130,23 @@ export function TelegramConnectSection() {
             <div className="mt-3 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-zinc-300">
               <div className="flex items-center gap-2">
                 <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-cyan-400 border-t-transparent" />
-                \u041e\u0442\u043a\u0440\u043e\u0439\u0442\u0435 \u0431\u043e\u0442\u0430 \u0438 \u043d\u0430\u0436\u043c\u0438\u0442\u0435 <strong className="text-white">\u0421\u0442\u0430\u0440\u0442</strong>. \u041e\u0436\u0438\u0434\u0430\u0435\u043c \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0438\u044f...
+                Откройте бота и нажмите{' '}
+                <strong className="text-white">Старт</strong>.
+                {' '}Ожидаем подтверждения...
               </div>
               <button
                 type="button"
                 className="mt-2 text-xs text-zinc-500 underline hover:text-zinc-300"
                 onClick={() => { stopPolling(); setConnecting(false) }}
               >
-                \u041e\u0442\u043c\u0435\u043d\u0430
+                Отмена
               </button>
             </div>
           )}
 
           <div className="mt-4">
             <Button type="button" onClick={handleConnect} disabled={loading || connecting}>
-              {loading ? '\u0421\u043e\u0437\u0434\u0430\u0451\u043c \u0441\u0441\u044b\u043b\u043a\u0443...' : '\u041f\u043e\u0434\u043a\u043b\u044e\u0447\u0438\u0442\u044c Telegram'}
+              {loading ? 'Создаём ссылку...' : 'Подключить Telegram'}
             </Button>
           </div>
         </>
