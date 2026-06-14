@@ -15,7 +15,7 @@ export class PlanFeatureGuard implements CanActivate {
 
     // Проверяем хотя бы один workspace с планом, разрешающим telegramNotifications
     const hasAccess = user?.workspaceMembers?.some((m: any) => {
-      const limits = m.workspace?.plan?.limits as Record<string, any> | null
+      const limits = m?.workspace?.subscription?.plan?.limits as Record<string, any> | null
       return limits?.telegramNotifications === true
     })
 

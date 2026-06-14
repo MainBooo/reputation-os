@@ -90,7 +90,7 @@ export class SettingsUpdate {
     const user = ctx.state.user
     const member = user.workspaceMembers?.[0]
     const workspace = member?.workspace
-    const plan = workspace?.plan
+    const plan = workspace?.subscription?.plan
 
     const roleMap: Record<string, string> = {
       OWNER: 'Владелец',
