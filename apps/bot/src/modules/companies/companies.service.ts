@@ -1,11 +1,21 @@
 import { Injectable, Logger } from '@nestjs/common'
+import { ConfigService } from '@nestjs/config'
 import { PrismaService } from '../../common/prisma/prisma.service'
+import * as jwt from 'jsonwebtoken'
 
 @Injectable()
 export class CompaniesService {
   private readonly logger = new Logger(CompaniesService.name)
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
+  ) {}
+
+  private makeServiceToken(userId: string): string {
+    const secret = this.config.getOrThrow<string>('JWT_ACCESS_SECRET')
+    return jwt.sign({ sub: userId, service: 'bot' }, secret, { expiresIn: '5m' })
+  }
 
   async getCompaniesForUser(userId: string) {
     const members = await this.prisma.workspaceMember.findMany({
@@ -68,17 +78,39 @@ export class CompaniesService {
     name: string
     platforms: string[]
     yandexUrl?: string
+    twoGisUrl?: string
+    keywords?: string[]
     userId: string
     workspaceId: string
   }) {
-    const company = await this.prisma.company.create({
-      data: {
-        name: data.name,
-        normalizedName: data.name.toLowerCase(),
-        workspaceId: data.workspaceId,
+    const apiUrl = this.config.getOrThrow<string>('API_INTERNAL_URL')
+    const token = this.makeServiceToken(data.userId)
+
+    const body = {
+      workspaceId: data.workspaceId,
+      name: data.name,
+      ...(data.yandexUrl && { yandexUrl: data.yandexUrl }),
+      ...(data.twoGisUrl && { twoGisUrl: data.twoGisUrl }),
+      ...(data.keywords?.length && { keywords: data.keywords }),
+    }
+
+    const res = await fetch(`${apiUrl}/companies`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
       },
+      body: JSON.stringify(body),
     })
-    this.logger.log(`Создана компания "${data.name}" (id=${company.id}) пользователем ${data.userId}`)
+
+    if (!res.ok) {
+      const err = await res.text()
+      this.logger.error(`API createCompany failed: ${res.status} ${err}`)
+      throw new Error(`Ошибка создания компании: ${res.status}`)
+    }
+
+    const company = await res.json() as any
+    this.logger.log(`Создана компания "${company.name}" (id=${company.id}) через API`)
     return company
   }
 

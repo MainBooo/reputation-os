@@ -8,7 +8,7 @@ import { WorkspaceRoleGuard } from '../../common/guards/workspace-role.guard'
 import { formatDistanceToNow } from '../../common/utils/date.util'
 
 // Простое in-memory хранилище состояния wizard (заменить на Redis при масштабировании)
-const wizardState = new Map<number, { step: number; name?: string; platforms?: string[]; workspaceId?: string }>()
+const wizardState = new Map<number, { step: number; name?: string; platforms?: string[]; workspaceId?: string; yandexUrl?: string; twoGisUrl?: string; keywords?: string[]; urlStep?: string }>()
 const deleteConfirm = new Map<number, string>() // chatId → companyId
 
 @Update()
@@ -147,8 +147,21 @@ export class CompaniesUpdate {
       return
     }
     if (state.step === 3) {
-      await this.finishWizard(ctx, msg.startsWith('http') ? msg : undefined)
-      return
+      // urlStep указывает какой URL сейчас собираем: 'YANDEX' | 'TWOGIS' | 'KEYWORDS'
+      const urlStep = state.urlStep
+      if (urlStep === 'YANDEX') {
+        wizardState.set(chatId, { ...state, yandexUrl: msg })
+        return this.askNextUrlStep(ctx, chatId)
+      }
+      if (urlStep === 'TWOGIS') {
+        wizardState.set(chatId, { ...state, twoGisUrl: msg })
+        return this.askNextUrlStep(ctx, chatId)
+      }
+      if (urlStep === 'KEYWORDS') {
+        const keywords = msg.split(/[,\n]+/).map((k: string) => k.trim()).filter(Boolean)
+        wizardState.set(chatId, { ...state, keywords })
+        await this.finishWizard(ctx)
+      }
     }
   }
 
@@ -185,23 +198,15 @@ export class CompaniesUpdate {
       return
     }
 
-    wizardState.set(chatId, { ...state, step: 3 })
-    await ctx.editMessageText(
-      '📝 *Добавление компании*\n\nШаг 3/3: Введите URL компании на Яндекс Картах\n(или нажмите «Пропустить»)',
-      {
-        parse_mode: 'Markdown',
-        ...Markup.inlineKeyboard([
-          [Markup.button.callback('Пропустить →', 'company:wizard:skip_url')],
-          [Markup.button.callback('❌ Отмена', 'company:wizard:cancel')],
-        ]),
-      },
-    )
+    wizardState.set(chatId, { ...state, step: 3, urlStep: undefined })
+    await this.askNextUrlStep(ctx, chatId)
   }
 
   @Action('company:wizard:skip_url')
   async onSkipUrl(@Ctx() ctx: Context & { state: { user: any } }) {
     await ctx.answerCbQuery()
-    await this.finishWizard(ctx, undefined)
+    const chatId = ctx.from!.id
+    await this.askNextUrlStep(ctx, chatId)
   }
 
   @Action('company:wizard:cancel')
@@ -351,7 +356,7 @@ export class CompaniesUpdate {
     }
   }
 
-  async finishWizard(ctx: Context & { state?: { user?: any } }, yandexUrl?: string) {
+  async finishWizard(ctx: Context & { state?: { user?: any } }) {
     const chatId = ctx.from!.id
     const state = wizardState.get(chatId)
 
@@ -365,7 +370,9 @@ export class CompaniesUpdate {
     const company = await this.companiesService.createCompany({
       name: state.name,
       platforms: state.platforms,
-      yandexUrl,
+      yandexUrl: state.yandexUrl,
+      twoGisUrl: state.twoGisUrl,
+      keywords: state.keywords,
       userId: user?.id,
       workspaceId: state.workspaceId,
     })
@@ -381,6 +388,88 @@ export class CompaniesUpdate {
         ]),
       },
     )
+  }
+
+  private async askNextUrlStep(ctx: Context & { state?: { user?: any } }, chatId: number) {
+    const state = wizardState.get(chatId)
+    if (!state) return
+
+    const platforms = state.platforms ?? []
+    const needYandex = platforms.includes('YANDEX_MAPS') && !state.yandexUrl
+    const needTwoGis = platforms.includes('TWOGIS') && !state.twoGisUrl
+    const needKeywords = platforms.includes('WEB') && !state.keywords
+
+    if (needYandex) {
+      wizardState.set(chatId, { ...state, urlStep: 'YANDEX' })
+      const text = '📝 *Добавление компании*\n\nШаг 3/3: Введите URL компании на Яндекс Картах\n\nПример: https://yandex.ru/maps/org/...'
+      try {
+        await ctx.editMessageText(text, {
+          parse_mode: 'Markdown',
+          ...Markup.inlineKeyboard([
+            [Markup.button.callback('Пропустить →', 'company:wizard:skip_url')],
+            [Markup.button.callback('❌ Отмена', 'company:wizard:cancel')],
+          ]),
+        })
+      } catch {
+        await ctx.reply(text, {
+          parse_mode: 'Markdown',
+          ...Markup.inlineKeyboard([
+            [Markup.button.callback('Пропустить →', 'company:wizard:skip_url')],
+            [Markup.button.callback('❌ Отмена', 'company:wizard:cancel')],
+          ]),
+        })
+      }
+      return
+    }
+
+    if (needTwoGis) {
+      wizardState.set(chatId, { ...state, urlStep: 'TWOGIS' })
+      const text = '📝 *Добавление компании*\n\nШаг 3/3: Введите URL компании в 2ГИС\n\nПример: https://2gis.ru/...'
+      try {
+        await ctx.editMessageText(text, {
+          parse_mode: 'Markdown',
+          ...Markup.inlineKeyboard([
+            [Markup.button.callback('Пропустить →', 'company:wizard:skip_url')],
+            [Markup.button.callback('❌ Отмена', 'company:wizard:cancel')],
+          ]),
+        })
+      } catch {
+        await ctx.reply(text, {
+          parse_mode: 'Markdown',
+          ...Markup.inlineKeyboard([
+            [Markup.button.callback('Пропустить →', 'company:wizard:skip_url')],
+            [Markup.button.callback('❌ Отмена', 'company:wizard:cancel')],
+          ]),
+        })
+      }
+      return
+    }
+
+    if (needKeywords) {
+      wizardState.set(chatId, { ...state, urlStep: 'KEYWORDS' })
+      const text = '📝 *Добавление компании*\n\nШаг 3/3: Введите ключевые слова для веб-поиска через запятую\n\nПример: Руки Вверх бар, бар Тверская'
+      try {
+        await ctx.editMessageText(text, {
+          parse_mode: 'Markdown',
+          ...Markup.inlineKeyboard([
+            [Markup.button.callback('Пропустить →', 'company:wizard:skip_url')],
+            [Markup.button.callback('❌ Отмена', 'company:wizard:cancel')],
+          ]),
+        })
+      } catch {
+        await ctx.reply(text, {
+          parse_mode: 'Markdown',
+          ...Markup.inlineKeyboard([
+            [Markup.button.callback('Пропустить →', 'company:wizard:skip_url')],
+            [Markup.button.callback('❌ Отмена', 'company:wizard:cancel')],
+          ]),
+        })
+      }
+      return
+    }
+
+    // Все шаги пройдены — создаём компанию
+    await this.finishWizard(ctx)
   }
 
   getWizardState(chatId: number) {
