@@ -217,7 +217,7 @@ export class CompaniesUpdate {
   }
 
   // ── Удаление компании: запрос подтверждения ─────────────────
-  @Action(/^company:delete:(.+)$/)
+  @Action(/^company:delete:((?!confirm:).+)$/)
   @UseGuards(WorkspaceRoleGuard)
   async onDeleteCompanyConfirm(@Ctx() ctx: Context & { match: RegExpMatchArray }) {
     await ctx.answerCbQuery()
