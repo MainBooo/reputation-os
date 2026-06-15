@@ -140,6 +140,7 @@ export class CompaniesUpdate {
     const state = wizardState.get(chatId)
     if (!state) return
     const msg = (ctx.message as any)?.text ?? ''
+    if (msg.startsWith('/')) return  // игнорируем команды во время wizard
     if (state.step === 1) {
       wizardState.set(chatId, { ...state, step: 2, name: msg })
       await this.showPlatformStep(ctx, [])

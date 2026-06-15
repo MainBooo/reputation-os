@@ -90,6 +90,8 @@ model User {
   systemRole   SystemRole @default(USER)
   lastLoginAt  DateTime?
   createdAt    DateTime   @default(now())
+  telegramChatId    BigInt?   @unique
+  telegramLinkedAt  DateTime?
   updatedAt    DateTime   @updatedAt
 
   workspaceMembers     WorkspaceMember[]
@@ -98,6 +100,7 @@ model User {
   aiReplyDrafts        AIReplyDraft[]        @relation("AIReplyDraftCreatedBy")
   jobLogsTriggered     JobLog[]              @relation("JobLogTriggeredBy")
   webPushSubscriptions WebPushSubscription[]
+  telegramLinkToken    TelegramLinkToken?
 }
 
 model Workspace {
@@ -572,4 +575,14 @@ model FeatureOverride {
   companyId String?
 
   @@unique([workspaceId, featureKey])
+}
+
+model TelegramLinkToken {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  token     String   @unique @default(cuid())
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
