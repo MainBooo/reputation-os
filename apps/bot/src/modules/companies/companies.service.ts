@@ -13,7 +13,7 @@ export class CompaniesService {
   ) {}
 
   private makeServiceToken(userId: string): string {
-    const secret = this.config.getOrThrow<string>('JWT_ACCESS_SECRET')
+    const secret = this.config.getOrThrow<string>('JWT_SECRET')
     return jwt.sign({ sub: userId, service: 'bot' }, secret, { expiresIn: '5m' })
   }
 
