@@ -1,5 +1,5 @@
 import { Logger } from '@nestjs/common'
-import { Start, Update, Ctx } from 'nestjs-telegraf'
+import { Start, Command, Update, Ctx } from 'nestjs-telegraf'
 import { Context } from 'telegraf'
 import { AuthService } from './auth.service'
 
@@ -8,6 +8,19 @@ export class AuthUpdate {
   private readonly logger = new Logger(AuthUpdate.name)
 
   constructor(private readonly authService: AuthService) {}
+
+  @Command('help')
+  async onHelp(@Ctx() ctx: Context) {
+    await ctx.reply(
+      '📖 *Доступные команды*\n\n' +
+      '/companies — список компаний и управление\n' +
+      '/settings — настройки уведомлений\n' +
+      '/me — информация об аккаунте\n' +
+      '/help — эта справка\n\n' +
+      '💡 Привяжите аккаунт через личный кабинет: Настройки → Профиль',
+      { parse_mode: 'Markdown' },
+    )
+  }
 
   @Start()
   async onStart(@Ctx() ctx: Context & { startPayload?: string }) {
