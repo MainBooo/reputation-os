@@ -197,7 +197,7 @@ export class AlertsService {
         },
         include: {
           source: { select: { platform: true } },
-          company: { select: { name: true } },
+          company: { select: { id: true, name: true } },
         },
         orderBy: { createdAt: 'asc' },
         take: 20,
@@ -215,6 +215,7 @@ export class AlertsService {
 
           const ok = await this.telegramNotifications.sendReviewNotification(recipient.telegramChatId, {
             id: mention.id,
+            companyId: mention.companyId,
             content: mention.content,
             ratingValue: mention.ratingValue,
             sentiment: mention.sentiment,

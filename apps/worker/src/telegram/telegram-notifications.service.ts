@@ -16,6 +16,7 @@ export class TelegramNotificationsService {
     chatId: bigint,
     review: {
       id: string
+      companyId: string
       content: string | null
       ratingValue: number | null
       sentiment: string | null
@@ -60,7 +61,7 @@ export class TelegramNotificationsService {
                   { text: '🤖 Сгенерировать ответ', callback_data: `ai:reply:${review.id}` },
                   {
                     text: '👁️ Открыть в кабинете',
-                    url: `${APP_URL}/reviews/${review.id}`,
+                    url: `${APP_URL}/companies/${review.companyId}/inbox?mentionId=${review.id}`,
                   },
                 ],
               ],
