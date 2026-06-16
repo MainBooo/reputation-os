@@ -6,10 +6,10 @@ const APP_URL = 'https://reputation.generationweb.ru'
 @Injectable()
 export class TelegramNotificationsService {
   private readonly logger = new Logger(TelegramNotificationsService.name)
-  private readonly token: string
+  private readonly token?: string
 
   constructor(private readonly config: ConfigService) {
-    this.token = config.getOrThrow<string>('TELEGRAM_BOT_TOKEN')
+    this.token = config.get<string>('TELEGRAM_BOT_TOKEN') || process.env.BOT_TOKEN
   }
 
   async sendReviewNotification(
@@ -22,7 +22,12 @@ export class TelegramNotificationsService {
       source: { platform: string }
       company: { name: string }
     },
-  ): Promise<void> {
+  ): Promise<boolean> {
+    if (!this.token) {
+      this.logger.warn('TELEGRAM_BOT_TOKEN is not configured, Telegram notification skipped')
+      return false
+    }
+
     const sentimentMap: Record<string, string> = {
       POSITIVE: '😊 Позитивный',
       NEGATIVE: '😞 Негативный',
@@ -67,11 +72,14 @@ export class TelegramNotificationsService {
       if (!res.ok) {
         const body = await res.text()
         this.logger.error(`Telegram API error: ${res.status} ${body}`)
-      } else {
-        this.logger.log(`Уведомление отправлено chatId=${chatId}, reviewId=${review.id}`)
+        return false
       }
+
+      this.logger.log(`Уведомление отправлено chatId=${chatId}, reviewId=${review.id}`)
+      return true
     } catch (err) {
       this.logger.error(`Ошибка отправки уведомления в Telegram: ${err}`)
+      return false
     }
   }
 

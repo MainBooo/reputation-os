@@ -101,6 +101,7 @@ model User {
   jobLogsTriggered     JobLog[]              @relation("JobLogTriggeredBy")
   webPushSubscriptions WebPushSubscription[]
   telegramLinkToken    TelegramLinkToken?
+  telegramDeliveries   TelegramMentionDelivery[]
 }
 
 model Workspace {
@@ -323,6 +324,7 @@ model Mention {
   duplicates  Mention[] @relation("MentionDuplicateLink")
 
   aiReplyDrafts AIReplyDraft[]
+  telegramDeliveries TelegramMentionDelivery[]
 
   @@unique([companyId, platform, externalMentionId], map: "mention_company_platform_external_unique")
   @@unique([companyId, hash], map: "mention_company_hash_unique")
@@ -585,4 +587,31 @@ model TelegramLinkToken {
   createdAt DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+enum TelegramDeliveryStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+model TelegramMentionDelivery {
+  id        String                 @id @default(cuid())
+  mentionId String
+  userId    String
+  chatId    BigInt
+  status    TelegramDeliveryStatus @default(PENDING)
+  attempts  Int                    @default(0)
+  lastError String?
+  sentAt    DateTime?
+  createdAt DateTime               @default(now())
+  updatedAt DateTime               @updatedAt
+
+  mention Mention @relation(fields: [mentionId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([mentionId, userId], map: "telegram_delivery_mention_user_unique")
+  @@index([mentionId])
+  @@index([userId])
+  @@index([status])
 }

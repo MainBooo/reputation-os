@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common'
 import * as webPush from 'web-push'
 import { PrismaService } from '../common/prisma/prisma.service'
+import { TelegramNotificationsService } from '../telegram/telegram-notifications.service'
 
 const ALLOWED_SENTIMENTS = ['NEGATIVE', 'POSITIVE', 'NEUTRAL'] as const
 const ALERT_MAX_PUBLISHED_AGE_MS = 48 * 60 * 60 * 1000
@@ -13,11 +14,19 @@ function sentimentLabel(sentiment: string) {
   return 'новый'
 }
 
+function notificationTypeForSentiment(sentiment: string | null | undefined) {
+  if (sentiment === 'NEGATIVE') return 'NEW_NEGATIVE_MENTION'
+  return 'NEW_REVIEW'
+}
+
 @Injectable()
 export class AlertsService {
   private readonly logger = new Logger(AlertsService.name)
 
-  constructor(private readonly prisma: PrismaService) {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly telegramNotifications: TelegramNotificationsService,
+  ) {
     const publicKey = process.env.WEB_PUSH_PUBLIC_KEY
     const privateKey = process.env.WEB_PUSH_PRIVATE_KEY
     const subject = process.env.WEB_PUSH_SUBJECT || 'mailto:admin@reputationos.local'
@@ -67,6 +76,11 @@ export class AlertsService {
           }
         },
         include: {
+          source: {
+            select: {
+              platform: true
+            }
+          },
           company: {
             select: {
               id: true,
@@ -141,8 +155,96 @@ export class AlertsService {
       }).catch(() => null)
     }
 
-    this.logger.log(`Alert check finished subscriptions=${subscriptions.length} checked=${checked} sent=${sent} failed=${failed}`)
+    const { telegramSent, telegramFailed } = await this.checkAndSendTelegram()
 
-    return { subscriptions: subscriptions.length, checked, sent, failed }
+    this.logger.log(
+      `Alert check finished subscriptions=${subscriptions.length} checked=${checked} sent=${sent} failed=${failed} telegramSent=${telegramSent} telegramFailed=${telegramFailed}`
+    )
+
+    return { subscriptions: subscriptions.length, checked, sent, failed, telegramSent, telegramFailed }
+  }
+
+  private async checkAndSendTelegram() {
+    const prismaAny = this.prisma as any
+    const now = new Date()
+    const minPublishedAt = new Date(now.getTime() - ALERT_MAX_PUBLISHED_AGE_MS)
+    const lookbackSince = new Date(now.getTime() - ALERT_INITIAL_LOOKBACK_MS)
+
+    let telegramSent = 0
+    let telegramFailed = 0
+
+    const rules = await prismaAny.notificationRule.findMany({
+      where: { channel: 'TELEGRAM', isActive: true },
+    })
+
+    for (const rule of rules) {
+      const recipients = await prismaAny.user.findMany({
+        where: {
+          telegramChatId: { not: null },
+          workspaceMembers: { some: { workspaceId: rule.workspaceId } },
+        },
+        select: { id: true, telegramChatId: true },
+      })
+
+      if (!recipients.length) continue
+
+      const mentions = await prismaAny.mention.findMany({
+        where: {
+          createdAt: { gt: lookbackSince },
+          publishedAt: { gte: minPublishedAt },
+          ...(rule.companyId ? { companyId: rule.companyId } : {}),
+          company: { workspaceId: rule.workspaceId, isActive: true },
+        },
+        include: {
+          source: { select: { platform: true } },
+          company: { select: { name: true } },
+        },
+        orderBy: { createdAt: 'asc' },
+        take: 20,
+      })
+
+      for (const mention of mentions) {
+        if (notificationTypeForSentiment(mention.sentiment) !== rule.type) continue
+
+        for (const recipient of recipients) {
+          const existing = await prismaAny.telegramMentionDelivery.findUnique({
+            where: { mentionId_userId: { mentionId: mention.id, userId: recipient.id } },
+          })
+
+          if (existing?.status === 'SENT') continue
+
+          const ok = await this.telegramNotifications.sendReviewNotification(recipient.telegramChatId, {
+            id: mention.id,
+            content: mention.content,
+            ratingValue: mention.ratingValue,
+            sentiment: mention.sentiment,
+            source: mention.source || { platform: 'UNKNOWN' },
+            company: mention.company || { name: 'Компания' },
+          })
+
+          await prismaAny.telegramMentionDelivery.upsert({
+            where: { mentionId_userId: { mentionId: mention.id, userId: recipient.id } },
+            create: {
+              mentionId: mention.id,
+              userId: recipient.id,
+              chatId: recipient.telegramChatId,
+              status: ok ? 'SENT' : 'FAILED',
+              attempts: 1,
+              sentAt: ok ? now : null,
+            },
+            update: {
+              status: ok ? 'SENT' : 'FAILED',
+              attempts: { increment: 1 },
+              sentAt: ok ? now : null,
+            },
+          })
+
+          if (ok) telegramSent += 1
+          else telegramFailed += 1
+        }
+      }
+    }
+
+    return { telegramSent, telegramFailed }
   }
 }
