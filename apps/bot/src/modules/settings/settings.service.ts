@@ -50,4 +50,25 @@ export class SettingsService {
     })
     this.logger.log(`Все TELEGRAM-правила отключены для workspaceId=${workspaceId}`)
   }
+
+  async enableAll(workspaceId: string): Promise<void> {
+    const eventTypes = ['NEW_NEGATIVE_MENTION', 'NEW_REVIEW']
+    for (const type of eventTypes) {
+      const existing = await this.prisma.notificationRule.findFirst({
+        where: { workspaceId, type: type as any, channel: 'TELEGRAM' },
+      })
+      if (!existing) {
+        await this.prisma.notificationRule.create({
+          data: {
+            workspaceId,
+            name: `Telegram: ${type}`,
+            type: type as any,
+            channel: 'TELEGRAM',
+            isActive: true,
+          },
+        })
+      }
+    }
+    this.logger.log(`Все TELEGRAM-правила включены для workspaceId=${workspaceId}`)
+  }
 }

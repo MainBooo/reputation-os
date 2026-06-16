@@ -7,10 +7,8 @@ import { TelegramAuthGuard } from '../../common/guards/telegram-auth.guard'
 import { PlanFeatureGuard } from '../../common/guards/plan-feature.guard'
 
 const EVENT_TYPES = [
-  { key: 'NEW_REVIEW', label: 'Новые отзывы' },
-  { key: 'NEW_MENTION', label: 'Упоминания' },
-  { key: 'NEGATIVE_REVIEW', label: 'Негативные отзывы' },
-  { key: 'POSITIVE_REVIEW', label: 'Позитивные отзывы' },
+  { key: 'NEW_NEGATIVE_MENTION', label: 'Негативные отзывы' },
+  { key: 'NEW_REVIEW', label: 'Все новые отзывы' },
 ]
 
 @Update()
@@ -49,7 +47,10 @@ export class SettingsUpdate {
     const keyboard = [
       ...eventButtons,
       ...companyButtons,
-      [Markup.button.callback('🔕 Отключить всё', 'settings:disable:all')],
+      [
+        Markup.button.callback('✅ Включить всё', 'settings:enable:all'),
+        Markup.button.callback('🔕 Отключить всё', 'settings:disable:all'),
+      ],
     ]
 
     await ctx.reply('⚙️ *Настройки уведомлений*\n\nПолучать уведомления о:', {
@@ -64,12 +65,7 @@ export class SettingsUpdate {
     const user = ctx.state.user
     const eventType = ctx.match[1]
 
-    // Применяем ко всем компаниям пользователя
-    const companies = user.workspaceMembers?.flatMap((m: any) => m.workspace?.companies ?? []) ?? []
-
-    for (const c of companies) {
-      await this.settingsService.toggleRule(user.workspaceMembers?.[0]?.workspaceId ?? "", eventType)
-    }
+    await this.settingsService.toggleRule(user.workspaceMembers?.[0]?.workspaceId ?? "", eventType)
 
     await ctx.answerCbQuery('✅ Настройка сохранена', { show_alert: false })
     // Обновляем меню
@@ -82,6 +78,13 @@ export class SettingsUpdate {
     await ctx.answerCbQuery()
     await this.settingsService.disableAll(ctx.state.user.workspaceMembers?.[0]?.workspaceId ?? "")
     await ctx.editMessageText('🔕 Все уведомления отключены.\n\nВключить снова: /settings')
+  }
+
+  @Action('settings:enable:all')
+  async onEnableAll(@Ctx() ctx: Context & { state: { user: any } }) {
+    await ctx.answerCbQuery()
+    await this.settingsService.enableAll(ctx.state.user.workspaceMembers?.[0]?.workspaceId ?? "")
+    await ctx.editMessageText('✅ Все уведомления включены.\n\nИзменить: /settings')
   }
 
   // ── /me ──────────────────────────────────────────────────────
