@@ -32,19 +32,6 @@ export class WebMentionAdapter implements SourceAdapter {
   }
 
   async fetchMentions(target: any) {
-    if (process.env.DEMO_MODE === 'true') {
-      return [
-        {
-          externalMentionId: 'web:demo:1',
-          url: 'https://news.example.com/article/acme',
-          title: 'Компания в обзоре рынка',
-          content: 'Компания получила позитивные отзывы клиентов.',
-          author: 'Industry Media',
-          publishedAt: new Date()
-        }
-      ]
-    }
-
     const context = target?.searchContext as WebSearchContext | undefined
     const queries = this.buildQueries(context, target?.externalUrl)
     const relevance = this.buildRelevanceContext(context, target?.externalUrl)
@@ -86,6 +73,11 @@ export class WebMentionAdapter implements SourceAdapter {
 
         if (this.isGarbage(url, title, snippet)) {
           console.log('[WEB] relevance skip garbage', { title, url })
+          continue
+        }
+
+        if (!this.hasReviewRatingSignal({ url, title, snippet })) {
+          console.log('[WEB] relevance skip no review/rating signal', { title, url })
           continue
         }
 
@@ -232,12 +224,10 @@ export class WebMentionAdapter implements SourceAdapter {
     if (!base.length) return []
 
     return base.flatMap((name) => [
-      `${name} ${city || ''}`.trim(),
       `${name} отзывы ${city || ''}`.trim(),
-      `${name} ресторан ${city || ''}`.trim(),
-      `${name} бар ${city || ''}`.trim(),
-      `${name} официальный сайт`.trim(),
-      `${name} telegram`.trim()
+      `${name} рейтинг отзывы ${city || ''}`.trim(),
+      `${name} оценка отзывы ${city || ''}`.trim(),
+      `${name} reviews rating ${city || ''}`.trim()
     ]).filter((value, index, arr): value is string => Boolean(value) && arr.indexOf(value) === index)
   }
 
@@ -350,6 +340,25 @@ export class WebMentionAdapter implements SourceAdapter {
     return { accepted, score, reasons }
   }
 
+  private hasReviewRatingSignal(item: SearchItem) {
+    const text = this.normalizeText(`${item.title || ''} ${item.snippet || ''} ${item.url || ''}`)
+    const host = this.getHost(item.url) || ''
+
+    const trustedReviewHost =
+      /(zoon|otzovik|irecommend|yell|tripadvisor|restaurantguru|restoclub|flamp|spr|orgpage)/i.test(host)
+
+    const hasReviewWord =
+      /(отзыв|отзывы|review|reviews|мнения|посетител|клиент)/i.test(text)
+
+    const hasRatingWord =
+      /(рейтинг|оценк|звезд|звезды|звезда|rated|rating|score)/i.test(text)
+
+    const hasNumericRating =
+      /(\d+[,.]?\d*\s*(из|\/|of)\s*5|[1-5]\s*звезд|[1-5]\s*stars)/i.test(text)
+
+    return hasReviewWord && (hasRatingWord || hasNumericRating || trustedReviewHost)
+  }
+
   private getBlockedReason(text: string, url?: string | null) {
     const host = this.getHost(url || null) || ''
 
@@ -371,6 +380,14 @@ export class WebMentionAdapter implements SourceAdapter {
 
     if (/(картинки по запросу|images\/search|яндекс картинки)/i.test(text)) {
       return 'blocked_image_search'
+    }
+
+    if (/(ozon|wildberries|lamoda|megamarket|market\.yandex|goldapple|podrygka|randewoo|aliexpress|iledebeaute|kikocosmetics|yves-rocher)/i.test(host)) {
+      return 'blocked_product_domain'
+    }
+
+    if (/(румян|помад|тушь|косметик|макияж|товар|купить|доставка|артикул|каталог|бренд)/i.test(text)) {
+      return 'blocked_product_content'
     }
 
     return null
