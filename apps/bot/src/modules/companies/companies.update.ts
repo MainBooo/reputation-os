@@ -80,7 +80,6 @@ export class CompaniesUpdate {
       ...Markup.inlineKeyboard([
         [
           Markup.button.callback('📝 Последние отзывы', `mentions:list:${companyId}`),
-          Markup.button.callback('🔔 Уведомления', `notify:company:${companyId}`),
         ],
         [
           Markup.button.callback('🗑️ Удалить', `company:delete:${companyId}`),
@@ -260,8 +259,59 @@ export class CompaniesUpdate {
   async onReviewsList(@Ctx() ctx: Context & { state: { user: any }; match: RegExpMatchArray }) {
     await ctx.answerCbQuery()
     const companyId = ctx.match[1]
+    await this.renderMentionSlide(ctx, companyId, 0)
+  }
+
+  @Action(/^mentions:slide:([^:]+):(\d+)$/)
+  async onMentionSlide(@Ctx() ctx: Context & { state: { user: any }; match: RegExpMatchArray }) {
+    await ctx.answerCbQuery()
+    const companyId = ctx.match[1]
+    const index = Number(ctx.match[2] || 0)
+    await this.renderMentionSlide(ctx, companyId, index)
+  }
+
+  // ── AI-ответ на отзыв ────────────────────────────────────────
+  @Action(/^ai:reply:(.+)$/)
+  async onAiReply(@Ctx() ctx: Context & { state: { user: any }; match: RegExpMatchArray }) {
+    await ctx.answerCbQuery('Генерирую ответ...')
+    const mentionId = ctx.match[1]
     const user = ctx.state.user
 
+    const text = await this.companiesService.generateAiReply(mentionId, user.id)
+
+    await ctx.reply(
+      `🤖 *AI-черновик ответа:*\n\n${text}`,
+      { parse_mode: 'Markdown' },
+    )
+  }
+
+  // ── Helpers ──────────────────────────────────────────────────
+  private getPlatformLabel(platform?: string | null) {
+    if (platform === 'YANDEX' || platform === 'YANDEX_MAPS') return 'Яндекс Карты'
+    if (platform === 'TWOGIS' || platform === '2GIS') return '📍 2ГИС'
+    if (platform === 'WEB') return '🌐 Интернет'
+    return platform || 'Источник'
+  }
+
+  private getSentimentLabel(value?: string | null) {
+    if (value === 'POSITIVE') return '😊 Позитивный'
+    if (value === 'NEGATIVE') return '😞 Негативный'
+    if (value === 'NEUTRAL') return '😐 Нейтральный'
+    return '❓ Тональность не определена'
+  }
+
+  private truncateText(value?: string | null, limit = 360) {
+    const text = value || '(без текста)'
+    if (text.length <= limit) return text
+    return `${text.slice(0, limit).trim()}…`
+  }
+
+  private async renderMentionSlide(
+    ctx: Context & { state: { user: any } },
+    companyId: string,
+    index: number,
+  ) {
+    const user = ctx.state.user
     const reviews = await this.companiesService.getRecentMentions(companyId, user.id, 5)
 
     if (!reviews.length) {
@@ -271,52 +321,64 @@ export class CompaniesUpdate {
       return
     }
 
-    const sentimentMap: Record<string, string> = {
-      POSITIVE: '😊 Позитивный',
-      NEGATIVE: '😞 Негативный',
-      NEUTRAL: '😐 Нейтральный',
+    const safeIndex = Math.min(Math.max(index, 0), reviews.length - 1)
+    const review = reviews[safeIndex]
+
+    const ratingRaw = Number(review.ratingValue ?? 0)
+    const rating = Number.isFinite(ratingRaw) ? Math.max(0, Math.min(5, Math.round(ratingRaw))) : 0
+    const stars = rating > 0 ? '⭐'.repeat(rating) : 'Без оценки'
+    const when = review.publishedAt ? formatDistanceToNow(review.publishedAt) : 'дата неизвестна'
+    const reviewPlatform = review.source?.platform ?? review.platform
+    const platform = this.getPlatformLabel(reviewPlatform)
+    const sentiment = this.getSentimentLabel(review.sentiment)
+    const content = this.truncateText(review.content ?? review.title)
+    const isSeedReviewUrl = typeof review.url === 'string' && /\/reviews\/\d+\/?$/.test(review.url)
+    const reviewUrl = !isSeedReviewUrl && review.url
+      ? review.url
+      : review.sourceUrl || review.source?.baseUrl || null
+
+    const text =
+      `📝 *Последние отзывы*\n` +
+      `Отзыв ${safeIndex + 1} из ${reviews.length}\n\n` +
+      `${stars} ${platform} · ${when}\n\n` +
+      `${content}\n\n` +
+      `${sentiment}`
+
+    const buttons: any[][] = []
+
+    if (review.sentiment === 'NEGATIVE') {
+      buttons.push([Markup.button.callback('🤖 AI-ответ на отзыв', `ai:reply:${review.id}`)])
     }
 
-    const lines: string[] = [`📝 *Последние отзывы*\n`]
-    const aiButtons: any[][] = []
+    if (reviewUrl) {
+      buttons.push([Markup.button.url('🔗 Перейти к отзыву', reviewUrl)])
+    }
 
-    for (const r of reviews) {
-      const stars = '⭐'.repeat(Math.round(Number(r.ratingValue ?? 0)))
-      const when = r.publishedAt ? formatDistanceToNow(r.publishedAt) : 'дата неизвестна'
-      const platform = r.source?.platform ?? 'Источник'
-      const sentiment = sentimentMap[r.sentiment ?? ''] ?? '❓'
-      const content = (r.content ?? '(без текста)').slice(0, 200)
+    buttons.push([
+      Markup.button.callback('←', `mentions:slide:${companyId}:${Math.max(0, safeIndex - 1)}`),
+      Markup.button.callback(`${safeIndex + 1}/${reviews.length}`, 'noop'),
+      Markup.button.callback('→', `mentions:slide:${companyId}:${Math.min(reviews.length - 1, safeIndex + 1)}`),
+    ])
 
-      lines.push(`${stars} ${platform} · ${when}\n${content}\n${sentiment}\n`)
+    buttons.push([Markup.button.callback('← Назад', `company:view:${companyId}`)])
 
-      if (r.sentiment === 'NEGATIVE') {
-        aiButtons.push([Markup.button.callback(`🤖 AI-ответ на отзыв`, `ai:reply:${r.id}`)])
+    try {
+      await ctx.editMessageText(text, {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard(buttons),
+      })
+    } catch (error: any) {
+      if (!String(error?.message || '').includes('message is not modified')) {
+        throw error
       }
     }
-
-    aiButtons.push([Markup.button.callback('← Назад', `company:view:${companyId}`)])
-
-    await ctx.editMessageText(lines.join('\n'), {
-      parse_mode: 'Markdown',
-      ...Markup.inlineKeyboard(aiButtons),
-    })
   }
 
-  // ── AI-ответ на отзыв ────────────────────────────────────────
-  @Action(/^ai:reply:(.+)$/)
-  async onAiReply(@Ctx() ctx: Context & { match: RegExpMatchArray }) {
-    await ctx.answerCbQuery('Генерирую ответ...')
-    const mentionId = ctx.match[1]
-
-    const text = await this.companiesService.generateAiReply(mentionId)
-
-    await ctx.reply(
-      `🤖 *AI-черновик ответа:*\n\n${text}`,
-      { parse_mode: 'Markdown' },
-    )
+  @Action('noop')
+  async onNoop(@Ctx() ctx: Context) {
+    await ctx.answerCbQuery()
   }
 
-  // ── Helpers ──────────────────────────────────────────────────
   private async showPlatformStep(ctx: Context, selected: string[]) {
     const platforms = [
       { key: 'YANDEX_MAPS', label: 'Яндекс Карты' },

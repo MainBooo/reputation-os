@@ -89,15 +89,37 @@ export class CompaniesService {
   }
 
   async getRecentMentions(companyId: string, userId: string, limit = 5) {
-    return this.prisma.mention.findMany({
-      where: {
-        companyId,
-        company: { workspace: { members: { some: { userId } } } },
-      },
-      orderBy: { publishedAt: 'desc' },
-      take: limit,
-      include: { source: true },
-    })
+    const [mentions, sourceTargets] = await Promise.all([
+      this.prisma.mention.findMany({
+        where: {
+          companyId,
+          type: 'REVIEW',
+          ratingValue: { not: null },
+          company: { workspace: { members: { some: { userId } } } },
+        },
+        orderBy: [
+          { publishedAt: 'desc' },
+          { createdAt: 'desc' },
+        ],
+        take: limit,
+        include: { source: true },
+      }),
+      this.prisma.companySourceTarget.findMany({
+        where: { companyId, isActive: true },
+        include: { source: true },
+      }),
+    ])
+
+    const sourceUrlByPlatform = new Map(
+      sourceTargets
+        .filter((target) => target.externalUrl && target.source?.platform)
+        .map((target) => [target.source.platform, target.externalUrl]),
+    )
+
+    return mentions.map((mention) => ({
+      ...mention,
+      sourceUrl: sourceUrlByPlatform.get(mention.source?.platform ?? mention.platform) || mention.source?.baseUrl || null,
+    }))
   }
 
   async createCompany(data: {
@@ -153,32 +175,35 @@ export class CompaniesService {
     return true
   }
 
-  async generateAiReply(mentionId: string): Promise<string> {
-    const existing = await this.prisma.aIReplyDraft.findFirst({
-      where: { mentionId },
-      orderBy: { createdAt: 'desc' },
-    })
-    if (existing) return existing.draftText
+  async generateAiReply(mentionId: string, userId: string): Promise<string> {
+    const apiUrl = this.config.getOrThrow<string>('API_INTERNAL_URL')
+    const token = this.makeServiceToken(userId)
 
-    const mention = await this.prisma.mention.findUnique({
-      where: { id: mentionId },
-      include: { company: true },
-    })
-    if (!mention) return 'Упоминание не найдено.'
-
-    const draft = await this.prisma.aIReplyDraft.create({
-      data: {
-        mentionId,
-        companyId: mention.companyId,
-        draftText: `Спасибо за ваш отзыв о ${mention.company.name}! Мы ценим ваше мнение и постараемся учесть его в работе.`,
-        createdByUserId: null,
+    const res = await fetch(`${apiUrl}/mentions/${mentionId}/generate-reply`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
         languageCode: 'ru',
         tone: 'professional',
-        modelName: 'manual',
-        promptVersion: '1',
-        status: 'DRAFT',
-      },
+      }),
     })
+
+    if (!res.ok) {
+      const err = await res.text()
+      this.logger.error(`API generateAiReply failed: ${res.status} ${err}`)
+      throw new Error(`Ошибка генерации AI-ответа: ${res.status}`)
+    }
+
+    const draft = await res.json() as { draftText?: string }
+
+    if (!draft.draftText) {
+      this.logger.error(`API generateAiReply returned empty draftText for mention=${mentionId}`)
+      throw new Error('API вернул пустой AI-ответ')
+    }
+
     return draft.draftText
   }
 }
