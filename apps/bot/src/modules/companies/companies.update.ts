@@ -1,5 +1,5 @@
 import { Logger, UseGuards } from '@nestjs/common'
-import { Action, Command, Ctx, On, Update } from 'nestjs-telegraf'
+import { Action, Command, Ctx, On, Update, Hears} from 'nestjs-telegraf'
 import { Context, Markup } from 'telegraf'
 import { CompaniesService } from './companies.service'
 import { TelegramAuthGuard } from '../../common/guards/telegram-auth.guard'
@@ -35,9 +35,7 @@ export class CompaniesUpdate {
     }
 
     const buttons = companies.map((c: any) => {
-      const avgRating = c.mentions?.length
-        ? (c.mentions.reduce((sum: number, r: any) => sum + Number(r.ratingValue ?? 0), 0) / c.mentions.length).toFixed(1)
-        : '—'
+      const avgRating = c.currentRating != null ? Number(c.currentRating).toFixed(1) : '—'
       const label = `${c.name} ⭐ ${avgRating}`
       return [Markup.button.callback(label, `company:view:${c.id}`)]
     })
@@ -65,9 +63,7 @@ export class CompaniesUpdate {
     }
 
     const lastReview = company.mentions?.[0]
-    const avgRating = company.mentions?.length
-      ? (company.mentions.reduce((s: number, r: any) => s + Number(r.ratingValue ?? 0), 0) / company.mentions.length).toFixed(1)
-      : '—'
+    const avgRating = company.currentRating != null ? Number(company.currentRating).toFixed(1) : '—'
 
     const lastReviewText = lastReview?.publishedAt
       ? formatDistanceToNow(lastReview.publishedAt)
@@ -75,7 +71,7 @@ export class CompaniesUpdate {
 
     const text =
       `🏢 *${company.name}*\n\n` +
-      `📊 Рейтинг: ⭐ ${avgRating} (${company.mentions?.length ?? 0} отз.)\n` +
+      `📊 Рейтинг: ⭐ ${avgRating}\n` +
       `📅 Последний отзыв: ${lastReviewText}\n` +
       `🟢 Мониторинг: активен`
 
@@ -133,14 +129,12 @@ export class CompaniesUpdate {
   }
 
   // ── Wizard: обработка текстового ввода ──────────────────────
-  @On('text')
-  @UseGuards(TelegramAuthGuard, PlanFeatureGuard)
+  @Hears(/^(?!\/).+/)
   async onText(@Ctx() ctx: Context & { state: { user: any } }) {
     const chatId = ctx.from!.id
     const state = wizardState.get(chatId)
-    if (!state) return
     const msg = (ctx.message as any)?.text ?? ''
-    if (msg.startsWith('/')) return  // игнорируем команды во время wizard
+    if (!state) return
     if (state.step === 1) {
       wizardState.set(chatId, { ...state, step: 2, name: msg })
       await this.showPlatformStep(ctx, [])

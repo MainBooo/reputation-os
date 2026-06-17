@@ -4,6 +4,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config'
 import { AuthModule } from './modules/auth/auth.module'
 import { CompaniesModule } from './modules/companies/companies.module'
 import { SettingsModule } from './modules/settings/settings.module'
+import { dropIncoming } from './common/middleware/ephemeral'
 
 @Module({
   imports: [
@@ -13,6 +14,7 @@ import { SettingsModule } from './modules/settings/settings.module'
         token: configService.getOrThrow<string>('TELEGRAM_BOT_TOKEN'),
         // long polling — никаких webhookDomain
         include: [AuthModule, CompaniesModule, SettingsModule],
+        middlewares: [dropIncoming],
       }),
       inject: [ConfigService],
     }),

@@ -17,6 +17,43 @@ export class CompaniesService {
     return jwt.sign({ sub: userId, service: 'bot' }, secret, { expiresIn: '5m' })
   }
 
+  // Тот же отбор, что RatingsService.overview (API): все снапшоты, сортировка capturedAt desc,
+  // последний снапшот каждой площадки берётся в JS. N компаний батчим в один запрос —
+  // на результат по компании это не влияет, алгоритм идентичен API.
+  private async getCurrentRatings(companyIds: string[]): Promise<Map<string, number | null>> {
+    const result = new Map<string, number | null>()
+    if (!companyIds.length) return result
+
+    const snapshots = await this.prisma.ratingSnapshot.findMany({
+      where: { companyId: { in: companyIds } },
+      orderBy: { capturedAt: 'desc' },
+      select: { companyId: true, platform: true, ratingValue: true, reviewsCount: true },
+    })
+
+    const latestPerPlatform = new Map<string, Map<string, { ratingValue: number; reviewsCount: number }>>()
+    for (const s of snapshots) {
+      let byPlatform = latestPerPlatform.get(s.companyId)
+      if (!byPlatform) {
+        byPlatform = new Map()
+        latestPerPlatform.set(s.companyId, byPlatform)
+      }
+      if (!byPlatform.has(s.platform)) {
+        byPlatform.set(s.platform, { ratingValue: Number(s.ratingValue), reviewsCount: s.reviewsCount ?? 0 })
+      }
+    }
+
+    for (const [companyId, byPlatform] of latestPerPlatform) {
+      let num = 0
+      let den = 0
+      for (const item of byPlatform.values()) {
+        num += item.ratingValue * item.reviewsCount
+        den += item.reviewsCount
+      }
+      result.set(companyId, den > 0 ? num / den : null)
+    }
+    return result
+  }
+
   async getCompaniesForUser(userId: string) {
     const members = await this.prisma.workspaceMember.findMany({
       where: { userId },
@@ -29,21 +66,19 @@ export class CompaniesService {
                   orderBy: { publishedAt: 'desc' },
                   take: 1,
                 },
-                ratingSnapshots: {
-                  orderBy: { createdAt: 'desc' },
-                  take: 1,
-                },
               },
             },
           },
         },
       },
     })
-    return members.flatMap((m) => m.workspace.companies)
+    const companies = members.flatMap((m) => m.workspace.companies)
+    const ratings = await this.getCurrentRatings(companies.map((c) => c.id))
+    return companies.map((c) => ({ ...c, currentRating: ratings.get(c.id) ?? null }))
   }
 
   async getCompanyById(companyId: string, userId: string) {
-    return this.prisma.company.findFirst({
+    const company = await this.prisma.company.findFirst({
       where: {
         id: companyId,
         workspace: { members: { some: { userId } } },
@@ -54,12 +89,11 @@ export class CompaniesService {
           take: 5,
           include: { source: true },
         },
-        ratingSnapshots: {
-          orderBy: { createdAt: 'desc' },
-          take: 1,
-        },
       },
     })
+    if (!company) return null
+    const ratings = await this.getCurrentRatings([company.id])
+    return { ...company, currentRating: ratings.get(company.id) ?? null }
   }
 
   async getRecentMentions(companyId: string, userId: string, limit = 5) {

@@ -16,6 +16,7 @@ export class TelegramAuthGuard implements CanActivate {
     const ctx = telegrafCtx.getContext<Context & { state: { user: any } }>()
 
     const chatId = ctx.from?.id
+    this.logger.log(`[DEBUG] canActivate chatId=${chatId} type=${(ctx as any).updateType}`)
     if (!chatId) return false
 
     const user = await this.prisma.user.findUnique({
@@ -40,6 +41,7 @@ export class TelegramAuthGuard implements CanActivate {
     }
 
     ctx.state.user = user
+    this.logger.log(`[DEBUG] guard OK user=${user.email} updateType=${(ctx as any).updateType} text=${(ctx.message as any)?.text ?? ''}`)
     return true
   }
 }
