@@ -17,40 +17,32 @@ export class CompaniesService {
     return jwt.sign({ sub: userId, service: 'bot' }, secret, { expiresIn: '5m' })
   }
 
-  // Тот же отбор, что RatingsService.overview (API): все снапшоты, сортировка capturedAt desc,
-  // последний снапшот каждой площадки берётся в JS. N компаний батчим в один запрос —
-  // на результат по компании это не влияет, алгоритм идентичен API.
+  // Тот же рейтинг, что отображается в карточке компании на вебе:
+  // AVG(Mention.ratingValue) WHERE ratingValue IS NOT NULL
   private async getCurrentRatings(companyIds: string[]): Promise<Map<string, number | null>> {
     const result = new Map<string, number | null>()
     if (!companyIds.length) return result
 
-    const snapshots = await this.prisma.ratingSnapshot.findMany({
-      where: { companyId: { in: companyIds } },
-      orderBy: { capturedAt: 'desc' },
-      select: { companyId: true, platform: true, ratingValue: true, reviewsCount: true },
+    const rows = await this.prisma.mention.groupBy({
+      by: ['companyId'],
+      where: {
+        companyId: { in: companyIds },
+        ratingValue: { not: null },
+      },
+      _avg: {
+        ratingValue: true,
+      },
     })
 
-    const latestPerPlatform = new Map<string, Map<string, { ratingValue: number; reviewsCount: number }>>()
-    for (const s of snapshots) {
-      let byPlatform = latestPerPlatform.get(s.companyId)
-      if (!byPlatform) {
-        byPlatform = new Map()
-        latestPerPlatform.set(s.companyId, byPlatform)
-      }
-      if (!byPlatform.has(s.platform)) {
-        byPlatform.set(s.platform, { ratingValue: Number(s.ratingValue), reviewsCount: s.reviewsCount ?? 0 })
-      }
+    for (const row of rows) {
+      result.set(
+        row.companyId,
+        row._avg.ratingValue === null
+          ? null
+          : Number(row._avg.ratingValue),
+      )
     }
 
-    for (const [companyId, byPlatform] of latestPerPlatform) {
-      let num = 0
-      let den = 0
-      for (const item of byPlatform.values()) {
-        num += item.ratingValue * item.reviewsCount
-        den += item.reviewsCount
-      }
-      result.set(companyId, den > 0 ? num / den : null)
-    }
     return result
   }
 
