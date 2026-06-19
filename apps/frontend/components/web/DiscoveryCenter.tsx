@@ -189,13 +189,13 @@ export default function DiscoveryCenter({
 
   const webTargets = useMemo(() => targets.filter(isWebTarget), [targets])
 
-  const rootWebTarget = useMemo(
-    () => targets.find((t) => {
+  const rootWebTargets = useMemo(
+    () => targets.filter((t) => {
       if (t.source?.platform !== 'WEB') return false
       if (t.externalUrl) return false
       const cfg = t.config && typeof t.config === 'object' && !Array.isArray(t.config) ? t.config as Record<string, unknown> : {}
       return !cfg.origin
-    }) ?? null,
+    }),
     [targets]
   )
 
@@ -349,11 +349,10 @@ export default function DiscoveryCenter({
           <div>
             <div className="flex items-center justify-between gap-4">
               <div className="text-xl font-semibold text-white">WEB-мониторинг</div>
-              {rootWebTarget && canWrite ? (
+              {rootWebTargets.length > 0 && canWrite ? (
                 <WebMonitoringToggle
                   companyId={companyId}
-                  rootTargetId={rootWebTarget.id}
-                  initialEnabled={rootWebTarget.syncMentionsEnabled !== false}
+                  rootTargets={rootWebTargets}
                 />
               ) : null}
             </div>

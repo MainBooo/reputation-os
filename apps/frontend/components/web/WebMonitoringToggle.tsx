@@ -4,29 +4,34 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { updateCompanySourceTarget } from '@/lib/api/companies'
 
+type RootTarget = { id: string; syncMentionsEnabled?: boolean }
+
 export default function WebMonitoringToggle({
   companyId,
-  rootTargetId,
-  initialEnabled
+  rootTargets,
 }: {
   companyId: string
-  rootTargetId: string
-  initialEnabled: boolean
+  rootTargets: RootTarget[]
 }) {
   const router = useRouter()
+  const initialEnabled = rootTargets.some((t) => t.syncMentionsEnabled !== false)
   const [enabled, setEnabled] = useState(initialEnabled)
   const [loading, setLoading] = useState(false)
 
   async function onToggle() {
-    if (loading) return
+    if (loading || !rootTargets.length) return
     const next = !enabled
     setEnabled(next)
     setLoading(true)
     try {
-      await updateCompanySourceTarget(companyId, rootTargetId, {
-        syncMentionsEnabled: next,
-        isActive: next
-      })
+      await Promise.all(
+        rootTargets.map((t) =>
+          updateCompanySourceTarget(companyId, t.id, {
+            syncMentionsEnabled: next,
+            isActive: next
+          })
+        )
+      )
       router.refresh()
     } catch {
       setEnabled(!next)
@@ -44,11 +49,11 @@ export default function WebMonitoringToggle({
         type="button"
         role="switch"
         aria-checked={enabled}
-        disabled={loading}
+        disabled={loading || !rootTargets.length}
         onClick={onToggle}
         className={[
           'relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition',
-          enabled ? 'bg-brand' : 'bg-white/15',
+          enabled ? 'bg-cyan-500' : 'bg-white/15',
           loading ? 'opacity-60 cursor-not-allowed' : ''
         ].join(' ')}
       >
