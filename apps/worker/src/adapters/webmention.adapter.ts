@@ -83,7 +83,7 @@ export class WebMentionAdapter implements SourceAdapter {
 
         const score = this.scoreSearchItem({ url, title, snippet }, relevance)
 
-        if (!score.accepted) {
+        if (!score.accepted && !score.needsLlm) {
           console.log('[WEB] relevance skip low score', {
             score: score.score,
             reasons: score.reasons,
@@ -93,12 +93,34 @@ export class WebMentionAdapter implements SourceAdapter {
           continue
         }
 
-        console.log('[WEB] relevance accepted', {
-          score: score.score,
-          reasons: score.reasons,
-          title,
-          url
-        })
+        if (score.needsLlm) {
+          const companyName = context?.companyName || relevance.names[0] || ''
+          const verdict = await this.llmEntityCheck(
+            companyName,
+            context?.city,
+            context?.industry,
+            url,
+            title,
+            snippet
+          )
+          if (verdict === 'NO') {
+            console.log('[WEB] relevance skip llm NO', { title, url })
+            continue
+          }
+          console.log('[WEB] relevance accepted via LLM', {
+            verdict,
+            score: score.score,
+            title,
+            url
+          })
+        } else {
+          console.log('[WEB] relevance accepted', {
+            score: score.score,
+            reasons: score.reasons,
+            title,
+            url
+          })
+        }
 
         results.push({
           externalMentionId: `web:yandex:${Buffer.from(url).toString('base64url')}`,
@@ -331,13 +353,20 @@ export class WebMentionAdapter implements SourceAdapter {
       reasons.push('business_terms')
     }
 
-    const accepted =
+    const hardAccept =
       score >= 10 &&
       (exactNameHit || totalTokenHits >= 2) &&
       (hasCityHit || score >= 13) &&
       !(hasOtherCity && !hasCityHit)
 
-    return { accepted, score, reasons }
+    const needsLlm =
+      !hardAccept &&
+      score >= 10 &&
+      score <= 12 &&
+      (exactNameHit || totalTokenHits >= 2) &&
+      !(hasOtherCity && !hasCityHit)
+
+    return { accepted: hardAccept, needsLlm, score, reasons }
   }
 
   private hasReviewRatingSignal(item: SearchItem) {
@@ -537,6 +566,67 @@ export class WebMentionAdapter implements SourceAdapter {
       return parsed.hostname.replace(/^www\./, '')
     } catch {
       return null
+    }
+  }
+
+  private async llmEntityCheck(
+    companyName: string,
+    city: string | null | undefined,
+    industry: string | null | undefined,
+    url: string,
+    title: string,
+    snippet: string
+  ): Promise<'YES' | 'NO' | 'UNSURE'> {
+    const apiKey = process.env.YANDEX_GPT_API_KEY
+    const folderId = process.env.YANDEX_GPT_FOLDER_ID
+    const model = process.env.YANDEX_GPT_MODEL || 'yandexgpt-lite'
+
+    if (!apiKey || !folderId) return 'UNSURE'
+
+    const prompt = [
+      `Компания: "${companyName}"`,
+      city ? `Город: "${city}"` : null,
+      industry ? `Категория: "${industry}"` : null,
+      `URL: ${url}`,
+      `Заголовок: ${title}`,
+      `Фрагмент: ${snippet.slice(0, 400)}`
+    ].filter(Boolean).join('\n')
+
+    try {
+      const { data } = await axios.post(
+        'https://llm.api.cloud.yandex.net/foundationModels/v1/completion',
+        {
+          modelUri: `gpt://${folderId}/${model}`,
+          completionOptions: { stream: false, temperature: 0, maxTokens: 5 },
+          messages: [
+            {
+              role: 'system',
+              text: 'Ты система фильтрации. Отвечай ТОЛЬКО одним словом: YES, NO или UNSURE. YES — страница про эту компанию. NO — не про эту компанию. UNSURE — непонятно.'
+            },
+            {
+              role: 'user',
+              text: `Эта страница содержит упоминание именно этой компании (не товара, не другой организации)?\n\n${prompt}`
+            }
+          ]
+        },
+        {
+          headers: {
+            Authorization: `Api-Key ${apiKey}`,
+            'Content-Type': 'application/json'
+          },
+          timeout: 8000
+        }
+      )
+
+      const answer = data?.result?.alternatives?.[0]?.message?.text?.trim().toUpperCase() || 'UNSURE'
+      console.log('[WEB] LLM entity check', { companyName, url, answer })
+
+      if (answer.includes('YES')) return 'YES'
+      if (answer.includes('NO')) return 'NO'
+      return 'UNSURE'
+    } catch (e: any) {
+      console.warn('[WEB] LLM entity check failed', { url, error: e?.message })
+      return 'UNSURE'
     }
   }
 
