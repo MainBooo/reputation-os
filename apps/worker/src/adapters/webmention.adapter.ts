@@ -244,7 +244,7 @@ export class WebMentionAdapter implements SourceAdapter {
 
     const nameTokens = Array.from(new Set(
       names.flatMap((name) => this.tokenize(name))
-        .filter((token) => !this.isWeakToken(token))
+        .filter((token) => !this.isWeakToken(token, context?.industry))
     ))
 
     const city = context?.city?.trim() || null
@@ -434,19 +434,16 @@ export class WebMentionAdapter implements SourceAdapter {
       .filter((token) => token.length >= 3)
   }
 
-  private isWeakToken(token: string) {
-    return [
-      'клуб',
-      'бар',
-      'ооо',
-      'ип',
-      'the',
-      'and',
-      'для',
-      'или',
-      'это',
-      'как'
-    ].includes(token)
+  private isWeakToken(token: string, category?: string | null) {
+    const universal = ['ооо', 'ип', 'the', 'and', 'для', 'или', 'это', 'как']
+    if (universal.includes(token)) return true
+
+    const categoryTokens = ['клуб', 'бар', 'ресторан', 'кафе', 'салон']
+    if (categoryTokens.includes(token)) {
+      return !category?.toLowerCase().includes(token)
+    }
+
+    return false
   }
 
   private normalizeText(value: string) {
