@@ -1,6 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common'
 import { CompaniesService } from './companies.service'
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard'
+import { DemoProtectionGuard } from '../../common/guards/demo-protection.guard'
 import { CurrentUser } from '../../common/decorators/current-user.decorator'
 import { AuthUser } from '../../common/auth/auth-user.type'
 import { CreateCompanyDto } from './dto/create-company.dto'
@@ -35,6 +36,7 @@ export class CompaniesController {
   }
 
   @Delete(':id')
+  @UseGuards(DemoProtectionGuard)
   remove(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.companiesService.remove(user.id, id)
   }
@@ -45,6 +47,7 @@ export class CompaniesController {
   }
 
   @Delete(':id/aliases/:aliasId')
+  @UseGuards(DemoProtectionGuard)
   deleteAlias(@CurrentUser() user: AuthUser, @Param('id') id: string, @Param('aliasId') aliasId: string) {
     return this.companiesService.deleteAlias(user.id, id, aliasId)
   }
@@ -75,6 +78,7 @@ export class CompaniesController {
   }
 
   @Delete(':id/sources/:targetId')
+  @UseGuards(DemoProtectionGuard)
   deleteSourceTarget(@CurrentUser() user: AuthUser, @Param('id') id: string, @Param('targetId') targetId: string) {
     return this.companiesService.deleteSourceTarget(user.id, id, targetId)
   }
