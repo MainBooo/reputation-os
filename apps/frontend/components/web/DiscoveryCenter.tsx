@@ -10,6 +10,7 @@ import {
 } from '@/lib/api/companies'
 import { getCompanyMentions } from '@/lib/api/mentions'
 import { useWorkspaceAccess } from '@/lib/hooks/useWorkspaceAccess'
+import WebMonitoringToggle from '@/components/web/WebMonitoringToggle'
 
 const SCAN_INTERVALS = [
   { label: '4 часа', hours: 4, minutes: 240 },
@@ -188,6 +189,16 @@ export default function DiscoveryCenter({
 
   const webTargets = useMemo(() => targets.filter(isWebTarget), [targets])
 
+  const rootWebTarget = useMemo(
+    () => targets.find((t) => {
+      if (t.source?.platform !== 'WEB') return false
+      if (t.externalUrl) return false
+      const cfg = t.config && typeof t.config === 'object' && !Array.isArray(t.config) ? t.config as Record<string, unknown> : {}
+      return !cfg.origin
+    }) ?? null,
+    [targets]
+  )
+
   useEffect(() => {
     let mounted = true
 
@@ -336,7 +347,16 @@ export default function DiscoveryCenter({
       <Card className="overflow-hidden border-cyan-400/15 bg-[radial-gradient(circle_at_0%_0%,rgba(34,211,238,0.13),transparent_34%),radial-gradient(circle_at_100%_0%,rgba(168,85,247,0.12),transparent_28%),rgba(15,23,42,0.72)] p-5 shadow-[0_0_42px_rgba(59,130,246,0.12)]">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <div className="text-xl font-semibold text-white">WEB-мониторинг</div>
+            <div className="flex items-center justify-between gap-4">
+              <div className="text-xl font-semibold text-white">WEB-мониторинг</div>
+              {rootWebTarget && canWrite ? (
+                <WebMonitoringToggle
+                  companyId={companyId}
+                  rootTargetId={rootWebTarget.id}
+                  initialEnabled={rootWebTarget.syncMentionsEnabled !== false}
+                />
+              ) : null}
+            </div>
             <div className="mt-2 max-w-2xl text-sm leading-6 text-zinc-300">
               Система ищет внешние площадки, каталоги, статьи и страницы. Яндекс Карты и 2GIS остаются отдельными источниками отзывов.
             </div>
