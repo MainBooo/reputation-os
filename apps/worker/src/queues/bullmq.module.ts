@@ -6,19 +6,24 @@ import { DEFAULT_JOB_OPTIONS } from './job-options'
 
 const queueNames = Object.values(QUEUES)
 
+function createRedisConnection() {
+  const redisUrl = process.env.REDIS_URL || 'redis://127.0.0.1:6379'
+  return new IORedis(redisUrl, {
+    maxRetriesPerRequest: null,
+    enableReadyCheck: false
+  })
+}
+
 @Global()
 @Module({
   providers: [
     {
       provide: 'BULLMQ_CONNECTION',
-      useFactory: () => {
-        const redisUrl = process.env.REDIS_URL || 'redis://127.0.0.1:6379'
-
-        return new IORedis(redisUrl, {
-          maxRetriesPerRequest: null,
-          enableReadyCheck: false
-        })
-      }
+      useFactory: () => createRedisConnection()
+    },
+    {
+      provide: 'BULLMQ_WORKER_CONNECTION_FACTORY',
+      useValue: () => createRedisConnection()
     },
     ...queueNames.map((queueName) => ({
       provide: `QUEUE_${queueName}`,
@@ -32,6 +37,7 @@ const queueNames = Object.values(QUEUES)
   ],
   exports: [
     'BULLMQ_CONNECTION',
+    'BULLMQ_WORKER_CONNECTION_FACTORY',
     ...queueNames.map((queueName) => `QUEUE_${queueName}`)
   ]
 })
