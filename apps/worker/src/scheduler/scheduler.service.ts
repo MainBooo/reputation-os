@@ -193,7 +193,7 @@ export class SchedulerService implements OnModuleInit {
     for (const page of watchedPages) {
       const intervalMs = (page.checkIntervalMin || 60) * 60 * 1000
       await this.pageWatchQueue.add(
-        'page-watch',
+        JOBS.PAGE_WATCH,
         { watchedPageId: page.id },
         {
           ...CRON_JOB_OPTIONS,

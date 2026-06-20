@@ -201,6 +201,7 @@ model Company {
   mentions          Mention[]
   ratingSnapshots   RatingSnapshot[]
   watchedPages      WatchedPage[]
+  watchedPageItems  WatchedPageItem[]
   aiReplyDrafts     AIReplyDraft[]
   notificationRules NotificationRule[]
   subscription      Subscription?         @relation(fields: [subscriptionId], references: [id])
@@ -637,7 +638,30 @@ model WatchedPage {
   company      Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
   sourceTarget CompanySourceTarget? @relation(fields: [sourceTargetId], references: [id], onDelete: SetNull)
 
+  items        WatchedPageItem[]
+
   @@unique([companyId, url])
   @@index([companyId])
   @@index([enabled, lastCheckedAt])
+}
+
+model WatchedPageItem {
+  id            String   @id @default(cuid())
+  watchedPageId String
+  companyId     String
+  itemHash      String
+  itemType      String
+  title         String?
+  content       String?
+  author        String?
+  ratingValue   Int?
+  publishedAt   DateTime?
+  url           String?
+  createdAt     DateTime @default(now())
+
+  watchedPage WatchedPage @relation(fields: [watchedPageId], references: [id], onDelete: Cascade)
+  company     Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([watchedPageId, itemHash])
+  @@index([companyId])
 }
