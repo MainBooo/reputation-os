@@ -53,7 +53,8 @@ export class PageWatchExtractor {
       case 'REVIEWS':   return this.extractReviews(html, pageUrl)
       case 'ARTICLES':  return this.extractArticles(html, pageUrl)
       case 'FORUM':     return this.extractComments(html, pageUrl)
-      default:          return this.extractMentions(html, pageUrl)
+      case 'DIRECTORY': return []  // каталоги не парсим — только список организаций
+      default:          return []  // UNKNOWN = JS-сайт или нераспознанный, не создаём мусор
     }
   }
 

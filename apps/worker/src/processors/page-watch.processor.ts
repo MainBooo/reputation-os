@@ -86,6 +86,18 @@ export class PageWatchProcessor implements OnModuleInit, OnModuleDestroy {
       }
 
       const html = await response.text()
+
+      // Детект CAPTCHA / блокировки
+      const isCaptcha = /yandex smartcaptcha|smartcaptcha\.yandex\.net|captcha-container|you are being blocked|вы не робот|подтвердите, что запросы отправляли вы/i.test(html)
+      if (isCaptcha) {
+        await this.prisma.watchedPage.update({
+          where: { id: watchedPageId },
+          data: { lastCheckedAt: new Date(), lastError: 'CAPTCHA_DETECTED' }
+        })
+        console.warn('[PageWatch] CAPTCHA detected for ' + page.url)
+        return
+      }
+
       const text = this.extractText(html)
       const newHash = this.hashText(text)
       const changed = newHash !== page.contentHash
@@ -144,7 +156,7 @@ export class PageWatchProcessor implements OnModuleInit, OnModuleDestroy {
 
           // Создаём Mention
           const content = item.content || item.title || ''
-          if (!content || content.length < 10) continue
+          if (!content || content.length < 50) continue
 
           const normalizedContent = normalizeText(content)
           const mentionHash = this.hashText(
