@@ -16,7 +16,8 @@ export class SchedulerService implements OnModuleInit {
     @Inject(`QUEUE_${QUEUES.MENTIONS_SYNC}`) private readonly mentionsSyncQueue: Queue,
     @Inject(`QUEUE_${QUEUES.RATING_REFRESH}`) private readonly ratingRefreshQueue: Queue,
     @Inject(`QUEUE_${QUEUES.RECONCILE}`) private readonly reconcileQueue: Queue,
-    @Inject(`QUEUE_${QUEUES.ALERT_CHECK}`) private readonly alertCheckQueue: Queue
+    @Inject(`QUEUE_${QUEUES.ALERT_CHECK}`) private readonly alertCheckQueue: Queue,
+    @Inject(`QUEUE_${QUEUES.PAGE_WATCH}`) private readonly pageWatchQueue: Queue
   ) {}
 
   async onModuleInit() {
@@ -185,8 +186,27 @@ export class SchedulerService implements OnModuleInit {
       })
     }
 
+    const watchedPages = await prismaAny.watchedPage.findMany({
+      where: { enabled: true }
+    }).catch(() => [])
+
+    for (const page of watchedPages) {
+      const intervalMs = (page.checkIntervalMin || 60) * 60 * 1000
+      await this.pageWatchQueue.add(
+        'page-watch',
+        { watchedPageId: page.id },
+        {
+          ...CRON_JOB_OPTIONS,
+          repeat: { every: intervalMs },
+          jobId: `page-watch:${page.id}`
+        }
+      ).catch((error) => {
+        this.logger.warn(`Failed to ensure page-watch cron pageId=${page.id}: ${error?.message || error}`)
+      })
+    }
+
     this.logger.log(
-      `Scheduler initialized reviewCronTargets=${reviewTargets.length} webCronCompanies=${webTargetsByCompany.size} alertCheckEveryMinutes=5`
+      `Scheduler initialized reviewCronTargets=${reviewTargets.length} webCronCompanies=${webTargetsByCompany.size} alertCheckEveryMinutes=5 watchedPages=${watchedPages.length}`
     )
   }
 }

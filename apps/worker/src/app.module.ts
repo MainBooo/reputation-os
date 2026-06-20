@@ -16,6 +16,7 @@ import { ReconcileProcessor } from './processors/reconcile.processor'
 import { NotificationsProcessor } from './processors/notifications.processor'
 import { AlertsCheckProcessor } from './processors/alerts-check.processor'
 import { TelegramNotificationsModule } from './telegram/telegram-notifications.module'
+import { PageWatchProcessor } from './processors/page-watch.processor'
 
 @Module({
   imports: [ConfigModule.forRoot({ isGlobal: true, envFilePath: ['apps/worker/.env', '.env'] }), PrismaModule, BullmqModule, TelegramNotificationsModule],
@@ -32,7 +33,8 @@ import { TelegramNotificationsModule } from './telegram/telegram-notifications.m
     RatingRefreshProcessor,
     ReconcileProcessor,
     NotificationsProcessor,
-    AlertsCheckProcessor
+    AlertsCheckProcessor,
+    PageWatchProcessor
   ]
 })
 export class AppModule {}
