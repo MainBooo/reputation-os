@@ -1258,6 +1258,30 @@ export class CompaniesService {
 
     if (createdTarget.source?.platform === 'WEB') {
       await this.refreshWebMentionsRepeat(companyId)
+
+      if (createdTarget.externalUrl) {
+        try {
+          const domain = new URL(createdTarget.externalUrl).hostname.replace(/^www\./, '')
+          await this.prisma.watchedPage.upsert({
+            where: { companyId_url: { companyId, url: createdTarget.externalUrl } },
+            create: {
+              companyId,
+              sourceTargetId: createdTarget.id,
+              url: createdTarget.externalUrl,
+              domain,
+              pageType: 'UNKNOWN',
+              enabled: true,
+              checkIntervalMin: 1440
+            },
+            update: {
+              sourceTargetId: createdTarget.id,
+              enabled: true
+            }
+          })
+        } catch (e) {
+          // ignore invalid URL
+        }
+      }
     }
 
     return createdTarget
@@ -1312,6 +1336,39 @@ export class CompaniesService {
 
     if (updatedTarget.source?.platform === 'WEB') {
       await this.refreshWebMentionsRepeat(companyId)
+
+      const url = updatedTarget.externalUrl
+      const isMonitored = updatedTarget.isActive && updatedTarget.syncMentionsEnabled
+      if (url) {
+        try {
+          const domain = new URL(url).hostname.replace(/^www\./, '')
+          if (isMonitored) {
+            await this.prisma.watchedPage.upsert({
+              where: { companyId_url: { companyId, url } },
+              create: {
+                companyId,
+                sourceTargetId: updatedTarget.id,
+                url,
+                domain,
+                pageType: 'UNKNOWN',
+                enabled: true,
+                checkIntervalMin: 1440
+              },
+              update: {
+                sourceTargetId: updatedTarget.id,
+                enabled: true
+              }
+            })
+          } else {
+            await this.prisma.watchedPage.updateMany({
+              where: { companyId, url },
+              data: { enabled: false }
+            })
+          }
+        } catch (e) {
+          // ignore invalid URL
+        }
+      }
     }
 
     return updatedTarget
@@ -1333,6 +1390,18 @@ export class CompaniesService {
 
     if (!target || target.companyId !== companyId) {
       throw new NotFoundException('Company source target not found')
+    }
+
+    if (target.source?.platform === 'WEB' && target.externalUrl) {
+      await this.prisma.watchedPage.deleteMany({
+        where: { companyId, url: target.externalUrl }
+      })
+    }
+
+    if (target.source?.platform === 'WEB' && target.externalUrl) {
+      await this.prisma.watchedPage.deleteMany({
+        where: { companyId, url: target.externalUrl }
+      })
     }
 
     const deletedTarget = await this.prisma.companySourceTarget.delete({
