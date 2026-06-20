@@ -924,6 +924,18 @@ export class CompaniesService {
             publishedAt: true,
             createdAt: true
           }
+        },
+        watchedPages: {
+          take: 1,
+          select: {
+            id: true,
+            pageType: true,
+            lastCheckedAt: true,
+            lastChangedAt: true,
+            lastError: true,
+            enabled: true,
+            checkIntervalMin: true
+          }
         }
       },
       orderBy: { createdAt: 'desc' }
@@ -1038,7 +1050,8 @@ export class CompaniesService {
         lastMentionAt: lastMention?.publishedAt || null,
         relevanceScore: relevance.score,
         relevanceLabel: relevance.label,
-        relevanceReasons: relevanceReasons(target)
+        relevanceReasons: relevanceReasons(target),
+        watchedPage: target.watchedPages?.[0] || null
       }
     })
   }

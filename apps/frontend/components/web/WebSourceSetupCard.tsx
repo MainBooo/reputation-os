@@ -28,6 +28,13 @@ type SourceTarget = {
     type?: string
     name?: string
   }
+  watchedPage?: {
+    pageType?: string | null
+    lastCheckedAt?: string | null
+    lastChangedAt?: string | null
+    lastError?: string | null
+    enabled?: boolean
+  } | null
 }
 
 const INTERVALS = [
@@ -337,6 +344,22 @@ export default function WebSourceSetupCard({ companyId }: { companyId: string })
                           {deletingId === target.id ? 'Удаляем…' : 'Удалить'}
                         </button>
                       </div>
+                      {target.watchedPage ? (
+                        <div className="mt-2 w-full space-y-1 rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 text-xs text-zinc-400">
+                          {target.watchedPage.pageType && target.watchedPage.pageType !== 'UNKNOWN' ? (
+                            <div>Тип: <span className="text-zinc-300">{target.watchedPage.pageType}</span></div>
+                          ) : null}
+                          {target.watchedPage.lastCheckedAt ? (
+                            <div>Проверка: <span className="text-zinc-300">{new Date(target.watchedPage.lastCheckedAt).toLocaleString('ru')}</span></div>
+                          ) : null}
+                          {target.watchedPage.lastChangedAt ? (
+                            <div>Изменилась: <span className="text-zinc-300">{new Date(target.watchedPage.lastChangedAt).toLocaleString('ru')}</span></div>
+                          ) : null}
+                          {target.watchedPage.lastError ? (
+                            <div className="text-red-400">Ошибка: {target.watchedPage.lastError}</div>
+                          ) : null}
+                        </div>
+                      ) : null}
                     </div>
                   )
                 })}
