@@ -218,6 +218,24 @@ export default function DiscoveryCenter({
   const activeTargets = useMemo(() => webTargets.filter((target) => isActiveTarget(target) && Boolean(target.externalUrl)), [webTargets])
   const discoveredTargets = useMemo(() => webTargets.filter(isDiscoveredTarget), [webTargets])
 
+  const groupedDiscovered = useMemo(() => {
+    const map = new Map<string, SourceTarget[]>()
+    for (const target of discoveredTargets) {
+      const host = hostOf(target.externalUrl)
+      const items = map.get(host) || []
+      items.push(target)
+      map.set(host, items)
+    }
+    return Array.from(map.entries()).map(([host, items]) => ({
+      ...items[0],
+      host,
+      items,
+      pagesCount: items.length,
+      bestUrl: items[0]?.externalUrl || null,
+      bestTitle: items[0]?.displayName || items[0]?.externalUrl || host
+    }))
+  }, [discoveredTargets])
+
   const groupedActive = useMemo(() => {
     const map = new Map<string, SourceTarget[]>()
 
@@ -242,7 +260,7 @@ export default function DiscoveryCenter({
   }, [activeTargets])
 
   const effectiveGroupedActive = serverActiveGroups.length ? serverActiveGroups : groupedActive
-  const effectiveDiscovered = serverDiscovered.length ? serverDiscovered : discoveredTargets
+  const effectiveDiscovered = serverDiscovered.length ? serverDiscovered : groupedDiscovered
 
   const visibleActive = showAllActive ? effectiveGroupedActive : effectiveGroupedActive.slice(0, 5)
   const visibleDiscovered = showAllDiscovered ? effectiveDiscovered : effectiveDiscovered.slice(0, 4)
@@ -548,14 +566,17 @@ export default function DiscoveryCenter({
                       {sourceTitle(target)}
                     </div>
 
-                    <div className="mt-1 text-sm text-zinc-300">{host}</div>
+                    <div className="mt-1 text-sm text-zinc-300 truncate">{(target as any).bestUrl || target.externalUrl || host}</div>
 
-                    <div className={`mt-3 inline-flex w-fit rounded-full border px-2.5 py-1 text-[11px] font-semibold ${relevanceClass(label)}`}>
-                      {label} релевантность
-                    </div>
-
-                    <div className="mt-2 text-xs text-zinc-300">
-                      Найдено страниц: 1
+                    <div className="mt-3 flex flex-wrap gap-2 items-center">
+                      <div className={`inline-flex w-fit rounded-full border px-2.5 py-1 text-[11px] font-semibold ${relevanceClass(label)}`}>
+                        {label} релевантность
+                      </div>
+                      {(target as any).pagesCount > 1 ? (
+                        <div className="inline-flex rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px] text-zinc-300">
+                          {(target as any).pagesCount} страниц
+                        </div>
+                      ) : null}
                     </div>
                       <div className={canWrite ? "mt-auto grid grid-cols-3 gap-2 pt-4" : "mt-auto grid grid-cols-1 gap-2 pt-4"}>
                         {target.externalUrl ? (
