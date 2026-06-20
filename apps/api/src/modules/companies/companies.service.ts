@@ -1154,13 +1154,31 @@ export class CompaniesService {
       return String(a.host).localeCompare(String(b.host))
     })
 
-    const discovered = discoveredTargets
-      .filter((target: any) => Boolean(target.externalUrl))
-      .sort((a: any, b: any) => {
-        const byRelevance = Number(b.relevanceScore || 0) - Number(a.relevanceScore || 0)
-        if (byRelevance !== 0) return byRelevance
-        return String(a.displayName || a.externalUrl || '').localeCompare(String(b.displayName || b.externalUrl || ''))
-      })
+    const discoveredByHost = new Map<string, any[]>()
+    for (const target of discoveredTargets.filter((t: any) => Boolean(t.externalUrl))) {
+      const host = this.webSourceHost(target.externalUrl) || 'unknown'
+      const items = discoveredByHost.get(host) || []
+      items.push(target)
+      discoveredByHost.set(host, items)
+    }
+
+    const discovered = Array.from(discoveredByHost.entries()).map(([host, items]) => {
+      const best = items.slice().sort((a: any, b: any) =>
+        Number(b.relevanceScore || 0) - Number(a.relevanceScore || 0)
+      )[0]
+      return {
+        ...best,
+        host,
+        items,
+        pagesCount: items.length,
+        bestUrl: best.externalUrl,
+        bestTitle: best.displayName || best.externalUrl || host
+      }
+    }).sort((a: any, b: any) => {
+      const byRelevance = Number(b.relevanceScore || 0) - Number(a.relevanceScore || 0)
+      if (byRelevance !== 0) return byRelevance
+      return String(a.host).localeCompare(String(b.host))
+    })
 
     const latestSignals = await this.prisma.mention.findMany({
       where: {
