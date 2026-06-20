@@ -78,7 +78,6 @@ export class CompaniesController {
   }
 
   @Delete(':id/sources/:targetId')
-  @UseGuards(DemoProtectionGuard)
   deleteSourceTarget(@CurrentUser() user: AuthUser, @Param('id') id: string, @Param('targetId') targetId: string) {
     return this.companiesService.deleteSourceTarget(user.id, id, targetId)
   }
