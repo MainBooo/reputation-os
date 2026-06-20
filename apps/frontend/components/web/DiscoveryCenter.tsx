@@ -318,6 +318,38 @@ export default function DiscoveryCenter({
     }
   }
 
+  async function patchGroup(target: SourceTarget, patch: Partial<SourceTarget>) {
+    const items: SourceTarget[] = (target as any).items?.length > 1 ? (target as any).items : [target]
+    setBusyId(target.id)
+    setMessage(null)
+    try {
+      await Promise.all(items.map((item) =>
+        updateCompanySourceTarget(companyId, item.id, {
+          isActive: patch.isActive,
+          syncMentionsEnabled: patch.syncMentionsEnabled,
+          syncReviewsEnabled: false,
+          syncRatingsEnabled: false,
+          config: {
+            ...(item.config || {}),
+            ...(patch.config || {}),
+            scanIntervalMinutes: intervalMinutes,
+            scanIntervalHours: Math.round(intervalMinutes / 60)
+          }
+        })
+      ))
+      setTargets((prev) => prev.map((item) =>
+        items.some((g) => g.id === item.id)
+          ? { ...item, isActive: patch.isActive ?? item.isActive, syncMentionsEnabled: patch.syncMentionsEnabled ?? item.syncMentionsEnabled }
+          : item
+      ))
+      router.refresh()
+    } catch {
+      setMessage('Не удалось обновить источник.')
+    } finally {
+      setBusyId(null)
+    }
+  }
+
   async function removeTarget(target: SourceTarget) {
     if (!confirm('Удалить источник из мониторинга?')) return
 
@@ -599,7 +631,7 @@ export default function DiscoveryCenter({
                             <button
                               type="button"
                               disabled={busy}
-                              onClick={() => patchTarget(target, { isActive: true, syncMentionsEnabled: true })}
+                              onClick={() => patchGroup(target, { isActive: true, syncMentionsEnabled: true })}
                               className="inline-flex h-10 items-center justify-center rounded-2xl border border-cyan-300/35 bg-cyan-300/90 px-3 text-sm font-bold text-slate-950 transition hover:bg-cyan-200 hover:shadow-[0_0_22px_rgba(103,232,249,0.24)] disabled:opacity-60"
                             >
                               {busy ? <Spinner /> : 'Добавить'}
@@ -609,7 +641,7 @@ export default function DiscoveryCenter({
                               type="button"
                               disabled={busy}
                               onClick={() =>
-                                patchTarget(target, {
+                                patchGroup(target, {
                                   isActive: false,
                                   syncMentionsEnabled: false,
                                   config: {
