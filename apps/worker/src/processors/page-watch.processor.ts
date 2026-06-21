@@ -178,6 +178,8 @@ export class PageWatchProcessor implements OnModuleInit, OnModuleDestroy {
           const isOld = !item.publishedAt || (Date.now() - item.publishedAt.getTime()) > SEVEN_DAYS_MS
           const mentionStatus = isOld ? 'ARCHIVED' : 'NEW'
 
+          console.log(`[PageWatch] item publishedAt=${item.publishedAt?.toISOString() ?? 'null'} status=${mentionStatus} url=${page.url}`)
+
           await this.prisma.mention.create({
             data: {
               companyId: page.companyId,
