@@ -207,14 +207,6 @@ export default function WebSourceSetupCard({ companyId }: { companyId: string })
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={handleStartSync}
-          disabled={syncing}
-          className="inline-flex h-10 items-center justify-center rounded-xl border border-violet-400/40 bg-cyan-400/10 px-4 text-sm font-semibold text-blue-100 transition hover:bg-cyan-400/20 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {syncing ? 'Запускаем…' : 'Запустить сканирование'}
-        </button>
       </div>
 
       <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_auto_auto_auto] lg:items-center">
