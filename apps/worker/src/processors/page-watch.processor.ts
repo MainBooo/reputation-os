@@ -88,7 +88,7 @@ export class PageWatchProcessor implements OnModuleInit, OnModuleDestroy {
       const html = await response.text()
 
       // Детект CAPTCHA / блокировки
-      const isCaptcha = /yandex smartcaptcha|smartcaptcha\.yandex\.net|captcha-container|you are being blocked|вы не робот|подтвердите, что запросы отправляли вы/i.test(html)
+      const isCaptcha = /yandex smartcaptcha|smartcaptcha\.yandex\.net|captcha-container|you are being blocked|вы не робот|подтвердите, что запросы отправляли вы|вы робот|capt4a=|captcha-form/i.test(html)
       if (isCaptcha) {
         await this.prisma.watchedPage.update({
           where: { id: watchedPageId },
