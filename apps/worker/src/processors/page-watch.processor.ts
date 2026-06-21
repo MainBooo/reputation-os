@@ -173,6 +173,11 @@ export class PageWatchProcessor implements OnModuleInit, OnModuleDestroy {
             ? (item.ratingValue <= 2 ? 'NEGATIVE' : item.ratingValue >= 4 ? 'POSITIVE' : 'NEUTRAL')
             : classifySentiment(normalizedContent)
 
+          // Определяем статус: если дата старше 7 дней или неизвестна — ARCHIVED (не спамим уведомлениями)
+          const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000
+          const isOld = !item.publishedAt || (Date.now() - item.publishedAt.getTime()) > SEVEN_DAYS_MS
+          const mentionStatus = isOld ? 'ARCHIVED' : 'NEW'
+
           await this.prisma.mention.create({
             data: {
               companyId: page.companyId,
@@ -185,10 +190,10 @@ export class PageWatchProcessor implements OnModuleInit, OnModuleDestroy {
               content,
               normalizedContent,
               author: item.author || null,
-              publishedAt: item.publishedAt || new Date(),
+              publishedAt: item.publishedAt ?? new Date(),
               ratingValue: item.ratingValue ?? null,
               sentiment,
-              status: 'NEW',
+              status: mentionStatus,
               hash: mentionHash,
               companySourceTargetId: page.sourceTargetId || null
             }

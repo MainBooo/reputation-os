@@ -14,73 +14,7 @@ export type ExtractedItem = {
 
 export type PageType = 'REVIEWS' | 'ARTICLES' | 'FORUM' | 'DIRECTORY' | 'UNKNOWN'
 
-// Русские названия месяцев
-const RU_MONTHS: Record<string, number> = {
-  'янв': 0, 'фев': 1, 'мар': 2, 'апр': 3, 'май': 4, 'июн': 5,
-  'июл': 6, 'авг': 7, 'сен': 8, 'окт': 9, 'ноя': 10, 'дек': 11,
-  'января': 0, 'февраля': 1, 'марта': 2, 'апреля': 3, 'мая': 4, 'июня': 5,
-  'июля': 6, 'августа': 7, 'сентября': 8, 'октября': 9, 'ноября': 10, 'декабря': 11
-}
-
 export class PageWatchExtractor {
-  // ─── Универсальное извлечение даты ───────────────────────────────────────
-
-  extractDate(blockHtml: string, pageHtml?: string): Date | null {
-    // 1. itemprop="datePublished" content="ISO" — otzovik и другие
-    const itemprop = blockHtml.match(/itemprop=["']datePublished["'][^>]*content=["']([^"']+)["']/)
-      || blockHtml.match(/content=["']([^"']+)["'][^>]*itemprop=["']datePublished["']/)
-    if (itemprop) {
-      const d = new Date(itemprop[1])
-      if (!isNaN(d.getTime())) return d
-    }
-
-    // 2. <time datetime="ISO">
-    const timeTag = blockHtml.match(/<time[^>]+datetime=["']([^"']+)["']/)
-    if (timeTag) {
-      const d = new Date(timeTag[1])
-      if (!isNaN(d.getTime())) return d
-    }
-
-    // 3. data-date / data-published / data-time атрибуты
-    const dataAttr = blockHtml.match(/data-(?:date|published|time|created)=["'](20\d{2}-\d{2}-\d{2}[^"']*)["']/)
-    if (dataAttr) {
-      const d = new Date(dataAttr[1])
-      if (!isNaN(d.getTime())) return d
-    }
-
-    // 4. ISO дата в тексте блока YYYY-MM-DD
-    const isoDate = blockHtml.match(/(20\d{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01]))/)
-    if (isoDate) {
-      const d = new Date(isoDate[1])
-      if (!isNaN(d.getTime())) return d
-    }
-
-    // 5. Русский текст "24 апр 2026" / "24 апреля 2026"
-    const ruMatch = blockHtml.match(/(\d{1,2})\s+(янв(?:аря)?|фев(?:раля)?|мар(?:та)?|апр(?:еля)?|май|мая|июн(?:я)?|июл(?:я)?|авг(?:уста)?|сен(?:тября)?|окт(?:ября)?|ноя(?:бря)?|дек(?:абря)?)\s+(20\d{2})/i)
-    if (ruMatch) {
-      const day = parseInt(ruMatch[1])
-      const monthKey = ruMatch[2].toLowerCase().slice(0, 3)
-      const year = parseInt(ruMatch[3])
-      const month = RU_MONTHS[monthKey] ?? RU_MONTHS[ruMatch[2].toLowerCase()]
-      if (month !== undefined) {
-        const d = new Date(year, month, day)
-        if (!isNaN(d.getTime())) return d
-      }
-    }
-
-    // 6. Поиск в глобальном HTML страницы (OpenGraph)
-    if (pageHtml) {
-      const og = pageHtml.match(/property=["']article:published_time["'][^>]*content=["']([^"']+)["']/)
-        || pageHtml.match(/content=["']([^"']+)["'][^>]*property=["']article:published_time["']/)
-      if (og) {
-        const d = new Date(og[1])
-        if (!isNaN(d.getTime())) return d
-      }
-    }
-
-    return null
-  }
-
   // ─── Определение типа страницы ───────────────────────────────────────────
 
   detectPageType(html: string, url: string): PageType {
@@ -119,8 +53,8 @@ export class PageWatchExtractor {
       case 'REVIEWS':   return this.extractReviews(html, pageUrl)
       case 'ARTICLES':  return this.extractArticles(html, pageUrl)
       case 'FORUM':     return this.extractComments(html, pageUrl)
-      case 'DIRECTORY': return []
-      default:          return []
+      case 'DIRECTORY': return []  // каталоги не парсим — только список организаций
+      default:          return []  // UNKNOWN = JS-сайт или нераспознанный, не создаём мусор
     }
   }
 
@@ -134,18 +68,14 @@ export class PageWatchExtractor {
     for (const block of jsonldBlocks) {
       try {
         const json = JSON.parse(block.replace(/<script[^>]*>|<\/script>/gi, ''))
-        const reviews = Array.isArray(json)
-          ? json.flatMap((j: any) => j['@type'] === 'Review' ? [j] : (j.review || []))
-          : (json['@type'] === 'Review' ? [json] : (json.review || []))
+        const reviews = Array.isArray(json) ? json.flatMap((j: any) => j['@type'] === 'Review' ? [j] : (j.review || [])) : (json['@type'] === 'Review' ? [json] : (json.review || []))
         for (const r of reviews) {
           const content = r.reviewBody || r.description || ''
           if (!content || content.length < 10) continue
           const author = r.author?.name || r.author || ''
           const rating = r.reviewRating?.ratingValue ? Number(r.reviewRating.ratingValue) : undefined
-          const publishedAt = r.datePublished
-            ? new Date(r.datePublished)
-            : this.extractDate(block, html)
-          items.push(this.makeItem('review', content, author, rating, publishedAt ?? undefined, pageUrl))
+          const publishedAt = r.datePublished ? new Date(r.datePublished) : new Date()
+          items.push(this.makeItem('review', content, author, rating, publishedAt, pageUrl))
         }
       } catch {}
     }
@@ -157,8 +87,7 @@ export class PageWatchExtractor {
     for (const block of reviewBodies) {
       const content = this.stripTags(block)
       if (content.length < 15) continue
-      const publishedAt = this.extractDate(block, html)
-      items.push(this.makeItem('review', content, undefined, undefined, publishedAt ?? undefined, pageUrl))
+      items.push(this.makeItem('review', content, undefined, undefined, new Date(), pageUrl))
     }
 
     if (items.length > 0) return items.slice(0, 50)
@@ -168,8 +97,7 @@ export class PageWatchExtractor {
     for (const block of blocks) {
       const text = this.stripTags(block).trim()
       if (text.length < 20 || text.length > 1000) continue
-      const publishedAt = this.extractDate(block, html)
-      items.push(this.makeItem('review', text, undefined, undefined, publishedAt ?? undefined, pageUrl))
+      items.push(this.makeItem('review', text, undefined, undefined, new Date(), pageUrl))
     }
 
     return items.slice(0, 50)
@@ -191,11 +119,9 @@ export class PageWatchExtractor {
           const title = a.headline || a.name || ''
           const content = a.description || a.articleBody || title
           if (!content || content.length < 10) continue
-          const publishedAt = a.datePublished
-            ? new Date(a.datePublished)
-            : this.extractDate(block, html)
+          const publishedAt = a.datePublished ? new Date(a.datePublished) : new Date()
           const author = a.author?.name || a.author || ''
-          items.push(this.makeItem('article', content, author, undefined, publishedAt ?? undefined, a.url || pageUrl, title))
+          items.push(this.makeItem('article', content, author, undefined, publishedAt, a.url || pageUrl, title))
         }
       } catch {}
     }
@@ -209,8 +135,7 @@ export class PageWatchExtractor {
       const title = titleMatch ? this.stripTags(titleMatch[0]).trim() : ''
       const content = this.stripTags(block).trim().slice(0, 500)
       if (content.length < 30) continue
-      const publishedAt = this.extractDate(block, html)
-      items.push(this.makeItem('article', content, undefined, undefined, publishedAt ?? undefined, pageUrl, title))
+      items.push(this.makeItem('article', content, undefined, undefined, new Date(), pageUrl, title))
     }
 
     return items.slice(0, 30)
@@ -224,8 +149,7 @@ export class PageWatchExtractor {
     for (const block of blocks) {
       const text = this.stripTags(block).trim()
       if (text.length < 20 || text.length > 1000) continue
-      const publishedAt = this.extractDate(block, html)
-      items.push(this.makeItem('comment', text, undefined, undefined, publishedAt ?? undefined, pageUrl))
+      items.push(this.makeItem('comment', text, undefined, undefined, new Date(), pageUrl))
     }
     return items.slice(0, 50)
   }
@@ -233,6 +157,7 @@ export class PageWatchExtractor {
   // ─── UNKNOWN / DIRECTORY ─────────────────────────────────────────────────
 
   private extractMentions(html: string, pageUrl: string): ExtractedItem[] {
+    // Просто берём первые 500 символов основного текста как одно упоминание
     const text = this.stripTags(
       html
         .replace(/<script[\s\S]*?<\/script>/gi, '')
@@ -243,7 +168,7 @@ export class PageWatchExtractor {
     ).replace(/\s+/g, ' ').trim().slice(0, 500)
 
     if (text.length < 30) return []
-    return [this.makeItem('mention', text, undefined, undefined, undefined, pageUrl)]
+    return [this.makeItem('mention', text, undefined, undefined, new Date(), pageUrl)]
   }
 
   // ─── YandexGPT fallback для определения типа ─────────────────────────────
