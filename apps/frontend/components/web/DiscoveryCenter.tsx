@@ -411,15 +411,7 @@ export default function DiscoveryCenter({
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={handleStartSync}
-            disabled={syncing}
-            className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl border border-blue-300/30 bg-cyan-400/10 px-5 text-sm font-semibold text-blue-100 shadow-[0_0_24px_rgba(34,211,238,0.12)] transition hover:bg-cyan-400/20 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {syncing ? <Spinner /> : '✧'}
-            {syncing ? 'Сканируем…' : 'Запустить сканирование'}
-          </button>
+          
         </div>
 
         <div className="mt-5 grid gap-3 md:grid-cols-4">
