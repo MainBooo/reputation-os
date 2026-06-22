@@ -125,15 +125,17 @@ export class TwoGisAdapter {
 
     const browser = await chromium.launch({
       headless: true,
-      args: ['--no-sandbox', '--disable-dev-shm-usage']
+      executablePath: '/root/.cache/ms-playwright/chromium-1208/chrome-linux64/chrome',
+      args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-blink-features=AutomationControlled']
     })
 
     try {
-      const page = await browser.newPage({
+      const context = await browser.newContext({
         viewport: { width: 1440, height: 1200 },
-        userAgent:
-          'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36'
       })
+      await context.addInitScript(() => { Object.defineProperty(navigator, 'webdriver', { get: () => undefined }) })
+      const page = await context.newPage()
 
       try {
         await page.goto(normalizedUrl, { waitUntil: 'domcontentloaded', timeout: 45000 })

@@ -191,16 +191,23 @@ export class AlertsService {
       const mentions = await prismaAny.mention.findMany({
         where: {
           createdAt: { gt: lookbackSince },
-          publishedAt: { gte: minPublishedAt },
           ...(rule.companyId ? { companyId: rule.companyId } : {}),
           company: { workspaceId: rule.workspaceId, isActive: true },
+          NOT: {
+            telegramDeliveries: {
+              some: {
+                userId: { in: recipients.map((r: any) => r.id) },
+                status: 'SENT',
+              },
+            },
+          },
         },
         include: {
           source: { select: { platform: true } },
           company: { select: { id: true, name: true } },
         },
         orderBy: { createdAt: 'asc' },
-        take: 20,
+        take: 100,
       })
 
       for (const mention of mentions) {
