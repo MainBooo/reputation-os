@@ -631,6 +631,24 @@ export class CompaniesService {
       this.logger.log(`[CompanyCreate] skip 2gis init companyId=${company.id} reason=no_two_gis_url`)
     }
 
+    if (!allowedPlatforms.length || allowedPlatforms.includes('WEB')) {
+      const webSource = await this.ensureWebSource(dto.workspaceId)
+      const existingWebTarget = await this.prisma.companySourceTarget.findFirst({
+        where: { companyId: company.id, sourceId: webSource.id, externalUrl: null }
+      })
+      if (!existingWebTarget) {
+        await this.prisma.companySourceTarget.create({
+          data: {
+            companyId: company.id,
+            sourceId: webSource.id,
+            syncMentionsEnabled: true,
+            isActive: true
+          }
+        })
+        this.logger.log(`[WebInit] root target created companyId=${company.id}`)
+      }
+    }
+
     return company
   }
 
