@@ -82,17 +82,18 @@ export class ReviewsSyncProcessor implements OnModuleInit, OnModuleDestroy {
 
         itemsDiscovered += mentions.length
 
+        const externalIds = mentions.map((m: any) => m.externalMentionId).filter(Boolean)
+        const existingIds = new Set(
+          externalIds.length > 0
+            ? (await this.prisma.mention.findMany({
+                where: { companyId, platform: target.source.platform, externalMentionId: { in: externalIds } },
+                select: { externalMentionId: true }
+              })).map((m) => m.externalMentionId)
+            : []
+        )
+
         for (const item of mentions) {
-          const existingMention = item.externalMentionId
-            ? await this.prisma.mention.findFirst({
-                where: {
-                  companyId,
-                  platform: target.source.platform,
-                  externalMentionId: item.externalMentionId
-                },
-                select: { id: true }
-              })
-            : null
+          const isExisting = item.externalMentionId ? existingIds.has(item.externalMentionId) : false
 
           await this.mentionService.persistExternalMention({
             companyId,
@@ -111,7 +112,7 @@ export class ReviewsSyncProcessor implements OnModuleInit, OnModuleDestroy {
             companySourceTargetId: target.id
           })
 
-          if (existingMention) {
+          if (isExisting) {
             itemsUpdated += 1
           } else {
             itemsCreated += 1

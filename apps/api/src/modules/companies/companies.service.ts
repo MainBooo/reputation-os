@@ -517,20 +517,11 @@ export class CompaniesService {
         },
         _count: { select: { mentions: true, ratingSnapshots: true } }
       },
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: 'desc' },
+      take: 200
     })
 
-    const logoRows = await this.prisma.$queryRawUnsafe<Array<{ id: string; logoUrl: string | null }>>(
-      'select "id", "logoUrl" from "Company" where "id" = any($1)',
-      companies.map((company) => company.id)
-    )
-
-    const logoById = new Map(logoRows.map((row) => [row.id, row.logoUrl]))
-
-    return companies.map((company) => ({
-      ...company,
-      logoUrl: logoById.get(company.id) || null
-    }))
+    return companies
   }
 
   async create(userId: string, dto: CreateCompanyDto) {
@@ -668,15 +659,7 @@ export class CompaniesService {
 
     await this.assertWorkspaceAccess(userId, company.workspaceId, 'read')
 
-    const logoRows = await this.prisma.$queryRawUnsafe<Array<{ logoUrl: string | null }>>(
-      'select "logoUrl" from "Company" where "id" = $1 limit 1',
-      id
-    )
-
-    return {
-      ...company,
-      logoUrl: logoRows[0]?.logoUrl || null
-    }
+    return company
   }
 
   async update(userId: string, id: string, dto: UpdateCompanyDto) {
