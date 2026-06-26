@@ -9,8 +9,13 @@ async function bootstrap() {
 
   app.setGlobalPrefix('api')
 
+  const allowedOrigins = (process.env.FRONTEND_URL || 'http://localhost:4011')
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean)
+
   app.enableCors({
-    origin: ['http://localhost:4011'],
+    origin: allowedOrigins,
     credentials: true
   })
 

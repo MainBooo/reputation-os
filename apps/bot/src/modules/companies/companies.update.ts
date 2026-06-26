@@ -1,0 +1,538 @@
+import { Logger, UseGuards } from '@nestjs/common'
+import { Action, Command, Ctx, On, Update, Hears} from 'nestjs-telegraf'
+import { Context, Markup } from 'telegraf'
+import { CompaniesService } from './companies.service'
+import { TelegramAuthGuard } from '../../common/guards/telegram-auth.guard'
+import { PlanFeatureGuard } from '../../common/guards/plan-feature.guard'
+import { WorkspaceRoleGuard } from '../../common/guards/workspace-role.guard'
+import { formatDistanceToNow } from '../../common/utils/date.util'
+
+// Простое in-memory хранилище состояния wizard (заменить на Redis при масштабировании)
+const wizardState = new Map<number, { step: number; name?: string; platforms?: string[]; workspaceId?: string; yandexUrl?: string; twoGisUrl?: string; keywords?: string[]; urlStep?: string }>()
+const deleteConfirm = new Map<number, string>() // chatId → companyId
+
+@Update()
+@UseGuards(TelegramAuthGuard, PlanFeatureGuard)
+export class CompaniesUpdate {
+  private readonly logger = new Logger(CompaniesUpdate.name)
+
+  constructor(private readonly companiesService: CompaniesService) {}
+
+  // ── /companies ──────────────────────────────────────────────
+  @Command('companies')
+  async onCompanies(@Ctx() ctx: Context & { state: { user: any } }) {
+    const user = ctx.state.user
+    const companies = await this.companiesService.getCompaniesForUser(user.id)
+
+    if (companies.length === 0) {
+      await ctx.reply(
+        '📋 У вас пока нет компаний.\n\nНажмите кнопку ниже, чтобы добавить первую.',
+        Markup.inlineKeyboard([
+          [Markup.button.callback('➕ Добавить компанию', 'company:add')],
+        ]),
+      )
+      return
+    }
+
+    const buttons = companies.map((c: any) => {
+      const avgRating = c.currentRating != null ? Number(c.currentRating).toFixed(1) : '—'
+      const label = `${c.name} ⭐ ${avgRating}`
+      return [Markup.button.callback(label, `company:view:${c.id}`)]
+    })
+
+    buttons.push([Markup.button.callback('➕ Добавить компанию', 'company:add')])
+    buttons.push([Markup.button.callback('⚙️ Настройки уведомлений', 'goto:settings')])
+
+    await ctx.reply('📋 *Ваши компании*', {
+      parse_mode: 'Markdown',
+      ...Markup.inlineKeyboard(buttons),
+    })
+  }
+
+  // ── Просмотр компании ────────────────────────────────────────
+  @Action(/^company:view:(.+)$/)
+  async onViewCompany(@Ctx() ctx: Context & { state: { user: any }; match: RegExpMatchArray }) {
+    await ctx.answerCbQuery()
+    const companyId = ctx.match[1]
+    const user = ctx.state.user
+
+    const company = await this.companiesService.getCompanyById(companyId, user.id)
+    if (!company) {
+      await ctx.reply('❌ Компания не найдена.')
+      return
+    }
+
+    const lastReview = company.mentions?.[0]
+    const avgRating = company.currentRating != null ? Number(company.currentRating).toFixed(1) : '—'
+
+    const lastReviewText = lastReview?.publishedAt
+      ? formatDistanceToNow(lastReview.publishedAt)
+      : 'нет данных'
+
+    const text =
+      `🏢 *${company.name}*\n\n` +
+      `📊 Рейтинг: ⭐ ${avgRating}\n` +
+      `📅 Последний отзыв: ${lastReviewText}\n` +
+      `🟢 Мониторинг: активен`
+
+    await ctx.editMessageText(text, {
+      parse_mode: 'Markdown',
+      ...Markup.inlineKeyboard([
+        [
+          Markup.button.callback('📝 Последние отзывы', `mentions:list:${companyId}`),
+        ],
+        [
+          Markup.button.callback('🗑️ Удалить', `company:delete:${companyId}`),
+          Markup.button.callback('← Назад', 'companies:list'),
+        ],
+      ]),
+    })
+  }
+
+  // ── Список компаний (кнопка «назад») ────────────────────────
+  @Action('companies:list')
+  async onBackToList(@Ctx() ctx: Context & { state: { user: any } }) {
+    await ctx.answerCbQuery()
+    await ctx.deleteMessage().catch(() => null)
+    await this.onCompanies(ctx)
+  }
+
+  // ── Переход в настройки ──────────────────────────────────────
+  @Action('goto:settings')
+  async onGotoSettings(@Ctx() ctx: Context) {
+    await ctx.answerCbQuery()
+    await ctx.reply('Введите /settings для управления уведомлениями.')
+  }
+
+  // ── Добавить компанию: шаг 1 ─────────────────────────────────
+  @Action('company:add')
+  async onAddCompany(@Ctx() ctx: Context & { state: { user: any } }) {
+    await ctx.answerCbQuery()
+    const chatId = ctx.from!.id
+
+    // Определяем workspaceId (первый workspace пользователя с ролью OWNER/ADMIN)
+    const member = ctx.state.user?.workspaceMembers?.find((m: any) =>
+      ['OWNER', 'ADMIN'].includes(m.role),
+    )
+
+    if (!member) {
+      await ctx.reply('⛔ У вас нет прав для добавления компаний.')
+      return
+    }
+
+    wizardState.set(chatId, { step: 1, workspaceId: member.workspaceId })
+    await ctx.reply('📝 *Добавление компании*\n\nШаг 1/3: Введите название компании', {
+      parse_mode: 'Markdown',
+      ...Markup.inlineKeyboard([[Markup.button.callback('❌ Отмена', 'company:wizard:cancel')]]),
+    })
+  }
+
+  // ── Wizard: обработка текстового ввода ──────────────────────
+  @Hears(/^(?!\/).+/)
+  async onText(@Ctx() ctx: Context & { state: { user: any } }) {
+    const chatId = ctx.from!.id
+    const state = wizardState.get(chatId)
+    const msg = (ctx.message as any)?.text ?? ''
+    if (!state) return
+    if (state.step === 1) {
+      wizardState.set(chatId, { ...state, step: 2, name: msg })
+      await this.showPlatformStep(ctx, [])
+      return
+    }
+    if (state.step === 3) {
+      // urlStep указывает какой URL сейчас собираем: 'YANDEX' | 'TWOGIS' | 'KEYWORDS'
+      const urlStep = state.urlStep
+      if (urlStep === 'YANDEX') {
+        wizardState.set(chatId, { ...state, yandexUrl: msg })
+        return this.askNextUrlStep(ctx, chatId)
+      }
+      if (urlStep === 'TWOGIS') {
+        wizardState.set(chatId, { ...state, twoGisUrl: msg })
+        return this.askNextUrlStep(ctx, chatId)
+      }
+      if (urlStep === 'KEYWORDS') {
+        const keywords = msg.split(/[,\n]+/).map((k: string) => k.trim()).filter(Boolean)
+        wizardState.set(chatId, { ...state, keywords })
+        await this.finishWizard(ctx)
+      }
+    }
+  }
+
+  @Action(/^company:platforms:(.+)$/)
+  async onSelectPlatform(@Ctx() ctx: Context & { state: { user: any }; match: RegExpMatchArray }) {
+    await ctx.answerCbQuery()
+    const chatId = ctx.from!.id
+    const platform = ctx.match[1]
+    const state = wizardState.get(chatId)
+
+    if (!state || state.step !== 2) return
+
+    const platforms = state.platforms ?? []
+    const idx = platforms.indexOf(platform)
+    if (idx >= 0) {
+      platforms.splice(idx, 1)
+    } else {
+      platforms.push(platform)
+    }
+
+    wizardState.set(chatId, { ...state, platforms })
+    await this.showPlatformStep(ctx, platforms)
+  }
+
+  @Action('company:wizard:platforms:next')
+  async onPlatformsNext(@Ctx() ctx: Context) {
+    await ctx.answerCbQuery()
+    const chatId = ctx.from!.id
+    const state = wizardState.get(chatId)
+
+    if (!state || state.step !== 2) return
+    if (!state.platforms?.length) {
+      await ctx.answerCbQuery('Выберите хотя бы одну платформу', { show_alert: true })
+      return
+    }
+
+    wizardState.set(chatId, { ...state, step: 3, urlStep: undefined })
+    await this.askNextUrlStep(ctx, chatId)
+  }
+
+  @Action('company:wizard:skip_url')
+  async onSkipUrl(@Ctx() ctx: Context & { state: { user: any } }) {
+    await ctx.answerCbQuery()
+    const chatId = ctx.from!.id
+    await this.askNextUrlStep(ctx, chatId)
+  }
+
+  @Action('company:wizard:cancel')
+  async onCancelWizard(@Ctx() ctx: Context) {
+    await ctx.answerCbQuery()
+    wizardState.delete(ctx.from!.id)
+    await ctx.editMessageText('❌ Добавление компании отменено.')
+  }
+
+  // ── Удаление компании: запрос подтверждения ─────────────────
+  @Action(/^company:delete:((?!confirm:).+)$/)
+  @UseGuards(WorkspaceRoleGuard)
+  async onDeleteCompanyConfirm(@Ctx() ctx: Context & { match: RegExpMatchArray }) {
+    await ctx.answerCbQuery()
+    const companyId = ctx.match[1]
+    deleteConfirm.set(ctx.from!.id, companyId)
+
+    // Получаем название
+    const company = await (this.companiesService as any).prisma.company.findUnique({
+      where: { id: companyId },
+    })
+
+    await ctx.editMessageText(
+      `⚠️ *Удалить «${company?.name ?? companyId}»?*\n\nВсе данные будут потеряны безвозвратно.`,
+      {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard([
+          [
+            Markup.button.callback('✅ Да, удалить', `company:delete:confirm:${companyId}`),
+            Markup.button.callback('❌ Отмена', `company:view:${companyId}`),
+          ],
+        ]),
+      },
+    )
+  }
+
+  @Action(/^company:delete:confirm:(.+)$/)
+  async onDeleteCompanyExecute(
+    @Ctx() ctx: Context & { state: { user: any }; match: RegExpMatchArray },
+  ) {
+    await ctx.answerCbQuery()
+    const companyId = ctx.match[1]
+    const user = ctx.state.user
+
+    const ok = await this.companiesService.deleteCompany(companyId, user.id)
+    deleteConfirm.delete(ctx.from!.id)
+
+    if (ok) {
+      await ctx.editMessageText('✅ Компания успешно удалена.')
+    } else {
+      await ctx.editMessageText('❌ Не удалось удалить компанию. Проверьте права доступа.')
+    }
+  }
+
+  // ── Последние отзывы ─────────────────────────────────────────
+  @Action(/^mentions:list:(.+)$/)
+  async onReviewsList(@Ctx() ctx: Context & { state: { user: any }; match: RegExpMatchArray }) {
+    await ctx.answerCbQuery()
+    const companyId = ctx.match[1]
+    await this.renderMentionSlide(ctx, companyId, 0)
+  }
+
+  @Action(/^mentions:slide:([^:]+):(\d+)$/)
+  async onMentionSlide(@Ctx() ctx: Context & { state: { user: any }; match: RegExpMatchArray }) {
+    await ctx.answerCbQuery()
+    const companyId = ctx.match[1]
+    const index = Number(ctx.match[2] || 0)
+    await this.renderMentionSlide(ctx, companyId, index)
+  }
+
+  // ── AI-ответ на отзыв ────────────────────────────────────────
+  @Action(/^ai:reply:(.+)$/)
+  async onAiReply(@Ctx() ctx: Context & { state: { user: any }; match: RegExpMatchArray }) {
+    await ctx.answerCbQuery('Генерирую ответ...')
+    const mentionId = ctx.match[1]
+    const user = ctx.state.user
+
+    const text = await this.companiesService.generateAiReply(mentionId, user.id)
+
+    await ctx.reply(
+      `🤖 *AI-черновик ответа:*\n\n${text}`,
+      { parse_mode: 'Markdown' },
+    )
+  }
+
+  // ── Helpers ──────────────────────────────────────────────────
+  private getPlatformLabel(platform?: string | null) {
+    if (platform === 'YANDEX' || platform === 'YANDEX_MAPS') return 'Яндекс Карты'
+    if (platform === 'TWOGIS' || platform === '2GIS') return '📍 2ГИС'
+    if (platform === 'WEB') return '🌐 Интернет'
+    return platform || 'Источник'
+  }
+
+  private getSentimentLabel(value?: string | null) {
+    if (value === 'POSITIVE') return '😊 Позитивный'
+    if (value === 'NEGATIVE') return '😞 Негативный'
+    if (value === 'NEUTRAL') return '😐 Нейтральный'
+    return '❓ Тональность не определена'
+  }
+
+  private truncateText(value?: string | null, limit = 360) {
+    const text = value || '(без текста)'
+    if (text.length <= limit) return text
+    return `${text.slice(0, limit).trim()}…`
+  }
+
+  private async renderMentionSlide(
+    ctx: Context & { state: { user: any } },
+    companyId: string,
+    index: number,
+  ) {
+    const user = ctx.state.user
+    const reviews = await this.companiesService.getRecentMentions(companyId, user.id, 5)
+
+    if (!reviews.length) {
+      await ctx.editMessageText('📭 Отзывов пока нет.', {
+        ...Markup.inlineKeyboard([[Markup.button.callback('← Назад', `company:view:${companyId}`)]]),
+      })
+      return
+    }
+
+    const safeIndex = Math.min(Math.max(index, 0), reviews.length - 1)
+    const review = reviews[safeIndex]
+
+    const ratingRaw = Number(review.ratingValue ?? 0)
+    const rating = Number.isFinite(ratingRaw) ? Math.max(0, Math.min(5, Math.round(ratingRaw))) : 0
+    const stars = rating > 0 ? '⭐'.repeat(rating) : 'Без оценки'
+    const when = review.publishedAt ? formatDistanceToNow(review.publishedAt) : 'дата неизвестна'
+    const reviewPlatform = review.source?.platform ?? review.platform
+    const platform = this.getPlatformLabel(reviewPlatform)
+    const sentiment = this.getSentimentLabel(review.sentiment)
+    const content = this.truncateText(review.content ?? review.title)
+    const isSeedReviewUrl = typeof review.url === 'string' && /\/reviews\/\d+\/?$/.test(review.url)
+    const reviewUrl = !isSeedReviewUrl && review.url
+      ? review.url
+      : review.sourceUrl || review.source?.baseUrl || null
+
+    const text =
+      `📝 *Последние отзывы*\n` +
+      `Отзыв ${safeIndex + 1} из ${reviews.length}\n\n` +
+      `${stars} ${platform} · ${when}\n\n` +
+      `${content}\n\n` +
+      `${sentiment}`
+
+    const buttons: any[][] = []
+
+    if (review.sentiment === 'NEGATIVE') {
+      buttons.push([Markup.button.callback('🤖 AI-ответ на отзыв', `ai:reply:${review.id}`)])
+    }
+
+    if (reviewUrl) {
+      buttons.push([Markup.button.url('🔗 Перейти к отзыву', reviewUrl)])
+    }
+
+    buttons.push([
+      Markup.button.callback('←', `mentions:slide:${companyId}:${Math.max(0, safeIndex - 1)}`),
+      Markup.button.callback(`${safeIndex + 1}/${reviews.length}`, 'noop'),
+      Markup.button.callback('→', `mentions:slide:${companyId}:${Math.min(reviews.length - 1, safeIndex + 1)}`),
+    ])
+
+    buttons.push([Markup.button.callback('← Назад', `company:view:${companyId}`)])
+
+    try {
+      await ctx.editMessageText(text, {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard(buttons),
+      })
+    } catch (error: any) {
+      if (!String(error?.message || '').includes('message is not modified')) {
+        throw error
+      }
+    }
+  }
+
+  @Action('noop')
+  async onNoop(@Ctx() ctx: Context) {
+    await ctx.answerCbQuery()
+  }
+
+  private async showPlatformStep(ctx: Context, selected: string[]) {
+    const platforms = [
+      { key: 'YANDEX_MAPS', label: 'Яндекс Карты' },
+      { key: 'TWOGIS', label: '2ГИС' },
+      { key: 'WEB', label: 'Веб-поиск' },
+    ]
+
+    const buttons = platforms.map((p) => {
+      const isSelected = selected.includes(p.key)
+      return [Markup.button.callback(
+        `${isSelected ? '✅' : '☐'} ${p.label}`,
+        `company:platforms:${p.key}`,
+      )]
+    })
+
+    buttons.push([Markup.button.callback('Далее →', 'company:wizard:platforms:next')])
+    buttons.push([Markup.button.callback('❌ Отмена', 'company:wizard:cancel')])
+
+    const text = '📝 *Добавление компании*\n\nШаг 2/3: Выберите платформы для мониторинга'
+
+    try {
+      await ctx.editMessageText(text, {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard(buttons),
+      })
+    } catch {
+      await ctx.reply(text, {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard(buttons),
+      })
+    }
+  }
+
+  async finishWizard(ctx: Context & { state?: { user?: any } }) {
+    const chatId = ctx.from!.id
+    const state = wizardState.get(chatId)
+
+    if (!state?.name || !state.platforms?.length || !state.workspaceId) {
+      await ctx.reply('❌ Ошибка: данные формы потеряны. Начните заново с /companies.')
+      wizardState.delete(chatId)
+      return
+    }
+
+    const user = ctx.state?.user
+    const company = await this.companiesService.createCompany({
+      name: state.name,
+      platforms: state.platforms,
+      yandexUrl: state.yandexUrl,
+      twoGisUrl: state.twoGisUrl,
+      keywords: state.keywords,
+      userId: user?.id,
+      workspaceId: state.workspaceId,
+    })
+
+    wizardState.delete(chatId)
+
+    await ctx.reply(
+      `✅ Компания *«${company.name}»* добавлена!\n\nМониторинг запущен. Первые отзывы появятся в течение нескольких часов.`,
+      {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard([
+          [Markup.button.callback('📋 К списку компаний', 'companies:list')],
+        ]),
+      },
+    )
+  }
+
+  private async askNextUrlStep(ctx: Context & { state?: { user?: any } }, chatId: number) {
+    const state = wizardState.get(chatId)
+    if (!state) return
+
+    const platforms = state.platforms ?? []
+    const needYandex = platforms.includes('YANDEX_MAPS') && !state.yandexUrl
+    const needTwoGis = platforms.includes('TWOGIS') && !state.twoGisUrl
+    const needKeywords = platforms.includes('WEB') && !state.keywords
+
+    if (needYandex) {
+      wizardState.set(chatId, { ...state, urlStep: 'YANDEX' })
+      const text = '📝 *Добавление компании*\n\nШаг 3/3: Введите URL компании на Яндекс Картах\n\nПример: https://yandex.ru/maps/org/...'
+      try {
+        await ctx.editMessageText(text, {
+          parse_mode: 'Markdown',
+          ...Markup.inlineKeyboard([
+            [Markup.button.callback('Пропустить →', 'company:wizard:skip_url')],
+            [Markup.button.callback('❌ Отмена', 'company:wizard:cancel')],
+          ]),
+        })
+      } catch {
+        await ctx.reply(text, {
+          parse_mode: 'Markdown',
+          ...Markup.inlineKeyboard([
+            [Markup.button.callback('Пропустить →', 'company:wizard:skip_url')],
+            [Markup.button.callback('❌ Отмена', 'company:wizard:cancel')],
+          ]),
+        })
+      }
+      return
+    }
+
+    if (needTwoGis) {
+      wizardState.set(chatId, { ...state, urlStep: 'TWOGIS' })
+      const text = '📝 *Добавление компании*\n\nШаг 3/3: Введите URL компании в 2ГИС\n\nПример: https://2gis.ru/...'
+      try {
+        await ctx.editMessageText(text, {
+          parse_mode: 'Markdown',
+          ...Markup.inlineKeyboard([
+            [Markup.button.callback('Пропустить →', 'company:wizard:skip_url')],
+            [Markup.button.callback('❌ Отмена', 'company:wizard:cancel')],
+          ]),
+        })
+      } catch {
+        await ctx.reply(text, {
+          parse_mode: 'Markdown',
+          ...Markup.inlineKeyboard([
+            [Markup.button.callback('Пропустить →', 'company:wizard:skip_url')],
+            [Markup.button.callback('❌ Отмена', 'company:wizard:cancel')],
+          ]),
+        })
+      }
+      return
+    }
+
+    if (needKeywords) {
+      wizardState.set(chatId, { ...state, urlStep: 'KEYWORDS' })
+      const text = '📝 *Добавление компании*\n\nШаг 3/3: Введите ключевые слова для веб-поиска через запятую\n\nПример: Руки Вверх бар, бар Тверская'
+      try {
+        await ctx.editMessageText(text, {
+          parse_mode: 'Markdown',
+          ...Markup.inlineKeyboard([
+            [Markup.button.callback('Пропустить →', 'company:wizard:skip_url')],
+            [Markup.button.callback('❌ Отмена', 'company:wizard:cancel')],
+          ]),
+        })
+      } catch {
+        await ctx.reply(text, {
+          parse_mode: 'Markdown',
+          ...Markup.inlineKeyboard([
+            [Markup.button.callback('Пропустить →', 'company:wizard:skip_url')],
+            [Markup.button.callback('❌ Отмена', 'company:wizard:cancel')],
+          ]),
+        })
+      }
+      return
+    }
+
+    // Все шаги пройдены — создаём компанию
+    await this.finishWizard(ctx)
+  }
+
+  getWizardState(chatId: number) {
+    return wizardState.get(chatId)
+  }
+
+  setWizardState(chatId: number, data: any) {
+    wizardState.set(chatId, data)
+  }
+}

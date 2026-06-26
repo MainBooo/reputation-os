@@ -12,7 +12,7 @@ import { DEFAULT_JOB_OPTIONS } from '../../common/queues/job-options'
     {
       provide: 'SYNC_BULLMQ_CONNECTION',
       useFactory: () => {
-        const redisUrl = process.env.REDIS_URL || 'redis://127.0.0.1:6380'
+        const redisUrl = process.env.REDIS_URL || 'redis://127.0.0.1:6379'
 
         return new IORedis(redisUrl, {
           maxRetriesPerRequest: null,

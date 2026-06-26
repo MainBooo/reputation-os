@@ -73,5 +73,9 @@ export const WORKER_OPTIONS = {
   notifications: {
     concurrency: 2,
     lockDuration: 60_000
+  },
+  pageWatch: {
+    concurrency: 2,
+    lockDuration: 2 * 60_000
   }
 } satisfies Record<string, Partial<WorkerOptions>>

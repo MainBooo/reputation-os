@@ -12,7 +12,7 @@ async function main() {
   const queue = new Queue(QUEUES.REVIEWS_SYNC, {
     connection: {
       host: '127.0.0.1',
-      port: 6380
+      port: 6379
     }
   })
 

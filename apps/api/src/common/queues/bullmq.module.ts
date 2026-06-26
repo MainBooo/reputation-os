@@ -4,7 +4,7 @@ import IORedis from 'ioredis'
 import { QUEUES } from './queue.names'
 import { DEFAULT_JOB_OPTIONS } from './job-options'
 
-const redisUrl = process.env.REDIS_URL || 'redis://127.0.0.1:6380'
+const redisUrl = process.env.REDIS_URL || 'redis://127.0.0.1:6379'
 
 const connection = new IORedis(redisUrl, {
   maxRetriesPerRequest: null,

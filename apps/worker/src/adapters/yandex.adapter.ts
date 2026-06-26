@@ -696,6 +696,31 @@ export class YandexAdapter {
             'i'
           )
 
+          const parseRuDate = (value: string): string | null => {
+            const now = new Date()
+            const lower = clean(value).toLowerCase()
+
+            if (lower === 'сегодня') return now.toISOString()
+
+            if (lower === 'вчера') {
+              const date = new Date(now)
+              date.setDate(date.getDate() - 1)
+              return date.toISOString()
+            }
+
+            const match = lower.match(/^(\d{1,2})\s+([а-яё]+)(?:\s+(\d{4}))?$/i)
+            if (!match) return null
+
+            const monthIndex = monthNames.indexOf(match[2])
+            if (monthIndex < 0) return null
+
+            const day = Number(match[1])
+            const year = match[3] ? Number(match[3]) : now.getFullYear()
+            const date = new Date(year, monthIndex, day, 12, 0, 0)
+
+            return Number.isFinite(date.getTime()) ? date.toISOString() : null
+          }
+
           const isMetaLine = (line: string) =>
             /лайк|отзыв|отзыва|отзывов|подписчик|подписчика|подписчиков|знаток города/i.test(line)
 
@@ -765,6 +790,9 @@ export class YandexAdapter {
 
             if (content.length < 2) continue
 
+            const parsedPublishedAt = parseRuDate(lines[dateIndex])
+            if (!parsedPublishedAt) continue
+
             const rawId = `${targetId || 'target'}:${author || 'unknown'}:${lines[dateIndex]}:${content.slice(0, 80)}`
             const externalMentionId = `yandex-visible:${rawId}`
 
@@ -774,7 +802,7 @@ export class YandexAdapter {
               title: null,
               content,
               author,
-              publishedAt: null,
+              publishedAt: parsedPublishedAt,
               ratingValue: null
             })
           }

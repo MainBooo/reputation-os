@@ -1,0 +1,32 @@
+// ============================================================
+// PATCH: добавить в существующий prisma/schema.prisma
+// ============================================================
+
+// 1. В enum NotificationChannel добавить TELEGRAM:
+// enum NotificationChannel {
+//   IN_APP
+//   TELEGRAM   // <-- добавить
+// }
+
+// 2. В model User добавить два поля:
+// telegramChatId    BigInt?   @unique
+// telegramLinkedAt  DateTime?
+
+// 3. Добавить новую модель TelegramLinkToken:
+
+model TelegramLinkToken {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  token     String   @unique @default(cuid())
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ============================================================
+// После правок запустить:
+//   cd /opt/reputation-os
+//   npx prisma migrate dev --name add_telegram_bot
+//   npx prisma generate
+// ============================================================

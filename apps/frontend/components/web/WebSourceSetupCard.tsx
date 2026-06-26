@@ -28,6 +28,13 @@ type SourceTarget = {
     type?: string
     name?: string
   }
+  watchedPage?: {
+    pageType?: string | null
+    lastCheckedAt?: string | null
+    lastChangedAt?: string | null
+    lastError?: string | null
+    enabled?: boolean
+  } | null
 }
 
 const INTERVALS = [
@@ -200,14 +207,6 @@ export default function WebSourceSetupCard({ companyId }: { companyId: string })
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={handleStartSync}
-          disabled={syncing}
-          className="inline-flex h-10 items-center justify-center rounded-xl border border-violet-400/40 bg-cyan-400/10 px-4 text-sm font-semibold text-blue-100 transition hover:bg-cyan-400/20 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {syncing ? 'Запускаем…' : 'Запустить сканирование'}
-        </button>
       </div>
 
       <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_auto_auto_auto] lg:items-center">
@@ -337,6 +336,22 @@ export default function WebSourceSetupCard({ companyId }: { companyId: string })
                           {deletingId === target.id ? 'Удаляем…' : 'Удалить'}
                         </button>
                       </div>
+                      {target.watchedPage ? (
+                        <div className="mt-2 w-full space-y-1 rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 text-xs text-zinc-400">
+                          {target.watchedPage.pageType && target.watchedPage.pageType !== 'UNKNOWN' ? (
+                            <div>Тип: <span className="text-zinc-300">{target.watchedPage.pageType}</span></div>
+                          ) : null}
+                          {target.watchedPage.lastCheckedAt ? (
+                            <div>Проверка: <span className="text-zinc-300">{new Date(target.watchedPage.lastCheckedAt).toLocaleString('ru')}</span></div>
+                          ) : null}
+                          {target.watchedPage.lastChangedAt ? (
+                            <div>Изменилась: <span className="text-zinc-300">{new Date(target.watchedPage.lastChangedAt).toLocaleString('ru')}</span></div>
+                          ) : null}
+                          {target.watchedPage.lastError ? (
+                            <div className="text-red-400">Ошибка: {target.watchedPage.lastError}</div>
+                          ) : null}
+                        </div>
+                      ) : null}
                     </div>
                   )
                 })}

@@ -5,5 +5,6 @@ export const JOBS = {
   RATING_REFRESH: 'rating.refresh',
   RECONCILE: 'reconcile.run',
   NOTIFICATIONS: 'notifications.evaluate',
-  ALERT_CHECK: 'alerts.check'
+  ALERT_CHECK: 'alerts.check',
+  PAGE_WATCH: 'page.watch'
 } as const

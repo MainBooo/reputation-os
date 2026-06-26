@@ -5,5 +5,6 @@ export const QUEUES = {
   RATING_REFRESH: 'rating_refresh',
   RECONCILE: 'reconcile',
   NOTIFICATIONS: 'notifications',
-  ALERT_CHECK: 'alert_check'
+  ALERT_CHECK: 'alert_check',
+  PAGE_WATCH: 'page_watch'
 } as const

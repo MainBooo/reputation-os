@@ -1,9 +1,13 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common'
 import { PrismaService } from '../../common/prisma/prisma.service'
+import { EntitlementsService } from '../billing/entitlements.service'
 
 @Injectable()
 export class AnalyticsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly entitlements: EntitlementsService
+  ) {}
 
   private async assertCompanyAccess(userId: string, companyId: string) {
     const company = await this.prisma.company.findUnique({ where: { id: companyId }, select: { workspaceId: true } })
@@ -49,10 +53,23 @@ export class AnalyticsService {
     const rating = Number(ratingAgg._avg.ratingValue || 0)
     const positiveShare = mentionsCount ? Math.round((positiveCount / mentionsCount) * 100) : 0
 
-    const dailyMentions = await this.prisma.mention.findMany({
-      where: { companyId, createdAt: { gte: startDate, lte: endDate } },
-      select: { createdAt: true, sentiment: true, ratingValue: true }
-    })
+    type DailyRow = { day: Date; positive: bigint; neutral: bigint; negative: bigint; avg_rating: number | null }
+    const dailyRows = await this.prisma.$queryRaw<DailyRow[]>`
+      SELECT
+        date_trunc('day', "createdAt" AT TIME ZONE 'UTC') AS day,
+        COUNT(*) FILTER (WHERE sentiment = 'POSITIVE') AS positive,
+        COUNT(*) FILTER (WHERE sentiment = 'NEUTRAL')   AS neutral,
+        COUNT(*) FILTER (WHERE sentiment = 'NEGATIVE')  AS negative,
+        AVG("ratingValue")                              AS avg_rating
+      FROM "Mention"
+      WHERE "companyId" = ${companyId}
+        AND "createdAt" >= ${startDate}
+        AND "createdAt" <= ${endDate}
+      GROUP BY 1
+      ORDER BY 1
+    `
+
+    const dailyMap = new Map(dailyRows.map((r) => [r.day.toISOString().slice(0, 10), r]))
 
     const diffDays = Math.max(1, Math.ceil((endDate.getTime() - startDate.getTime()) / 86400000) + 1)
     const daysCount = Math.min(diffDays, 31)
@@ -62,18 +79,14 @@ export class AnalyticsService {
       date.setDate(startDate.getDate() + index)
 
       const key = date.toISOString().slice(0, 10)
-      const rows = dailyMentions.filter((item) => item.createdAt.toISOString().slice(0, 10) === key)
-      const ratingRows = rows.filter((item) => item.ratingValue !== null)
-
-      const dayRating = ratingRows.length
-        ? ratingRows.reduce((sum, item) => sum + Number(item.ratingValue || 0), 0) / ratingRows.length
-        : rating
+      const row = dailyMap.get(key)
+      const dayRating = row?.avg_rating ? Number(row.avg_rating) : rating
 
       return {
         label: date.toLocaleDateString('ru-RU', { day: '2-digit', month: 'short' }),
-        positive: rows.filter((item) => item.sentiment === 'POSITIVE').length,
-        neutral: rows.filter((item) => item.sentiment === 'NEUTRAL').length,
-        negative: rows.filter((item) => item.sentiment === 'NEGATIVE').length,
+        positive: row ? Number(row.positive) : 0,
+        neutral:  row ? Number(row.neutral)  : 0,
+        negative: row ? Number(row.negative) : 0,
         rating: dayRating ? Number(Math.max(1, Math.min(5, dayRating)).toFixed(2)) : 0
       }
     })
@@ -95,6 +108,11 @@ export class AnalyticsService {
 
   async sentiment(userId: string, companyId: string) {
     await this.assertCompanyAccess(userId, companyId)
+
+    const company = await this.prisma.company.findUnique({ where: { id: companyId }, select: { workspaceId: true } })
+    if (company && !await this.entitlements.can(company.workspaceId, 'advancedAnalytics')) {
+      throw new ForbiddenException({ code: 'PLAN_LIMIT', feature: 'advancedAnalytics' })
+    }
     const grouped = await this.prisma.mention.groupBy({
       by: ['sentiment'],
       where: { companyId },
@@ -104,6 +122,10 @@ export class AnalyticsService {
   }
 
   async platforms(userId: string, companyId: string, from?: string, to?: string) {
+    const company = await this.prisma.company.findUnique({ where: { id: companyId }, select: { workspaceId: true } })
+    if (company && !await this.entitlements.can(company.workspaceId, 'advancedAnalytics')) {
+      throw new ForbiddenException({ code: 'PLAN_LIMIT', feature: 'advancedAnalytics' })
+    }
     await this.assertCompanyAccess(userId, companyId)
 
     const startDate = from ? new Date(`${from}T00:00:00.000Z`) : new Date()

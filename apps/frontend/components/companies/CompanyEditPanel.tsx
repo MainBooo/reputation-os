@@ -37,7 +37,7 @@ export default function CompanyEditPanel({
 }) {
   const router = useRouter()
   const [isOpen, setIsOpen] = useState(true)
-  const [saving, setSaving] = useState(true)
+  const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [keywordInput, setKeywordInput] = useState('')
   const [keywords, setKeywords] = useState<string[]>(() => getInitialKeywords(company))

@@ -68,6 +68,7 @@ export default function CompaniesCreateForm() {
   const [keywords, setKeywords] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [planLimitHit, setPlanLimitHit] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -175,7 +176,11 @@ export default function CompaniesCreateForm() {
       router.refresh()
     } catch (e) {
       const message = e instanceof Error ? e.message : 'Не удалось создать компанию'
-      setError(message)
+      if (message.includes('PLAN_LIMIT') || message.includes('Workspace company limit')) {
+        setPlanLimitHit(true)
+      } else {
+        setError(message)
+      }
     } finally {
       setLoading(false)
     }
@@ -309,7 +314,23 @@ export default function CompaniesCreateForm() {
             </select>
           ) : null}
 
-          {error ? (
+          {planLimitHit ? (
+            <div className="rounded-[1.35rem] border border-amber-400/20 bg-amber-500/[0.06] p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <div className="text-sm font-semibold text-white">🔒 Лимит тарифа</div>
+                  <div className="mt-1 text-xs text-zinc-400">Вы достигли максимального количества компаний на текущем плане. Перейдите на более высокий тариф.</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => router.push('/billing/checkout')}
+                  className="shrink-0 rounded-2xl border border-cyan-300/20 bg-[linear-gradient(135deg,rgba(34,211,238,0.34),rgba(79,70,229,0.34),rgba(168,85,247,0.28))] px-5 py-2.5 text-sm font-semibold text-white shadow-[0_20px_50px_rgba(34,211,238,0.16),inset_0_1px_0_rgba(255,255,255,0.18)] transition hover:brightness-110"
+                >
+                  Улучшить тариф
+                </button>
+              </div>
+            </div>
+          ) : error ? (
             <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-300">
               {error}
             </div>

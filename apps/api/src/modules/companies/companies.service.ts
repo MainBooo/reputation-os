@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, Inject, Injectable, Logger, No
 import { Queue } from 'bullmq'
 import { Prisma } from '@prisma/client'
 import { PrismaService } from '../../common/prisma/prisma.service'
+import { EntitlementsService } from '../billing/entitlements.service'
 import { QUEUES } from '../../common/queues/queue.names'
 import { JOBS } from '../../common/queues/job.names'
 import { SYNC_JOB_OPTIONS, CRON_JOB_OPTIONS } from '../../common/queues/job-options'
@@ -11,14 +12,13 @@ import { CreateCompanyAliasDto } from './dto/create-company-alias.dto'
 import { CreateCompanySourceTargetDto } from './dto/create-company-source-target.dto'
 import { UpdateCompanySourceTargetDto } from './dto/update-company-source-target.dto'
 
-const WORKSPACE_COMPANIES_LIMIT = 3
-
 @Injectable()
 export class CompaniesService {
   private readonly logger = new Logger(CompaniesService.name)
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly entitlements: EntitlementsService,
     @Inject(`QUEUE_${QUEUES.REVIEWS_SYNC}`) private readonly reviewsSyncQueue: Queue,
     @Inject(`QUEUE_${QUEUES.RATING_REFRESH}`) private readonly ratingRefreshQueue: Queue,
       @Inject(`QUEUE_${QUEUES.MENTIONS_SYNC}`) private readonly mentionsSyncQueue: Queue
@@ -517,20 +517,11 @@ export class CompaniesService {
         },
         _count: { select: { mentions: true, ratingSnapshots: true } }
       },
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: 'desc' },
+      take: 200
     })
 
-    const logoRows = await this.prisma.$queryRawUnsafe<Array<{ id: string; logoUrl: string | null }>>(
-      'select "id", "logoUrl" from "Company" where "id" = any($1)',
-      companies.map((company) => company.id)
-    )
-
-    const logoById = new Map(logoRows.map((row) => [row.id, row.logoUrl]))
-
-    return companies.map((company) => ({
-      ...company,
-      logoUrl: logoById.get(company.id) || null
-    }))
+    return companies
   }
 
   async create(userId: string, dto: CreateCompanyDto) {
@@ -540,8 +531,11 @@ export class CompaniesService {
       where: { workspaceId: dto.workspaceId }
     })
 
-    if (companiesCount >= WORKSPACE_COMPANIES_LIMIT) {
-      throw new BadRequestException(`Workspace company limit reached: ${WORKSPACE_COMPANIES_LIMIT}`)
+    const { limits } = await this.entitlements.getForWorkspace(dto.workspaceId)
+    const maxCompanies = Number(limits.maxCompanies)
+
+    if (maxCompanies >= 0 && companiesCount >= maxCompanies) {
+      throw new ForbiddenException({ code: 'PLAN_LIMIT', feature: 'maxCompanies', limit: maxCompanies })
     }
 
     this.logger.log(
@@ -566,7 +560,11 @@ export class CompaniesService {
     const normalizedYandexUrl = this.normalizeYandexUrl(dto.yandexUrl)
     const normalizedTwoGisUrl = this.normalizeTwoGisUrl(dto.twoGisUrl)
 
-    if (normalizedYandexUrl) {
+    const allowedPlatforms = Array.isArray(limits.platforms) ? limits.platforms : []
+
+    if (normalizedYandexUrl && !allowedPlatforms.includes('YANDEX')) {
+      this.logger.log(`[CompanyCreate] skip yandex init companyId=${company.id} reason=platform_not_allowed`)
+    } else if (normalizedYandexUrl) {
       const yandexSource = await this.ensureYandexSource(dto.workspaceId)
 
       const target = await this.prisma.companySourceTarget.create({
@@ -593,7 +591,9 @@ export class CompaniesService {
       this.logger.log(`[CompanyCreate] skip yandex init companyId=${company.id} reason=no_yandex_url`)
     }
 
-    if (normalizedTwoGisUrl) {
+    if (normalizedTwoGisUrl && !allowedPlatforms.includes('TWOGIS')) {
+      this.logger.log(`[CompanyCreate] skip 2gis init companyId=${company.id} reason=platform_not_allowed`)
+    } else if (normalizedTwoGisUrl) {
       const twoGisSource = await this.ensureTwoGisSource(dto.workspaceId)
 
       const target = await this.prisma.companySourceTarget.create({
@@ -622,6 +622,24 @@ export class CompaniesService {
       this.logger.log(`[CompanyCreate] skip 2gis init companyId=${company.id} reason=no_two_gis_url`)
     }
 
+    if (!allowedPlatforms.length || allowedPlatforms.includes('WEB')) {
+      const webSource = await this.ensureWebSource(dto.workspaceId)
+      const existingWebTarget = await this.prisma.companySourceTarget.findFirst({
+        where: { companyId: company.id, sourceId: webSource.id, externalUrl: null }
+      })
+      if (!existingWebTarget) {
+        await this.prisma.companySourceTarget.create({
+          data: {
+            companyId: company.id,
+            sourceId: webSource.id,
+            syncMentionsEnabled: true,
+            isActive: true
+          }
+        })
+        this.logger.log(`[WebInit] root target created companyId=${company.id}`)
+      }
+    }
+
     return company
   }
 
@@ -639,17 +657,9 @@ export class CompaniesService {
       throw new NotFoundException('Company not found')
     }
 
-    await this.assertWorkspaceAccess(userId, company.workspaceId, 'write')
+    await this.assertWorkspaceAccess(userId, company.workspaceId, 'read')
 
-    const logoRows = await this.prisma.$queryRawUnsafe<Array<{ logoUrl: string | null }>>(
-      'select "logoUrl" from "Company" where "id" = $1 limit 1',
-      id
-    )
-
-    return {
-      ...company,
-      logoUrl: logoRows[0]?.logoUrl || null
-    }
+    return company
   }
 
   async update(userId: string, id: string, dto: UpdateCompanyDto) {
@@ -845,10 +855,13 @@ export class CompaniesService {
 
     await this.assertWorkspaceAccess(userId, company.workspaceId, 'write')
 
-    await this.prisma.companyAlias.deleteMany({ where: { companyId: id } })
-    await this.prisma.companySourceTarget.deleteMany({ where: { companyId: id } })
+    await this.prisma.aIReplyDraft.deleteMany({ where: { companyId: id } })
+    await this.prisma.watchedPageItem.deleteMany({ where: { companyId: id } })
+    await this.prisma.watchedPage.deleteMany({ where: { companyId: id } })
     await this.prisma.mention.deleteMany({ where: { companyId: id } })
     await this.prisma.ratingSnapshot.deleteMany({ where: { companyId: id } })
+    await this.prisma.companySourceTarget.deleteMany({ where: { companyId: id } })
+    await this.prisma.companyAlias.deleteMany({ where: { companyId: id } })
 
     return this.prisma.company.delete({
       where: { id }
@@ -914,6 +927,18 @@ export class CompaniesService {
             url: true,
             publishedAt: true,
             createdAt: true
+          }
+        },
+        watchedPages: {
+          take: 1,
+          select: {
+            id: true,
+            pageType: true,
+            lastCheckedAt: true,
+            lastChangedAt: true,
+            lastError: true,
+            enabled: true,
+            checkIntervalMin: true
           }
         }
       },
@@ -1029,7 +1054,8 @@ export class CompaniesService {
         lastMentionAt: lastMention?.publishedAt || null,
         relevanceScore: relevance.score,
         relevanceLabel: relevance.label,
-        relevanceReasons: relevanceReasons(target)
+        relevanceReasons: relevanceReasons(target),
+        watchedPage: target.watchedPages?.[0] || null
       }
     })
   }
@@ -1132,13 +1158,31 @@ export class CompaniesService {
       return String(a.host).localeCompare(String(b.host))
     })
 
-    const discovered = discoveredTargets
-      .filter((target: any) => Boolean(target.externalUrl))
-      .sort((a: any, b: any) => {
-        const byRelevance = Number(b.relevanceScore || 0) - Number(a.relevanceScore || 0)
-        if (byRelevance !== 0) return byRelevance
-        return String(a.displayName || a.externalUrl || '').localeCompare(String(b.displayName || b.externalUrl || ''))
-      })
+    const discoveredByHost = new Map<string, any[]>()
+    for (const target of discoveredTargets.filter((t: any) => Boolean(t.externalUrl))) {
+      const host = this.webSourceHost(target.externalUrl) || 'unknown'
+      const items = discoveredByHost.get(host) || []
+      items.push(target)
+      discoveredByHost.set(host, items)
+    }
+
+    const discovered = Array.from(discoveredByHost.entries()).map(([host, items]) => {
+      const best = items.slice().sort((a: any, b: any) =>
+        Number(b.relevanceScore || 0) - Number(a.relevanceScore || 0)
+      )[0]
+      return {
+        ...best,
+        host,
+        items,
+        pagesCount: items.length,
+        bestUrl: best.externalUrl,
+        bestTitle: best.displayName || best.externalUrl || host
+      }
+    }).sort((a: any, b: any) => {
+      const byRelevance = Number(b.relevanceScore || 0) - Number(a.relevanceScore || 0)
+      if (byRelevance !== 0) return byRelevance
+      return String(a.host).localeCompare(String(b.host))
+    })
 
     const latestSignals = await this.prisma.mention.findMany({
       where: {
@@ -1182,6 +1226,19 @@ export class CompaniesService {
     }
 
     await this.assertWorkspaceAccess(userId, company.workspaceId, 'write')
+
+    const targetPlatform = dto.platform || (dto.sourceId
+      ? (await this.prisma.source.findUnique({ where: { id: dto.sourceId }, select: { platform: true } }))?.platform
+      : null)
+
+    if (targetPlatform) {
+      const { limits } = await this.entitlements.getForWorkspace(company.workspaceId)
+      const allowedPlatforms = Array.isArray(limits.platforms) ? limits.platforms : []
+
+      if (!allowedPlatforms.includes(targetPlatform)) {
+        throw new ForbiddenException({ code: 'PLAN_LIMIT', feature: 'platforms', platform: targetPlatform })
+      }
+    }
 
     let sourceId: string | null = dto.sourceId || null
 
@@ -1236,6 +1293,30 @@ export class CompaniesService {
 
     if (createdTarget.source?.platform === 'WEB') {
       await this.refreshWebMentionsRepeat(companyId)
+
+      if (createdTarget.externalUrl) {
+        try {
+          const domain = new URL(createdTarget.externalUrl).hostname.replace(/^www\./, '')
+          await this.prisma.watchedPage.upsert({
+            where: { companyId_url: { companyId, url: createdTarget.externalUrl } },
+            create: {
+              companyId,
+              sourceTargetId: createdTarget.id,
+              url: createdTarget.externalUrl,
+              domain,
+              pageType: 'UNKNOWN',
+              enabled: true,
+              checkIntervalMin: 1440
+            },
+            update: {
+              sourceTargetId: createdTarget.id,
+              enabled: true
+            }
+          })
+        } catch (e) {
+          // ignore invalid URL
+        }
+      }
     }
 
     return createdTarget
@@ -1290,6 +1371,39 @@ export class CompaniesService {
 
     if (updatedTarget.source?.platform === 'WEB') {
       await this.refreshWebMentionsRepeat(companyId)
+
+      const url = updatedTarget.externalUrl
+      const isMonitored = updatedTarget.isActive && updatedTarget.syncMentionsEnabled
+      if (url) {
+        try {
+          const domain = new URL(url).hostname.replace(/^www\./, '')
+          if (isMonitored) {
+            await this.prisma.watchedPage.upsert({
+              where: { companyId_url: { companyId, url } },
+              create: {
+                companyId,
+                sourceTargetId: updatedTarget.id,
+                url,
+                domain,
+                pageType: 'UNKNOWN',
+                enabled: true,
+                checkIntervalMin: 1440
+              },
+              update: {
+                sourceTargetId: updatedTarget.id,
+                enabled: true
+              }
+            })
+          } else {
+            await this.prisma.watchedPage.updateMany({
+              where: { companyId, url },
+              data: { enabled: false }
+            })
+          }
+        } catch (e) {
+          // ignore invalid URL
+        }
+      }
     }
 
     return updatedTarget
@@ -1311,6 +1425,12 @@ export class CompaniesService {
 
     if (!target || target.companyId !== companyId) {
       throw new NotFoundException('Company source target not found')
+    }
+
+    if (target.source?.platform === 'WEB' && target.externalUrl) {
+      await this.prisma.watchedPage.deleteMany({
+        where: { companyId, url: target.externalUrl }
+      })
     }
 
     const deletedTarget = await this.prisma.companySourceTarget.delete({

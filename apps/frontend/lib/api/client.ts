@@ -74,6 +74,8 @@ export async function apiFetch<T>(path: string, options?: RequestInit, fallback?
         message = data.message
       } else if (Array.isArray(data?.message) && data.message.length) {
         message = String(data.message[0])
+      } else if (typeof data?.code === 'string') {
+        message = data.code
       }
     } catch {}
 

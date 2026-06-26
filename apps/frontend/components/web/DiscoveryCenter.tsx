@@ -10,6 +10,7 @@ import {
 } from '@/lib/api/companies'
 import { getCompanyMentions } from '@/lib/api/mentions'
 import { useWorkspaceAccess } from '@/lib/hooks/useWorkspaceAccess'
+import WebMonitoringToggle from '@/components/web/WebMonitoringToggle'
 
 const SCAN_INTERVALS = [
   { label: '4 часа', hours: 4, minutes: 240 },
@@ -188,6 +189,16 @@ export default function DiscoveryCenter({
 
   const webTargets = useMemo(() => targets.filter(isWebTarget), [targets])
 
+  const rootWebTargets = useMemo(
+    () => targets.filter((t) => {
+      if (t.source?.platform !== 'WEB') return false
+      if (t.externalUrl) return false
+      const cfg = t.config && typeof t.config === 'object' && !Array.isArray(t.config) ? t.config as Record<string, unknown> : {}
+      return !cfg.origin
+    }),
+    [targets]
+  )
+
   useEffect(() => {
     let mounted = true
 
@@ -206,6 +217,24 @@ export default function DiscoveryCenter({
   }, [companyId])
   const activeTargets = useMemo(() => webTargets.filter((target) => isActiveTarget(target) && Boolean(target.externalUrl)), [webTargets])
   const discoveredTargets = useMemo(() => webTargets.filter(isDiscoveredTarget), [webTargets])
+
+  const groupedDiscovered = useMemo(() => {
+    const map = new Map<string, SourceTarget[]>()
+    for (const target of discoveredTargets) {
+      const host = hostOf(target.externalUrl)
+      const items = map.get(host) || []
+      items.push(target)
+      map.set(host, items)
+    }
+    return Array.from(map.entries()).map(([host, items]) => ({
+      ...items[0],
+      host,
+      items,
+      pagesCount: items.length,
+      bestUrl: items[0]?.externalUrl || null,
+      bestTitle: items[0]?.displayName || items[0]?.externalUrl || host
+    }))
+  }, [discoveredTargets])
 
   const groupedActive = useMemo(() => {
     const map = new Map<string, SourceTarget[]>()
@@ -231,7 +260,7 @@ export default function DiscoveryCenter({
   }, [activeTargets])
 
   const effectiveGroupedActive = serverActiveGroups.length ? serverActiveGroups : groupedActive
-  const effectiveDiscovered = serverDiscovered.length ? serverDiscovered : discoveredTargets
+  const effectiveDiscovered = serverDiscovered.length ? serverDiscovered : groupedDiscovered
 
   const visibleActive = showAllActive ? effectiveGroupedActive : effectiveGroupedActive.slice(0, 5)
   const visibleDiscovered = showAllDiscovered ? effectiveDiscovered : effectiveDiscovered.slice(0, 4)
@@ -289,6 +318,38 @@ export default function DiscoveryCenter({
     }
   }
 
+  async function patchGroup(target: SourceTarget, patch: Partial<SourceTarget>) {
+    const items: SourceTarget[] = (target as any).items?.length > 1 ? (target as any).items : [target]
+    setBusyId(target.id)
+    setMessage(null)
+    try {
+      await Promise.all(items.map((item) =>
+        updateCompanySourceTarget(companyId, item.id, {
+          isActive: patch.isActive,
+          syncMentionsEnabled: patch.syncMentionsEnabled,
+          syncReviewsEnabled: false,
+          syncRatingsEnabled: false,
+          config: {
+            ...(item.config || {}),
+            ...(patch.config || {}),
+            scanIntervalMinutes: intervalMinutes,
+            scanIntervalHours: Math.round(intervalMinutes / 60)
+          }
+        })
+      ))
+      setTargets((prev) => prev.map((item) =>
+        items.some((g) => g.id === item.id)
+          ? { ...item, isActive: patch.isActive ?? item.isActive, syncMentionsEnabled: patch.syncMentionsEnabled ?? item.syncMentionsEnabled }
+          : item
+      ))
+      router.refresh()
+    } catch {
+      setMessage('Не удалось обновить источник.')
+    } finally {
+      setBusyId(null)
+    }
+  }
+
   async function removeTarget(target: SourceTarget) {
     if (!confirm('Удалить источник из мониторинга?')) return
 
@@ -336,21 +397,21 @@ export default function DiscoveryCenter({
       <Card className="overflow-hidden border-cyan-400/15 bg-[radial-gradient(circle_at_0%_0%,rgba(34,211,238,0.13),transparent_34%),radial-gradient(circle_at_100%_0%,rgba(168,85,247,0.12),transparent_28%),rgba(15,23,42,0.72)] p-5 shadow-[0_0_42px_rgba(59,130,246,0.12)]">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <div className="text-xl font-semibold text-white">WEB-мониторинг</div>
+            <div className="flex items-center justify-between gap-4">
+              <div className="text-xl font-semibold text-white">WEB-мониторинг</div>
+              {rootWebTargets.length > 0 && canWrite ? (
+                <WebMonitoringToggle
+                  companyId={companyId}
+                  rootTargets={rootWebTargets}
+                />
+              ) : null}
+            </div>
             <div className="mt-2 max-w-2xl text-sm leading-6 text-zinc-300">
               Система ищет внешние площадки, каталоги, статьи и страницы. Яндекс Карты и 2GIS остаются отдельными источниками отзывов.
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={handleStartSync}
-            disabled={syncing}
-            className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl border border-blue-300/30 bg-cyan-400/10 px-5 text-sm font-semibold text-blue-100 shadow-[0_0_24px_rgba(34,211,238,0.12)] transition hover:bg-cyan-400/20 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {syncing ? <Spinner /> : '✧'}
-            {syncing ? 'Сканируем…' : 'Запустить сканирование'}
-          </button>
+          
         </div>
 
         <div className="mt-5 grid gap-3 md:grid-cols-4">
@@ -529,14 +590,17 @@ export default function DiscoveryCenter({
                       {sourceTitle(target)}
                     </div>
 
-                    <div className="mt-1 text-sm text-zinc-300">{host}</div>
+                    <div className="mt-1 text-sm text-zinc-300 truncate">{(target as any).bestUrl || target.externalUrl || host}</div>
 
-                    <div className={`mt-3 inline-flex w-fit rounded-full border px-2.5 py-1 text-[11px] font-semibold ${relevanceClass(label)}`}>
-                      {label} релевантность
-                    </div>
-
-                    <div className="mt-2 text-xs text-zinc-300">
-                      Найдено страниц: 1
+                    <div className="mt-3 flex flex-wrap gap-2 items-center">
+                      <div className={`inline-flex w-fit rounded-full border px-2.5 py-1 text-[11px] font-semibold ${relevanceClass(label)}`}>
+                        {label} релевантность
+                      </div>
+                      {(target as any).pagesCount > 1 ? (
+                        <div className="inline-flex rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px] text-zinc-300">
+                          {(target as any).pagesCount} страниц
+                        </div>
+                      ) : null}
                     </div>
                       <div className={canWrite ? "mt-auto grid grid-cols-3 gap-2 pt-4" : "mt-auto grid grid-cols-1 gap-2 pt-4"}>
                         {target.externalUrl ? (
@@ -559,7 +623,7 @@ export default function DiscoveryCenter({
                             <button
                               type="button"
                               disabled={busy}
-                              onClick={() => patchTarget(target, { isActive: true, syncMentionsEnabled: true })}
+                              onClick={() => patchGroup(target, { isActive: true, syncMentionsEnabled: true })}
                               className="inline-flex h-10 items-center justify-center rounded-2xl border border-cyan-300/35 bg-cyan-300/90 px-3 text-sm font-bold text-slate-950 transition hover:bg-cyan-200 hover:shadow-[0_0_22px_rgba(103,232,249,0.24)] disabled:opacity-60"
                             >
                               {busy ? <Spinner /> : 'Добавить'}
@@ -569,7 +633,7 @@ export default function DiscoveryCenter({
                               type="button"
                               disabled={busy}
                               onClick={() =>
-                                patchTarget(target, {
+                                patchGroup(target, {
                                   isActive: false,
                                   syncMentionsEnabled: false,
                                   config: {

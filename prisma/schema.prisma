@@ -82,15 +82,17 @@ enum NotificationType {
 }
 
 model User {
-  id           String    @id @default(cuid())
-  email        String    @unique
+  id           String     @id @default(cuid())
+  email        String     @unique
   passwordHash String
   fullName     String?
-  isActive     Boolean   @default(true)
+  isActive     Boolean    @default(true)
   systemRole   SystemRole @default(USER)
   lastLoginAt  DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  createdAt    DateTime   @default(now())
+  telegramChatId    BigInt?   @unique
+  telegramLinkedAt  DateTime?
+  updatedAt    DateTime   @updatedAt
 
   workspaceMembers     WorkspaceMember[]
   workspaceInvitesSent WorkspaceInvite[]
@@ -98,6 +100,8 @@ model User {
   aiReplyDrafts        AIReplyDraft[]        @relation("AIReplyDraftCreatedBy")
   jobLogsTriggered     JobLog[]              @relation("JobLogTriggeredBy")
   webPushSubscriptions WebPushSubscription[]
+  telegramLinkToken    TelegramLinkToken?
+  telegramDeliveries   TelegramMentionDelivery[]
 }
 
 model Workspace {
@@ -112,6 +116,9 @@ model Workspace {
   companies            Company[]
   sources              Source[]
   notificationRules    NotificationRule[]
+  subscription         Subscription?
+  payments             Payment[]
+  featureOverrides     FeatureOverride[]
   webPushSubscriptions WebPushSubscription[]
 
   @@index([slug])
@@ -188,14 +195,20 @@ model Company {
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
 
-  workspace            Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  aliases              CompanyAlias[]
-  sourceTargets        CompanySourceTarget[]
-  mentions             Mention[]
-  ratingSnapshots      RatingSnapshot[]
-  aiReplyDrafts        AIReplyDraft[]
-  notificationRules    NotificationRule[]
-  jobLogs              JobLog[]
+  workspace         Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  aliases           CompanyAlias[]
+  sourceTargets     CompanySourceTarget[]
+  mentions          Mention[]
+  ratingSnapshots   RatingSnapshot[]
+  watchedPages      WatchedPage[]
+  watchedPageItems  WatchedPageItem[]
+  aiReplyDrafts     AIReplyDraft[]
+  notificationRules NotificationRule[]
+  subscription      Subscription?         @relation(fields: [subscriptionId], references: [id])
+  payments          Payment[]
+  featureOverrides  FeatureOverride[]
+  jobLogs           JobLog[]
+  subscriptionId    String?
 
   @@index([workspaceId])
   @@index([workspaceId, isActive])
@@ -265,6 +278,7 @@ model CompanySourceTarget {
   source          Source           @relation(fields: [sourceId], references: [id], onDelete: Cascade)
   mentions        Mention[]
   ratingSnapshots RatingSnapshot[]
+  watchedPages    WatchedPage[]
 
   @@unique([companyId, sourceId, externalPlaceId])
   @@index([companyId])
@@ -313,6 +327,7 @@ model Mention {
   duplicates  Mention[] @relation("MentionDuplicateLink")
 
   aiReplyDrafts AIReplyDraft[]
+  telegramDeliveries TelegramMentionDelivery[]
 
   @@unique([companyId, platform, externalMentionId], map: "mention_company_platform_external_unique")
   @@unique([companyId, hash], map: "mention_company_hash_unique")
@@ -411,21 +426,21 @@ model NotificationRule {
 }
 
 model WebPushSubscription {
-  id          String    @id @default(cuid())
+  id          String  @id @default(cuid())
   workspaceId String
   userId      String
-  endpoint    String    @unique
+  endpoint    String  @unique
   p256dh      String
   auth        String
   userAgent   String?
-  isActive    Boolean   @default(true)
+  isActive    Boolean @default(true)
 
-  alertSentiments       String[]  @default(["NEGATIVE"])
-  lastAlertCheckedAt    DateTime?
-  lastUsedAt            DateTime?
+  alertSentiments    String[]  @default(["NEGATIVE"])
+  lastAlertCheckedAt DateTime?
+  lastUsedAt         DateTime?
 
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -467,4 +482,186 @@ model JobLog {
   @@index([jobStatus])
   @@index([queueName, jobName])
   @@index([createdAt(sort: Desc)])
+}
+
+// ============================================
+// BILLING
+// ============================================
+
+enum PlanCode {
+  FREE
+  START
+  PRO
+  AGENCY
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  EXPIRED
+}
+
+enum PaymentStatus {
+  PENDING
+  WAITING_FOR_CAPTURE
+  SUCCEEDED
+  CANCELED
+}
+
+enum BillingProvider {
+  MOCK
+  YOOKASSA
+}
+
+model Plan {
+  id           String   @id @default(cuid())
+  code         PlanCode @unique
+  name         String
+  priceMonthly Int // рубли в месяц
+  isActive     Boolean  @default(true)
+  limits       Json // { maxCompanies, maxAiRepliesPerMonth, platforms[], telegramNotifications, advancedAnalytics }
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  subscriptions Subscription[]
+}
+
+model Subscription {
+  id                String             @id @default(cuid())
+  workspaceId       String             @unique
+  planId            String
+  status            SubscriptionStatus @default(ACTIVE)
+  currentPeriodEnd  DateTime
+  cancelAtPeriodEnd Boolean            @default(false)
+  provider          BillingProvider    @default(MOCK)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  plan      Plan      @relation(fields: [planId], references: [id])
+  Company   Company[]
+
+  @@index([status, currentPeriodEnd])
+}
+
+model Payment {
+  id                String          @id @default(cuid())
+  workspaceId       String
+  planCode          PlanCode
+  amount            Int // рубли
+  currency          String          @default("RUB")
+  status            PaymentStatus   @default(PENDING)
+  provider          BillingProvider @default(MOCK)
+  providerPaymentId String?         @unique
+  rawPayload        Json?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  Company   Company?  @relation(fields: [companyId], references: [id])
+  companyId String?
+
+  @@index([workspaceId])
+  @@index([status])
+}
+
+model FeatureOverride {
+  id          String   @id @default(cuid())
+  workspaceId String
+  featureKey  String // 'telegramNotifications' | 'advancedAnalytics' | 'maxCompanies' | 'maxAiRepliesPerMonth' | 'platforms'
+  value       Json // true/false или число/массив для лимитов
+  note        String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  Company   Company?  @relation(fields: [companyId], references: [id])
+  companyId String?
+
+  @@unique([workspaceId, featureKey])
+}
+
+model TelegramLinkToken {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  token     String   @unique @default(cuid())
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+enum TelegramDeliveryStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+model TelegramMentionDelivery {
+  id        String                 @id @default(cuid())
+  mentionId String
+  userId    String
+  chatId    BigInt
+  status    TelegramDeliveryStatus @default(PENDING)
+  attempts  Int                    @default(0)
+  lastError String?
+  sentAt    DateTime?
+  createdAt DateTime               @default(now())
+  updatedAt DateTime               @updatedAt
+
+  mention Mention @relation(fields: [mentionId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([mentionId, userId], map: "telegram_delivery_mention_user_unique")
+  @@index([mentionId])
+  @@index([userId])
+  @@index([status])
+}
+
+model WatchedPage {
+  id                String    @id @default(cuid())
+  companyId         String
+  sourceTargetId    String?
+  url               String
+  domain            String
+  pageType          String    @default("UNKNOWN")
+  enabled           Boolean   @default(true)
+  lastCheckedAt     DateTime?
+  lastChangedAt     DateTime?
+  lastError         String?
+  contentHash       String?
+  checkIntervalMin  Int       @default(1440)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  company      Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  sourceTarget CompanySourceTarget? @relation(fields: [sourceTargetId], references: [id], onDelete: SetNull)
+
+  items        WatchedPageItem[]
+
+  @@unique([companyId, url])
+  @@index([companyId])
+  @@index([enabled, lastCheckedAt])
+}
+
+model WatchedPageItem {
+  id            String   @id @default(cuid())
+  watchedPageId String
+  companyId     String
+  itemHash      String
+  itemType      String
+  title         String?
+  content       String?
+  author        String?
+  ratingValue   Int?
+  publishedAt   DateTime?
+  url           String?
+  createdAt     DateTime @default(now())
+
+  watchedPage WatchedPage @relation(fields: [watchedPageId], references: [id], onDelete: Cascade)
+  company     Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([watchedPageId, itemHash])
+  @@index([companyId])
 }

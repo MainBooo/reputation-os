@@ -1,57 +1,61 @@
-# ReputationOS
+# Telegram Bot — Scaffold для ReputationOS
 
-SaaS-платформа мониторинга репутации бизнеса: автоматический сбор отзывов и упоминаний с Яндекс Карт, 2ГИС и веба, анализ тональности, AI-черновики ответов на отзывы и аналитика по компаниям.
-
-**Лендинг:** https://reputationos.generationweb.ru
-**Приложение:** https://reputation.generationweb.ru
-**Демо-доступ:** `demo@reputation.local` / `demo123`
-
-## Возможности
-
-- **Мониторинг источников** — отзывы и рейтинги с Яндекс Карт и 2ГИС, упоминания бренда в вебе (через Yandex Search API). Адаптер Google Maps реализован, но выключен (см. docs/DEPLOY.md → Known issues).
-- **Анализ тональности** — каждое упоминание автоматически классифицируется (позитив / нейтрально / негатив / смешанно).
-- **AI-ответы на отзывы** — генерация черновиков ответов (YandexGPT или OpenAI, переключается переменной `AI_PROVIDER`), с выбором тона.
-- **Дедупликация** — упоминания дедуплицируются по контентному хэшу, дубли связываются между собой.
-- **Аналитика** — динамика рейтингов по платформам, распределение тональности, история синхронизаций.
-- **Уведомления** — правила нотификаций (негатив, новые отзывы, падение рейтинга, дайджест), каналы: in-app, Web Push. Канал Telegram заложен в схему данных (быстрая фича для развития).
-- **Мультитенантность** — воркспейсы, роли OWNER / ADMIN / MEMBER, инвайты по email, системная роль SUPER_ADMIN с админ-панелью.
-
-## Стек
-
-| Слой | Технологии |
-|---|---|
-| Frontend (приложение + лендинг) | Next.js 14 (App Router, standalone build) |
-| API | NestJS |
-| Фоновые задачи | Node.js worker, очереди BullMQ (Redis) |
-| База данных | PostgreSQL + Prisma ORM |
-| Монорепо | Turborepo + pnpm workspaces |
-| Процесс-менеджер | PM2 |
-
-## Структура монорепо
+## Файлы в этом архиве
 
 ```
-apps/
-  api/        — NestJS REST API (auth, companies, mentions, analytics, ai-reply-drafts, ...)
-  frontend/   — приложение (dashboard, companies, admin, settings, team)
-  landing/    — публичный лендинг
-  worker/     — сбор данных: адаптеры источников, очереди, синхронизация
-packages/
-  shared/     — общие enum'ы, типы, константы (имена очередей и задач)
-  config/     — общие конфиги
 prisma/
-  schema.prisma       — схема БД (16 моделей)
-  migrations/0_init/  — чистый baseline: свежая БД разворачивается одной командой
-  seed.ts             — демо-данные (демо-юзер, 2 компании, источники, упоминания)
+  SCHEMA_PATCH.txt                            — что добавить в schema.prisma
+  migrations/20240614000000_add_telegram_bot/
+    migration.sql                             — SQL для ручного применения (fallback)
+
+apps/bot/
+  package.json
+  tsconfig.json
+  nest-cli.json
+  .env.example
+  src/
+    main.ts                                   — long polling bootstrap
+    app.module.ts
+    bot.module.ts                             — TelegrafModule.forRootAsync
+    common/
+      prisma/{prisma.service.ts, prisma.module.ts}
+      guards/{telegram-auth.guard.ts, workspace-role.guard.ts, plan-feature.guard.ts}
+      decorators/tg-user.decorator.ts
+      utils/date.util.ts
+    modules/
+      auth/{auth.module.ts, auth.service.ts, auth.update.ts}
+      companies/{companies.module.ts, companies.service.ts, companies.update.ts}
+      settings/{settings.module.ts, settings.service.ts, settings.update.ts}
+
+apps/api/src/telegram/
+  telegram.controller.ts                      — POST/DELETE/GET /api/telegram/*
+  telegram.service.ts
+  telegram.module.ts                          — добавить в app.module.ts
+
+apps/worker/src/telegram/
+  telegram-notifications.service.ts          — HTTP-клиент к Telegram Bot API
+  telegram-notifications.module.ts
+  WORKER_PATCH.txt                           — как встроить в notifications.processor
+
+apps/frontend/src/components/settings/
+  TelegramConnectSection.tsx                 — React-компонент для страницы профиля
+
+DEPLOY.md                                    — порядок деплоя
 ```
 
-## Быстрый старт
+## Чеклист интеграции
 
-```bash
-pnpm install
-cp .env.example .env        # заполнить переменные (см. docs/DEPLOY.md)
-pnpm exec prisma migrate deploy
-pnpm exec prisma db seed
-pnpm run build
-```
-
-Полная инструкция развёртывания с нуля, таблица всех env-переменных, конфигурация PM2 и nginx — в **docs/DEPLOY.md**. Устройство системы и поток данных — в **docs/ARCHITECTURE.md**.
+- [ ] Добавить поля в `schema.prisma` (см. `prisma/SCHEMA_PATCH.txt`)
+- [ ] `npx prisma migrate dev --name add_telegram_bot`
+- [ ] `npx prisma generate`
+- [ ] Скопировать `apps/bot/` → в монорепо
+- [ ] Скопировать `apps/api/src/telegram/` → в монорепо, добавить `TelegramApiModule` в `app.module.ts`
+- [ ] Скопировать `apps/worker/src/telegram/` → в монорепо, применить `WORKER_PATCH.txt`
+- [ ] Добавить `TelegramConnectSection` в страницу профиля
+- [ ] Создать `apps/bot/.env` с `TELEGRAM_BOT_TOKEN` и `TELEGRAM_BOT_USERNAME`
+- [ ] Добавить `TELEGRAM_BOT_TOKEN` + `TELEGRAM_BOT_USERNAME` в `apps/api/.env`
+- [ ] Добавить `TELEGRAM_BOT_TOKEN` в `apps/worker/.env`
+- [ ] `pnpm --filter reputation-bot build`
+- [ ] Добавить `reputation-bot` в `ecosystem.config.js` (см. `DEPLOY.md`)
+- [ ] `pm2 start ecosystem.config.js --only reputation-bot && pm2 save`
+- [ ] `pm2 restart reputation-api reputation-worker`

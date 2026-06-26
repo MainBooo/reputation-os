@@ -33,19 +33,37 @@ export class MentionsSyncProcessor implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  private readonly workerConnection: any
+
   constructor(
     @Inject('BULLMQ_CONNECTION') private readonly connection: any,
+    @Inject('BULLMQ_WORKER_CONNECTION_FACTORY') private readonly workerConnectionFactory: () => any,
     @Inject(`QUEUE_${QUEUES.MENTIONS_SYNC}`) private readonly queue: Queue,
     private readonly prisma: PrismaService,
     private readonly mentionService: MentionService,
     private readonly jobLogService: JobLogService
-  ) {}
+  ) {
+    this.workerConnection = workerConnectionFactory()
+  }
 
-  onModuleInit() {
-    this.worker = new Worker(QUEUES.MENTIONS_SYNC, async (job: Job) => this.handle(job), {
-      connection: this.connection,
-      ...WORKER_OPTIONS.mentionsSync
-    })
+  async onModuleInit() {
+    try {
+      console.log('[MentionsSync] Creating BullMQ Worker...')
+      console.log(`[MentionsSync] connection type=${typeof this.workerConnection}, status=${this.workerConnection?.status}`)
+      this.worker = new Worker(QUEUES.MENTIONS_SYNC, async (job: Job) => this.handle(job), {
+        connection: this.workerConnection,
+        ...WORKER_OPTIONS.mentionsSync
+      })
+      this.worker.on('ready', () => console.log('[MentionsSync] Worker READY'))
+      this.worker.on('error', (err) => console.error('[MentionsSync] Worker error', err))
+      this.worker.on('active', (job) => console.log(`[MentionsSync] active jobId=${job.id}`))
+      this.worker.on('failed', (job, err) => console.error(`[MentionsSync] failed jobId=${job?.id}`, err))
+      this.worker.on('stalled', (jobId) => console.warn(`[MentionsSync] stalled jobId=${jobId}`))
+      await this.worker.waitUntilReady()
+      console.log('[MentionsSync] BullMQ Worker waitUntilReady OK')
+    } catch (err) {
+      console.error('[MentionsSync] Failed to create Worker', err)
+    }
   }
 
   async onModuleDestroy() {

@@ -23,6 +23,47 @@ export class DedupService {
     return classifySentiment(content)
   }
 
+  private mergeMentionData(existing: {
+    title?: string | null
+    content?: string | null
+    normalizedContent?: string | null
+    author?: string | null
+    url?: string | null
+    publishedAt?: Date | null
+    ratingValue?: any
+    sentiment?: Sentiment | null
+    rawPayload?: any
+    metadata?: any
+  }, params: {
+    title?: string | null
+    content: string
+    normalizedContent: string
+    author?: string | null
+    url?: string | null
+    publishedAt: Date
+    ratingValue?: number | null
+    rawPayload?: unknown
+    metadata?: unknown
+  }) {
+    const nextRating = params.ratingValue ?? existing.ratingValue ?? null
+    const nextPublishedAt = existing.publishedAt && params.ratingValue == null
+      ? existing.publishedAt
+      : params.publishedAt
+
+    return {
+      title: params.title || existing.title || null,
+      content: params.content || existing.content || '',
+      normalizedContent: params.normalizedContent || existing.normalizedContent || '',
+      author: params.author || existing.author || null,
+      url: params.url || existing.url || null,
+      publishedAt: nextPublishedAt,
+      ratingValue: nextRating,
+      sentiment: this.classifyMentionSentiment(params.normalizedContent || existing.normalizedContent || '', nextRating),
+      rawPayload: params.rawPayload as any,
+      metadata: params.metadata as any,
+    }
+  }
+
   async persistMention(params: {
     companyId: string
     sourceId: string
@@ -53,18 +94,10 @@ export class DedupService {
       if (existingByExternal) {
         return this.prisma.mention.update({
           where: { id: existingByExternal.id },
-          data: {
-            title: params.title,
-            content: params.content,
+          data: this.mergeMentionData(existingByExternal, {
+            ...params,
             normalizedContent,
-            author: params.author,
-            url: params.url,
-            publishedAt: params.publishedAt,
-            ratingValue: params.ratingValue,
-            sentiment: this.classifyMentionSentiment(normalizedContent, params.ratingValue),
-            rawPayload: params.rawPayload as any,
-            metadata: params.metadata as any,
-          }
+          })
         })
       }
     }
@@ -80,7 +113,41 @@ export class DedupService {
       where: { companyId: params.companyId, hash }
     })
 
-    if (existingByHash) return existingByHash
+    if (existingByHash) {
+      return this.prisma.mention.update({
+        where: { id: existingByHash.id },
+        data: this.mergeMentionData(existingByHash, {
+          ...params,
+          normalizedContent,
+        })
+      })
+    }
+
+    const contentPrefix = normalizedContent.slice(0, 160)
+
+    const existingByAuthorAndContent = params.author && contentPrefix.length >= 80
+      ? await this.prisma.mention.findFirst({
+          where: {
+            companyId: params.companyId,
+            platform: params.platform,
+            author: params.author,
+            normalizedContent: {
+              startsWith: contentPrefix,
+            },
+          },
+          orderBy: { createdAt: 'asc' },
+        })
+      : null
+
+    if (existingByAuthorAndContent) {
+      return this.prisma.mention.update({
+        where: { id: existingByAuthorAndContent.id },
+        data: this.mergeMentionData(existingByAuthorAndContent, {
+          ...params,
+          normalizedContent,
+        })
+      })
+    }
 
     return this.prisma.mention.create({
       data: {

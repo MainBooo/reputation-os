@@ -15,9 +15,11 @@ import { RatingRefreshProcessor } from './processors/rating-refresh.processor'
 import { ReconcileProcessor } from './processors/reconcile.processor'
 import { NotificationsProcessor } from './processors/notifications.processor'
 import { AlertsCheckProcessor } from './processors/alerts-check.processor'
+import { TelegramNotificationsModule } from './telegram/telegram-notifications.module'
+import { PageWatchProcessor } from './processors/page-watch.processor'
 
 @Module({
-  imports: [ConfigModule.forRoot({ isGlobal: true }), PrismaModule, BullmqModule],
+  imports: [ConfigModule.forRoot({ isGlobal: true, envFilePath: ['apps/worker/.env', '.env'] }), PrismaModule, BullmqModule, TelegramNotificationsModule],
   providers: [
     SchedulerService,
     DedupService,
@@ -31,7 +33,8 @@ import { AlertsCheckProcessor } from './processors/alerts-check.processor'
     RatingRefreshProcessor,
     ReconcileProcessor,
     NotificationsProcessor,
-    AlertsCheckProcessor
+    AlertsCheckProcessor,
+    PageWatchProcessor
   ]
 })
 export class AppModule {}

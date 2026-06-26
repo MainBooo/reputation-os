@@ -1,5 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common'
 import { PrismaService } from '../../common/prisma/prisma.service'
+import { EntitlementsService } from '../billing/entitlements.service'
 import { GenerateReplyDto } from './dto/generate-reply.dto'
 
 type YandexGptResponse = {
@@ -12,7 +13,10 @@ type YandexGptResponse = {
 
 @Injectable()
 export class AiReplyDraftsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly entitlements: EntitlementsService
+  ) {}
 
   private buildPrompt(mention: any, dto: GenerateReplyDto) {
     const tone = dto.tone || 'professional'
@@ -122,6 +126,26 @@ export class AiReplyDraftsService {
       where: { userId, workspaceId: mention.company.workspaceId }
     })
     if (!member) throw new ForbiddenException('No access to mention')
+
+    const { limits } = await this.entitlements.getForWorkspace(mention.company.workspaceId)
+    const maxAiReplies = Number(limits.maxAiRepliesPerMonth)
+
+    if (maxAiReplies >= 0) {
+      const monthStart = new Date()
+      monthStart.setUTCDate(1)
+      monthStart.setUTCHours(0, 0, 0, 0)
+
+      const repliesThisMonth = await this.prisma.aIReplyDraft.count({
+        where: {
+          company: { workspaceId: mention.company.workspaceId },
+          createdAt: { gte: monthStart }
+        }
+      })
+
+      if (repliesThisMonth >= maxAiReplies) {
+        throw new ForbiddenException({ code: 'PLAN_LIMIT', feature: 'maxAiRepliesPerMonth', limit: maxAiReplies })
+      }
+    }
 
     const draftText = await this.generateWithYandexGpt(mention, dto)
 
