@@ -6,7 +6,9 @@
     "dev": "nest start --watch",
     "build": "nest build",
     "start": "node dist/main.js",
-    "lint": "eslint \"src/**/*.ts\""
+    "lint": "eslint \"src/**/*.ts\"",
+    "test": "jest --config jest.config.js",
+    "test:cov": "jest --config jest.config.js --coverage"
   },
   "dependencies": {
     "@nestjs/common": "^10.3.2",
@@ -32,12 +34,16 @@
   "devDependencies": {
     "@nestjs/cli": "^10.3.2",
     "@nestjs/schematics": "^10.1.1",
+    "@nestjs/testing": "^11.1.27",
     "@types/bcrypt": "^5.0.2",
     "@types/express": "^5.0.0",
+    "@types/jest": "^30.0.0",
     "@types/node": "^20.11.25",
     "@types/passport-jwt": "^4.0.1",
     "@types/web-push": "^3.6.4",
     "eslint": "^8.57.0",
+    "jest": "^30.4.2",
+    "ts-jest": "^29.4.11",
     "ts-node": "^10.9.2",
     "typescript": "^5.4.0"
   }
