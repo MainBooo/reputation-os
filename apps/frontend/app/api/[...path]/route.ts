@@ -45,7 +45,7 @@ async function handler(
     if (data?.accessToken) {
       responseHeaders.append(
         'set-cookie',
-        `accessToken=${encodeURIComponent(data.accessToken)}; Path=/; Max-Age=${60 * 60 * 24 * 7}; SameSite=Lax`
+        `accessToken=${encodeURIComponent(data.accessToken)}; Path=/; Max-Age=${60 * 60 * 24 * 7}; SameSite=Lax; HttpOnly`
       )
     }
   } catch {}

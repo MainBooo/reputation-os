@@ -666,7 +666,7 @@ export class CompaniesService {
       throw new NotFoundException('Company not found')
     }
 
-    await this.assertWorkspaceAccess(userId, company.workspaceId, 'write')
+    await this.assertWorkspaceAccess(userId, company.workspaceId, 'read')
 
     const logoRows = await this.prisma.$queryRawUnsafe<Array<{ logoUrl: string | null }>>(
       'select "logoUrl" from "Company" where "id" = $1 limit 1',
@@ -872,10 +872,13 @@ export class CompaniesService {
 
     await this.assertWorkspaceAccess(userId, company.workspaceId, 'write')
 
-    await this.prisma.companyAlias.deleteMany({ where: { companyId: id } })
-    await this.prisma.companySourceTarget.deleteMany({ where: { companyId: id } })
+    await this.prisma.aIReplyDraft.deleteMany({ where: { companyId: id } })
+    await this.prisma.watchedPageItem.deleteMany({ where: { companyId: id } })
+    await this.prisma.watchedPage.deleteMany({ where: { companyId: id } })
     await this.prisma.mention.deleteMany({ where: { companyId: id } })
     await this.prisma.ratingSnapshot.deleteMany({ where: { companyId: id } })
+    await this.prisma.companySourceTarget.deleteMany({ where: { companyId: id } })
+    await this.prisma.companyAlias.deleteMany({ where: { companyId: id } })
 
     return this.prisma.company.delete({
       where: { id }
@@ -1439,12 +1442,6 @@ export class CompaniesService {
 
     if (!target || target.companyId !== companyId) {
       throw new NotFoundException('Company source target not found')
-    }
-
-    if (target.source?.platform === 'WEB' && target.externalUrl) {
-      await this.prisma.watchedPage.deleteMany({
-        where: { companyId, url: target.externalUrl }
-      })
     }
 
     if (target.source?.platform === 'WEB' && target.externalUrl) {
