@@ -23,6 +23,7 @@ import { useSubscription } from '@/lib/subscription/SubscriptionContext'
 import { getPlanBadgeLabel, isSubscriptionActive } from '@/lib/api/billing'
 import NotificationsBell from './NotificationsBell'
 import ChatButton from '@/components/chat/ChatButton'
+import WorkspaceSwitcher from './WorkspaceSwitcher'
 
 const navItems = [
   {
@@ -176,6 +177,8 @@ export default function Topbar() {
                   </span>
                 ) : null}
               </div>
+
+              {user ? <WorkspaceSwitcher /> : null}
 
               {user ? (
                 <button

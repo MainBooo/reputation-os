@@ -27,9 +27,12 @@ export default function DeleteAccountSection() {
       const p = await getDeletePreview()
       setPreview(p)
       if (!p.canDelete) {
-        const names = p.blockerWorkspaces.map((w) => w.name).join(', ')
+        const blocker = p.blockerWorkspaces[0]
+        const names = p.blockerWorkspaces.map((w) => `«${w.name}»`).join(', ')
         setInlineError(
-          `Нельзя удалить аккаунт, пока вы единственный владелец workspace с другими участниками: ${names}. Передайте роль другому участнику.`
+          blocker
+            ? `Вы единственный владелец workspace «${blocker.name}»${p.blockerWorkspaces.length > 1 ? ` и ещё ${p.blockerWorkspaces.length - 1}` : ''}, где есть другие участники. Передайте роль владельца другому участнику, затем повторите удаление.`
+            : `Нельзя удалить аккаунт: вы единственный владелец workspace ${names}, где есть другие участники. Передайте роль владельца другому участнику, затем повторите удаление.`
         )
         return
       }
@@ -103,19 +106,21 @@ export default function DeleteAccountSection() {
             </div>
 
             {hasArchives && (
-              <div className="mb-4 rounded-xl border border-amber-400/20 bg-amber-500/[0.07] px-3 py-3">
-                <div className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-amber-300">
-                  <ArchiveX className="h-3.5 w-3.5" />
-                  Workspace будет архивирован
-                </div>
-                <div className="text-xs leading-5 text-amber-200/70">
-                  Вы единственный участник следующих workspace — они будут архивированы вместе с аккаунтом:
-                </div>
-                <ul className="mt-1.5 space-y-0.5">
-                  {preview!.archivedWorkspaces.map((w) => (
-                    <li key={w.id} className="text-xs font-medium text-amber-200">{w.name}</li>
-                  ))}
-                </ul>
+              <div className="mb-4 space-y-2">
+                {preview!.archivedWorkspaces.map((w) => (
+                  <div key={w.id} className="rounded-xl border border-amber-400/20 bg-amber-500/[0.07] px-3 py-3">
+                    <div className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-amber-300">
+                      <ArchiveX className="h-3.5 w-3.5" />
+                      Workspace будет архивирован
+                    </div>
+                    <div className="text-xs leading-5 text-amber-200/70">
+                      Вы являетесь единственным участником workspace{' '}
+                      <span className="font-medium text-amber-200">«{w.name}»</span>. При удалении аккаунта этот
+                      workspace будет архивирован, а доступ к компаниям, источникам, уведомлениям и настройкам
+                      будет потерян.
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
 
@@ -152,7 +157,7 @@ export default function DeleteAccountSection() {
                 disabled={!canConfirm || loading}
                 className="rounded-xl border border-red-500/30 bg-red-500/15 px-4 py-2 text-sm font-medium text-red-300 transition hover:bg-red-500/25 disabled:cursor-not-allowed disabled:opacity-40"
               >
-                {loading ? 'Удаление...' : hasArchives ? 'Удалить аккаунт и архивировать workspace' : 'Удалить аккаунт'}
+                {loading ? 'Удаление...' : hasArchives ? 'Удалить аккаунт и workspace' : 'Удалить аккаунт'}
               </button>
             </div>
           </div>

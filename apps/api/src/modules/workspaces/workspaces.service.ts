@@ -17,7 +17,7 @@ export class WorkspacesService {
 
   async findAllForUser(userId: string) {
     return this.prisma.workspace.findMany({
-      where: { members: { some: { userId } } },
+      where: { members: { some: { userId } }, deletedAt: null },
       include: { members: true, companies: true },
       orderBy: { createdAt: 'desc' }
     })
@@ -42,7 +42,7 @@ export class WorkspacesService {
       where: { id },
       include: { members: true, companies: true }
     })
-    if (!workspace) throw new NotFoundException('Workspace not found')
+    if (!workspace || workspace.deletedAt) throw new NotFoundException('Workspace not found')
     const hasAccess = workspace.members.some((member) => member.userId === userId)
     if (!hasAccess) throw new ForbiddenException('No access to workspace')
     return workspace
