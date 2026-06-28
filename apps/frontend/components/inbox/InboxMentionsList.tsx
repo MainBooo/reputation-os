@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useRef, useState, useEffect } from 'react'
+import { useRouter, usePathname } from 'next/navigation'
 import clsx from 'clsx'
 import MentionRow from '@/components/mentions/MentionRow'
 import Button from '@/components/ui/Button'
@@ -176,18 +177,34 @@ export default function InboxMentionsList({
   )
   const [ratedCount, setRatedCount] = useState(Number(initialRatedCount || 0))
   const requestIdRef = useRef(0)
+  const scrolledForHighlightRef = useRef('')
   const [highlightedId, setHighlightedId] = useState(highlightId || '')
+  const router = useRouter()
+  const pathname = usePathname()
 
   useEffect(() => {
     if (!highlightId) return
+    // Already scrolled to this exact id — do nothing on subsequent mention refetches
+    if (scrolledForHighlightRef.current === highlightId) return
+
     const el = document.getElementById(`mention-${highlightId}`)
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      setHighlightedId(highlightId)
-      const timer = setTimeout(() => setHighlightedId(''), 3000)
-      return () => clearTimeout(timer)
-    }
-  }, [highlightId, mentions]) // re-run when mentions load
+    if (!el) return // element not in DOM yet, will retry when mentions update
+
+    scrolledForHighlightRef.current = highlightId
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    setHighlightedId(highlightId)
+
+    const timer = setTimeout(() => {
+      setHighlightedId('')
+      // Remove mentionId from URL so repeated renders never re-trigger scroll
+      const params = new URLSearchParams(window.location.search)
+      params.delete('mentionId')
+      const qs = params.toString()
+      router.replace(`${pathname}${qs ? `?${qs}` : ''}`, { scroll: false })
+    }, 3500)
+
+    return () => clearTimeout(timer)
+  }, [highlightId, mentions]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const filterQuery = useMemo(() => {
     const params = new URLSearchParams()
