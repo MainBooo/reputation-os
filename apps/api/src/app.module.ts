@@ -16,6 +16,7 @@ import { SyncModule } from './modules/sync/sync.module'
 import { PushModule } from './modules/push/push.module'
 import { TelegramApiModule } from "./telegram/telegram.module"
 import { BillingModule } from './modules/billing/billing.module'
+import { ChatModule } from './modules/chat/chat.module'
 
 @Module({
   imports: [
@@ -35,7 +36,8 @@ import { BillingModule } from './modules/billing/billing.module'
     SyncModule,
     PushModule,
     BillingModule,
-    TelegramApiModule
+    TelegramApiModule,
+    ChatModule
   ]
 })
 export class AppModule {}

@@ -6,6 +6,7 @@ import CompanyYandexCronToggle from '@/components/companies/CompanyYandexCronTog
 import CompanyEditPopup from '@/components/companies/CompanyEditPopup'
 import CompanySyncStatusCard from '@/components/companies/CompanySyncStatusCard'
 import CompanyManualSyncButton from '@/components/companies/CompanyManualSyncButton'
+import CompanyChatPanel from '@/components/chat/CompanyChatPanel'
 import { getCompany, getCompanySyncStatus } from '@/lib/api/companies'
 import { getCompanyMentions } from '@/lib/api/mentions'
 
@@ -464,6 +465,8 @@ export default async function CompanyPage({ params }: { params: { id: string } }
           <EmptyState title="Упоминаний пока нет" description="После синхронизации последние отзывы появятся здесь." />
         )}
       </Card>
+
+      <CompanyChatPanel companyId={params.id} workspaceId={company.workspaceId} />
     </div>
   )
 }

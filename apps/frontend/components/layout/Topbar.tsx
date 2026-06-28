@@ -16,7 +16,11 @@ import {
   Radio
 } from 'lucide-react'
 import { me, logoutLocal, type AuthMe } from '@/lib/api/auth'
+import { apiFetch } from '@/lib/api/client'
+import { WORKSPACE_STORAGE_KEY } from '@/lib/workspace-selection'
+import { useChatContext } from '@/lib/chat/ChatContext'
 import NotificationsBell from './NotificationsBell'
+import ChatButton from '@/components/chat/ChatButton'
 
 const navItems = [
   {
@@ -78,6 +82,7 @@ export default function Topbar() {
   const router = useRouter()
   const [user, setUser] = useState<AuthMe | null>(null)
   const [loading, setLoading] = useState(true)
+  const { setWorkspaceId } = useChatContext()
 
   const visibleNavItems = user?.systemRole === 'SUPER_ADMIN'
     ? [
@@ -98,6 +103,19 @@ export default function Topbar() {
       try {
         const data = await me()
         if (mounted) setUser(data)
+
+        // Initialize workspace ID for chat
+        const stored = localStorage.getItem(WORKSPACE_STORAGE_KEY)
+        if (stored) {
+          setWorkspaceId(stored)
+        } else {
+          const workspaces = await apiFetch<{ id: string }[]>('/workspaces', undefined, [])
+          const id = Array.isArray(workspaces) && workspaces[0]?.id ? workspaces[0].id : ''
+          if (id) {
+            localStorage.setItem(WORKSPACE_STORAGE_KEY, id)
+            if (mounted) setWorkspaceId(id)
+          }
+        }
       } catch {
         if (mounted) setUser(null)
       } finally {
@@ -107,7 +125,7 @@ export default function Topbar() {
     return () => {
       mounted = false
     }
-  }, [pathname])
+  }, [pathname]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleLogout() {
     logoutLocal()
@@ -155,6 +173,7 @@ export default function Topbar() {
                 ) : null}
               </div>
 
+                {user ? <ChatButton /> : null}
                 {user ? <NotificationsBell /> : null}
 
               {user ? (

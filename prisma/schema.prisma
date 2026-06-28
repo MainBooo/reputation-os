@@ -105,6 +105,11 @@ model User {
   auditLogsAuthored    AuditLog[]            @relation("AuditLogActor")
   auditLogsTargeted    AuditLog[]            @relation("AuditLogTarget")
   subscriptionsManaged Subscription[]        @relation("SubscriptionManagedBy")
+
+  chatThreadsCreated ChatThread[]   @relation("ChatThreadCreatedBy")
+  chatMessages       ChatMessage[]
+  chatReadStates     ChatReadState[]
+  chatMentions       ChatMention[]
 }
 
 model Workspace {
@@ -125,6 +130,7 @@ model Workspace {
   featureOverrides     FeatureOverride[]
   webPushSubscriptions WebPushSubscription[]
   auditLogs            AuditLog[]            @relation("AuditLogWorkspace")
+  chatThreads          ChatThread[]
 
   @@index([slug])
 }
@@ -209,6 +215,7 @@ model Company {
   watchedPageItems  WatchedPageItem[]
   aiReplyDrafts     AIReplyDraft[]
   notificationRules NotificationRule[]
+  chatThreads       ChatThread[]          @relation("CompanyChatThreads")
   subscription      Subscription?         @relation(fields: [subscriptionId], references: [id])
   payments          Payment[]
   featureOverrides  FeatureOverride[]
@@ -333,6 +340,7 @@ model Mention {
 
   aiReplyDrafts AIReplyDraft[]
   telegramDeliveries TelegramMentionDelivery[]
+  chatThreads    ChatThread[]    @relation("MentionChatThreads")
 
   @@unique([companyId, platform, externalMentionId], map: "mention_company_platform_external_unique")
   @@unique([companyId, hash], map: "mention_company_hash_unique")
@@ -680,6 +688,102 @@ model WatchedPageItem {
 
   @@unique([watchedPageId, itemHash])
   @@index([companyId])
+}
+
+// ============================================
+// CHAT
+// ============================================
+
+enum ChatThreadType {
+  WORKSPACE
+  COMPANY
+  MENTION
+}
+
+enum ChatMessageType {
+  TEXT
+  SYSTEM
+}
+
+model ChatThread {
+  id            String         @id @default(cuid())
+  workspaceId   String
+  type          ChatThreadType
+  companyId     String?
+  mentionId     String?
+  title         String?
+  isArchived    Boolean        @default(false)
+  createdById   String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  lastMessageAt DateTime?
+
+  workspace  Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  company    Company?      @relation("CompanyChatThreads", fields: [companyId], references: [id], onDelete: Cascade)
+  mention    Mention?      @relation("MentionChatThreads", fields: [mentionId], references: [id], onDelete: Cascade)
+  createdBy  User?         @relation("ChatThreadCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  messages   ChatMessage[]
+  readStates ChatReadState[]
+
+  @@index([workspaceId])
+  @@index([workspaceId, type])
+  @@index([workspaceId, lastMessageAt(sort: Desc)])
+  @@index([companyId])
+  @@index([mentionId])
+}
+
+model ChatMessage {
+  id          String          @id @default(cuid())
+  threadId    String
+  workspaceId String
+  authorId    String
+
+  body      String
+  type      ChatMessageType @default(TEXT)
+  editedAt  DateTime?
+  deletedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  thread   ChatThread  @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  author   User        @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  mentions ChatMention[]
+
+  @@index([threadId, createdAt(sort: Desc)])
+  @@index([workspaceId])
+  @@index([authorId])
+  @@index([deletedAt])
+}
+
+model ChatReadState {
+  id                String   @id @default(cuid())
+  threadId          String
+  userId            String
+  workspaceId       String
+  lastReadAt        DateTime @default(now())
+  lastReadMessageId String?
+
+  thread ChatThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  user   User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([threadId, userId])
+  @@index([workspaceId])
+  @@index([userId])
+}
+
+model ChatMention {
+  id              String   @id @default(cuid())
+  messageId       String
+  mentionedUserId String
+  workspaceId     String
+  createdAt       DateTime @default(now())
+
+  message       ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  mentionedUser User        @relation(fields: [mentionedUserId], references: [id], onDelete: Cascade)
+
+  @@index([mentionedUserId])
+  @@index([workspaceId])
 }
 
 // ============================================

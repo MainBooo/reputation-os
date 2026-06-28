@@ -120,6 +120,7 @@ function mentionMatchesFilters(
 
 export default function InboxMentionsList({
   companyId,
+  workspaceId,
   initialMentions,
   total,
   initialAverageRating,
@@ -128,6 +129,7 @@ export default function InboxMentionsList({
   initialFilters
 }: {
   companyId: string
+  workspaceId?: string
   initialMentions: any[]
   total: number
   initialAverageRating?: number | null
@@ -552,6 +554,7 @@ export default function InboxMentionsList({
                   </label>
                   <MentionRow
                     mention={mention}
+                    workspaceId={workspaceId}
                     actions={
                       <button type="button" disabled={removingId === mention.id} onClick={() => handleDelete(mention.id)} className="inline-flex items-center justify-center rounded-md border border-red-500/20 bg-red-500/10 px-2.5 py-1 text-xs text-red-300 transition-all hover:bg-red-500/20 hover:text-white disabled:cursor-not-allowed disabled:opacity-60">
                         {removingId === mention.id ? 'Удаление...' : 'Удалить'}

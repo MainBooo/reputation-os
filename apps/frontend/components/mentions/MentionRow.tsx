@@ -3,6 +3,7 @@
 import { ReactNode, useState } from 'react'
 import clsx from 'clsx'
 import Badge from '../ui/Badge'
+import MentionChatPanel from '@/components/chat/MentionChatPanel'
 import { generateReply } from '@/lib/api/mentions'
 
 function platformLabel(value?: string | null) {
@@ -101,11 +102,13 @@ function getFaviconUrl(sourceUrl?: string | null) {
 export default function MentionRow({
   mention,
   actions,
-  hideMetaBadges = false
+  hideMetaBadges = false,
+  workspaceId
 }: {
   mention: any
   actions?: ReactNode
   hideMetaBadges?: boolean
+  workspaceId?: string
 }) {
   const [replyText, setReplyText] = useState('')
   const [replyLoading, setReplyLoading] = useState(false)
@@ -235,6 +238,12 @@ export default function MentionRow({
           <button type="button" onClick={handleCopyReply} className="mt-3 rounded-lg border border-cyan-400/30 bg-cyan-400/10 px-3 py-1.5 text-xs text-cyan-100">
             {copied ? 'Скопировано' : 'Скопировать'}
           </button>
+        </div>
+      ) : null}
+
+      {mention?.id && workspaceId ? (
+        <div className="mt-4">
+          <MentionChatPanel mentionId={mention.id} workspaceId={workspaceId} />
         </div>
       ) : null}
     </div>

@@ -83,6 +83,7 @@ export default async function CompanyInboxPage({
       ) : (
         <InboxMentionsList
           companyId={params.id}
+          workspaceId={company?.workspaceId}
           initialMentions={mentions}
           total={total}
           initialAverageRating={averageRating}
