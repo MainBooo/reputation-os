@@ -65,10 +65,11 @@ export default function ChatMessageList({ threadId, workspaceId, currentUserId, 
     return () => leaveThread(threadId)
   }, [threadId, workspaceId]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Scroll to bottom on first load
+  // Scroll to bottom on first load — scroll only the inner container, not the page
   useEffect(() => {
     if (!loading) {
-      bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+      const el = listRef.current
+      if (el) el.scrollTop = el.scrollHeight
     }
   }, [loading])
 
@@ -77,7 +78,10 @@ export default function ChatMessageList({ threadId, workspaceId, currentUserId, 
     const unsubMsg = onMessage((msg) => {
       if (msg.threadId !== threadId) return
       setMessages((prev) => [...prev, msg])
-      setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50)
+      setTimeout(() => {
+        const el = listRef.current
+        if (el) el.scrollTop = el.scrollHeight
+      }, 50)
       markThreadRead(threadId, workspaceId).then(refreshUnread).catch(() => {})
     })
 

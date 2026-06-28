@@ -58,7 +58,7 @@ export default function ChatMessageInput({ threadId, onSend }: Props) {
     try {
       await onSend(body)
       setValue('')
-      textareaRef.current?.focus()
+      textareaRef.current?.focus({ preventScroll: true })
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Не удалось отправить сообщение')
     } finally {
