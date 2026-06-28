@@ -23,6 +23,7 @@ export interface BillingPlan {
 }
 
 export interface BillingEntitlements {
+  workspaceId: string
   planCode: string
   planName: string
   priceMonthly: number
