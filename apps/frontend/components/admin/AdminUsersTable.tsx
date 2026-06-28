@@ -15,12 +15,11 @@ function roleLabel(role?: string) {
   return role || '—'
 }
 
-function buildQuery(q: string, systemRole: string) {
-  const params = new URLSearchParams()
-  if (q.trim()) params.set('q', q.trim())
-  if (systemRole) params.set('systemRole', systemRole)
-  const value = params.toString()
-  return value ? `?${value}` : ''
+function buildQuery(q: string, systemRole: string): Record<string, string> {
+  const params: Record<string, string> = {}
+  if (q.trim()) params.q = q.trim()
+  if (systemRole) params.systemRole = systemRole
+  return params
 }
 
 function RoleBadge({ role }: { role?: string }) {
@@ -73,7 +72,8 @@ export default function AdminUsersTable({ initialUsers }: { initialUsers: any[] 
     setMessage('')
 
     try {
-      const data = await getAdminUsers(nextQuery)
+      const res = await getAdminUsers(nextQuery)
+      const data = res && 'items' in res ? (res as any).items : res
       setUsers(Array.isArray(data) ? data : [])
     } catch (e) {
       setMessage(e instanceof Error ? e.message : 'Не удалось загрузить пользователей.')
@@ -89,7 +89,7 @@ export default function AdminUsersTable({ initialUsers }: { initialUsers: any[] 
   async function handleReset() {
     setQ('')
     setSystemRole('')
-    await loadUsers('')
+    await loadUsers({})
   }
 
   async function patchUser(userId: string, payload: { isActive?: boolean; systemRole?: AdminSystemRole }) {

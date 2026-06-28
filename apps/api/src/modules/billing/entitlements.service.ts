@@ -61,15 +61,22 @@ export class EntitlementsService {
     let priceMonthly = 0
     let limits: PlanLimits = { ...FREE_LIMITS }
 
-    if (
+    const now = new Date()
+    const isSubActive =
       subscription &&
-      subscription.status === SubscriptionStatus.ACTIVE &&
-      subscription.currentPeriodEnd > new Date()
-    ) {
-      planCode = subscription.plan.code
-      planName = subscription.plan.name
-      priceMonthly = subscription.plan.priceMonthly
-      limits = { ...FREE_LIMITS, ...(subscription.plan.limits as Partial<PlanLimits>) }
+      ((subscription.status === SubscriptionStatus.ACTIVE &&
+        subscription.currentPeriodEnd != null &&
+        subscription.currentPeriodEnd > now) ||
+        subscription.status === SubscriptionStatus.MANUAL ||
+        (subscription.status === SubscriptionStatus.TRIAL &&
+          subscription.trialEndsAt != null &&
+          subscription.trialEndsAt > now))
+
+    if (isSubActive) {
+      planCode = subscription!.plan.code
+      planName = subscription!.plan.name
+      priceMonthly = subscription!.plan.priceMonthly
+      limits = { ...FREE_LIMITS, ...(subscription!.plan.limits as Partial<PlanLimits>) }
     }
 
     const overrideMap: Partial<Record<FeatureKey, unknown>> = {}

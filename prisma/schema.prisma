@@ -102,6 +102,9 @@ model User {
   webPushSubscriptions WebPushSubscription[]
   telegramLinkToken    TelegramLinkToken?
   telegramDeliveries   TelegramMentionDelivery[]
+  auditLogsAuthored    AuditLog[]            @relation("AuditLogActor")
+  auditLogsTargeted    AuditLog[]            @relation("AuditLogTarget")
+  subscriptionsManaged Subscription[]        @relation("SubscriptionManagedBy")
 }
 
 model Workspace {
@@ -111,6 +114,7 @@ model Workspace {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  isActive             Boolean    @default(true)
   members              WorkspaceMember[]
   invites              WorkspaceInvite[]
   companies            Company[]
@@ -120,6 +124,7 @@ model Workspace {
   payments             Payment[]
   featureOverrides     FeatureOverride[]
   webPushSubscriptions WebPushSubscription[]
+  auditLogs            AuditLog[]            @relation("AuditLogWorkspace")
 
   @@index([slug])
 }
@@ -491,12 +496,19 @@ model JobLog {
 enum PlanCode {
   FREE
   START
+  STARTER
   PRO
+  BUSINESS
   AGENCY
+  ENTERPRISE
+  CUSTOM
 }
 
 enum SubscriptionStatus {
+  TRIAL
   ACTIVE
+  MANUAL
+  PAUSED
   PAST_DUE
   CANCELED
   EXPIRED
@@ -532,15 +544,19 @@ model Subscription {
   workspaceId       String             @unique
   planId            String
   status            SubscriptionStatus @default(ACTIVE)
-  currentPeriodEnd  DateTime
+  currentPeriodEnd  DateTime?
   cancelAtPeriodEnd Boolean            @default(false)
   provider          BillingProvider    @default(MOCK)
+  trialEndsAt       DateTime?
+  adminNote         String?
+  updatedByAdminId  String?
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
 
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  plan      Plan      @relation(fields: [planId], references: [id])
-  Company   Company[]
+  workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  plan           Plan      @relation(fields: [planId], references: [id])
+  updatedByAdmin User?     @relation("SubscriptionManagedBy", fields: [updatedByAdminId], references: [id], onDelete: SetNull)
+  Company        Company[]
 
   @@index([status, currentPeriodEnd])
 }
@@ -664,4 +680,33 @@ model WatchedPageItem {
 
   @@unique([watchedPageId, itemHash])
   @@index([companyId])
+}
+
+// ============================================
+// AUDIT LOG
+// ============================================
+
+model AuditLog {
+  id           String    @id @default(cuid())
+  actorUserId  String?
+  actorEmail   String?
+  action       String
+  entityType   String
+  entityId     String?
+  workspaceId  String?
+  targetUserId String?
+  beforeJson   Json?
+  afterJson    Json?
+  metadata     Json?
+  createdAt    DateTime  @default(now())
+
+  actorUser  User?      @relation("AuditLogActor",     fields: [actorUserId],  references: [id], onDelete: SetNull)
+  workspace  Workspace? @relation("AuditLogWorkspace", fields: [workspaceId],  references: [id], onDelete: SetNull)
+  targetUser User?      @relation("AuditLogTarget",    fields: [targetUserId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt(sort: Desc)])
+  @@index([actorUserId])
+  @@index([workspaceId])
+  @@index([targetUserId])
+  @@index([action])
 }

@@ -99,7 +99,7 @@ export default function AdminBillingPage() {
   useEffect(() => {
     me()
       .then((user) => {
-        if ((user as any)?.systemRole !== 'SUPE_ADMIN') router.replace('/')
+        if ((user as any)?.systemRole !== 'SUPER_ADMIN') router.replace('/')
       })
       .catch(() => router.replace('/'))
   }, [router])

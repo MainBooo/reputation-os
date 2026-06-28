@@ -5,12 +5,17 @@ import { QUEUES } from '../queues/queue.names'
 import { JOBS } from '../queues/job.names'
 import { CRON_JOB_OPTIONS } from '../queues/job-options'
 
+const HEARTBEAT_KEY = 'worker:heartbeat'
+const HEARTBEAT_TTL_SECONDS = 120
+const HEARTBEAT_INTERVAL_MS = 60_000
+
 @Injectable()
 export class SchedulerService implements OnModuleInit {
   private readonly logger = new Logger(SchedulerService.name)
 
   constructor(
     private readonly prisma: PrismaService,
+    @Inject('BULLMQ_CONNECTION') private readonly redis: any,
     @Inject(`QUEUE_${QUEUES.SOURCE_DISCOVERY}`) private readonly sourceDiscoveryQueue: Queue,
     @Inject(`QUEUE_${QUEUES.REVIEWS_SYNC}`) private readonly reviewsSyncQueue: Queue,
     @Inject(`QUEUE_${QUEUES.MENTIONS_SYNC}`) private readonly mentionsSyncQueue: Queue,
@@ -20,10 +25,18 @@ export class SchedulerService implements OnModuleInit {
     @Inject(`QUEUE_${QUEUES.PAGE_WATCH}`) private readonly pageWatchQueue: Queue
   ) {}
 
+  private async writeHeartbeat() {
+    await this.redis.set(HEARTBEAT_KEY, String(Date.now()), 'EX', HEARTBEAT_TTL_SECONDS)
+  }
+
   async onModuleInit() {
     await this.scheduleAll().catch((error) => {
       this.logger.error(`scheduleAll failed: ${error?.message || error}`)
     })
+
+    this.writeHeartbeat().catch(() => {})
+    const interval = setInterval(() => { this.writeHeartbeat().catch(() => {}) }, HEARTBEAT_INTERVAL_MS)
+    interval.unref()
   }
 
   private getYandexReviewsRepeatOptions() {

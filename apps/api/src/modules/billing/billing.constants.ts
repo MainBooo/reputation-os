@@ -6,6 +6,12 @@ export interface PlanLimits {
   platforms: Platform[]
   telegramNotifications: boolean
   advancedAnalytics: boolean
+  // Extended limits (admin-configurable)
+  maxSources: number            // -1 = безлимит
+  maxMembers: number            // -1 = безлимит
+  maxWebPages: number           // -1 = безлимит
+  webMonitoringEnabled: boolean
+  pushNotificationsEnabled: boolean
 }
 
 export type FeatureKey = keyof PlanLimits
@@ -15,7 +21,12 @@ export const FREE_LIMITS: PlanLimits = {
   maxAiRepliesPerMonth: 5,
   platforms: [Platform.YANDEX],
   telegramNotifications: false,
-  advancedAnalytics: false
+  advancedAnalytics: false,
+  maxSources: -1,
+  maxMembers: -1,
+  maxWebPages: 0,
+  webMonitoringEnabled: false,
+  pushNotificationsEnabled: false
 }
 
 export const FEATURE_KEYS: FeatureKey[] = [
@@ -23,5 +34,10 @@ export const FEATURE_KEYS: FeatureKey[] = [
   'maxAiRepliesPerMonth',
   'platforms',
   'telegramNotifications',
-  'advancedAnalytics'
+  'advancedAnalytics',
+  'maxSources',
+  'maxMembers',
+  'maxWebPages',
+  'webMonitoringEnabled',
+  'pushNotificationsEnabled'
 ]
