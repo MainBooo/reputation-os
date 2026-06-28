@@ -213,6 +213,11 @@ function CheckoutInner() {
         <div className="mt-4 border-t border-white/[0.06] pt-4 text-xs text-zinc-600">
           Оплата через Yandex Pay · Тестовый режим
         </div>
+        <div className="mt-2 text-xs text-zinc-700">
+          Исполнитель: Полякова Кристина Алексеевна · ИНН 645325780844 · Самозанятый
+          {' · '}
+          <a href="/legal" className="underline hover:text-zinc-500 transition-colors">Реквизиты</a>
+        </div>
       </Card>
 
       <button
