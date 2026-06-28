@@ -8,6 +8,11 @@ export interface PlanLimits {
   platforms: string[]
   telegramNotifications: boolean
   advancedAnalytics: boolean
+  webMonitoringEnabled?: boolean
+  pushNotificationsEnabled?: boolean
+  maxSources?: number
+  maxMembers?: number
+  maxWebPages?: number
 }
 
 export interface BillingPlan {
@@ -20,11 +25,29 @@ export interface BillingPlan {
 export interface BillingEntitlements {
   planCode: string
   planName: string
+  priceMonthly: number
+  subscriptionStatus: string | null
+  currentPeriodEnd: string | null
+  trialEndsAt?: string | null
+  workspaceActive: boolean
   effective: PlanLimits
+  limits: PlanLimits
   usage: {
     companiesCount: number
     aiRepliesThisMonth: number
   }
+}
+
+export function isSubscriptionActive(ent: BillingEntitlements | null): boolean {
+  if (!ent) return false
+  const s = ent.subscriptionStatus
+  return s === 'ACTIVE' || s === 'MANUAL' || s === 'TRIAL'
+}
+
+export function getPlanBadgeLabel(ent: BillingEntitlements | null): string {
+  if (!ent || !isSubscriptionActive(ent)) return 'Нет тарифа'
+  if (ent.subscriptionStatus === 'TRIAL') return 'Триал'
+  return ent.planName || ent.planCode || 'Нет тарифа'
 }
 
 export interface CheckoutResult {

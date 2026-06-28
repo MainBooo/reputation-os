@@ -22,7 +22,7 @@ const jsonLd = [
     description: 'Reputation OS — операционная система для управления отзывами, рейтингами, упоминаниями и репутационными рисками бизнеса.',
     offers: {
       '@type': 'Offer',
-      price: '3990',
+      price: '990',
       priceCurrency: 'RUB',
       availability: 'https://schema.org/InStock'
     }

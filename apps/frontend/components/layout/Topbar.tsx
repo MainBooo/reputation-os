@@ -19,6 +19,8 @@ import { me, logoutLocal, type AuthMe } from '@/lib/api/auth'
 import { apiFetch } from '@/lib/api/client'
 import { WORKSPACE_STORAGE_KEY } from '@/lib/workspace-selection'
 import { useChatContext } from '@/lib/chat/ChatContext'
+import { useSubscription } from '@/lib/subscription/SubscriptionContext'
+import { getPlanBadgeLabel, isSubscriptionActive } from '@/lib/api/billing'
 import NotificationsBell from './NotificationsBell'
 import ChatButton from '@/components/chat/ChatButton'
 
@@ -83,6 +85,9 @@ export default function Topbar() {
   const [user, setUser] = useState<AuthMe | null>(null)
   const [loading, setLoading] = useState(true)
   const { setWorkspaceId } = useChatContext()
+  const { entitlements } = useSubscription()
+  const planLabel = getPlanBadgeLabel(entitlements)
+  const planActive = isSubscriptionActive(entitlements)
 
   const visibleNavItems = user?.systemRole === 'SUPER_ADMIN'
     ? [
@@ -172,8 +177,23 @@ export default function Topbar() {
                 ) : null}
               </div>
 
-                {user ? <ChatButton /> : null}
-                {user ? <NotificationsBell /> : null}
+              {user ? (
+                <button
+                  type="button"
+                  onClick={() => router.push('/billing/checkout')}
+                  className={clsx(
+                    'inline-flex shrink-0 items-center rounded-[18px] border px-3 py-2 text-xs font-semibold transition',
+                    planActive
+                      ? 'border-cyan-400/25 bg-cyan-500/[0.10] text-cyan-200 hover:bg-cyan-500/[0.18]'
+                      : 'border-amber-400/20 bg-amber-500/[0.08] text-amber-200 hover:bg-amber-500/[0.14]'
+                  )}
+                  title="Перейти к выбору тарифа"
+                >
+                  {planLabel}
+                </button>
+              ) : null}
+              {user ? <ChatButton /> : null}
+              {user ? <NotificationsBell /> : null}
 
               {user ? (
                 <button

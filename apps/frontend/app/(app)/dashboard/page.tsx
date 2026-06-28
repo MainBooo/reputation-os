@@ -3,6 +3,7 @@ import PageHeader from '@/components/ui/PageHeader'
 import Card from '@/components/ui/Card'
 import EmptyState from '@/components/ui/EmptyState'
 import DashboardCharts from '@/components/dashboard/DashboardCharts'
+import UpgradeBanner from '@/components/billing/UpgradeBanner'
 import { getCompanies } from '@/lib/api/companies'
 import { me } from '@/lib/api/auth'
 import { getCompanyMentions } from '@/lib/api/mentions'
@@ -801,6 +802,8 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
           </p>
         </div>
       </div>
+
+      <UpgradeBanner />
 
       <Card className="relative mb-5 overflow-hidden rounded-[30px] border-white/10 bg-[radial-gradient(circle_at_0%_0%,rgba(34,211,238,0.16),transparent_34%),#0b111c]/95 p-5 shadow-[0_22px_70px_rgba(0,0,0,0.34),0_0_44px_rgba(34,211,238,0.06)] sm:p-6">
         <div className="mb-4 flex items-center justify-between gap-3">
