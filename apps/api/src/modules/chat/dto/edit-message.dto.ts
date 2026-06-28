@@ -1,8 +1,9 @@
-import { IsString, MaxLength, MinLength } from 'class-validator'
+import { IsOptional, IsString, MaxLength, MinLength } from 'class-validator'
 
 export class EditMessageDto {
+  @IsOptional()
   @IsString()
-  workspaceId!: string
+  workspaceId?: string
 
   @IsString()
   @MinLength(1)

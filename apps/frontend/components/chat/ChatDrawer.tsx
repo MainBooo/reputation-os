@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { ArrowLeft, X } from 'lucide-react'
-import { getThreads } from '@/lib/api/chat'
+import { getThreads, getDirectPartner } from '@/lib/api/chat'
 import { me } from '@/lib/api/auth'
 import { useChatContext } from '@/lib/chat/ChatContext'
 import ChatThreadList from './ChatThreadList'
@@ -66,11 +66,20 @@ export default function ChatDrawer() {
     })
   }, [isOpen, workspaceId]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Update thread unread counts after reading
   function handleSelectThread(threadId: string) {
     setSelectedThreadId(threadId)
-    // Mark as read in thread list optimistically
     setThreads((prev) => prev.map((t) => t.id === threadId ? { ...t, unreadCount: 0 } : t))
+  }
+
+  function getThreadTitle(thread: ChatThread): string {
+    if (thread.type === 'DIRECT') {
+      const partner = getDirectPartner(thread, currentUserId)
+      return partner?.fullName || partner?.email || 'Личный чат'
+    }
+    if (thread.title) return thread.title
+    if (thread.type === 'WORKSPACE') return 'Общий чат'
+    if (thread.type === 'COMPANY') return thread.company?.name ?? 'Компания'
+    return 'Обсуждение отзыва'
   }
 
   if (!isOpen) return null
@@ -99,15 +108,16 @@ export default function ChatDrawer() {
 
           <div className="flex-1 min-w-0">
             <div className="text-sm font-semibold text-white">
-              {selectedThread
-                ? (selectedThread.title || (selectedThread.type === 'WORKSPACE' ? 'Общий чат' : selectedThread.type === 'COMPANY' ? selectedThread.company?.name ?? 'Компания' : 'Обсуждение отзыва'))
-                : 'Командный чат'}
+              {selectedThread ? getThreadTitle(selectedThread) : 'Сообщения'}
             </div>
             {selectedThread?.type === 'COMPANY' && selectedThread.company ? (
               <div className="mt-0.5 text-xs text-slate-500">{selectedThread.company.name}</div>
             ) : null}
             {selectedThread?.type === 'MENTION' && selectedThread.mention ? (
               <div className="mt-0.5 truncate text-xs text-slate-500">{selectedThread.mention.preview}</div>
+            ) : null}
+            {selectedThread?.type === 'DIRECT' ? (
+              <div className="mt-0.5 text-xs text-slate-500">Личный диалог</div>
             ) : null}
           </div>
 
@@ -125,9 +135,9 @@ export default function ChatDrawer() {
           {selectedThreadId ? (
             <ChatMessageList
               threadId={selectedThreadId}
-              workspaceId={workspaceId}
+              workspaceId={selectedThread?.workspaceId ?? null}
               currentUserId={currentUserId}
-              canManage={canManage}
+              canManage={canManage && selectedThread?.type !== 'DIRECT'}
             />
           ) : (
             <div className="flex-1 overflow-y-auto">
@@ -136,6 +146,7 @@ export default function ChatDrawer() {
                 selectedId={null}
                 onSelect={handleSelectThread}
                 loading={loadingThreads || (isOpen && !workspaceId)}
+                currentUserId={currentUserId}
               />
             </div>
           )}

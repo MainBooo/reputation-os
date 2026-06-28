@@ -18,6 +18,7 @@ import { ChatGateway } from './chat.gateway'
 import { CreateThreadDto } from './dto/create-thread.dto'
 import { CreateMessageDto } from './dto/create-message.dto'
 import { EditMessageDto } from './dto/edit-message.dto'
+import { CreateDirectChatDto } from './dto/create-direct-chat.dto'
 
 @UseGuards(JwtAuthGuard)
 @Controller('chat')
@@ -43,6 +44,14 @@ export class ChatController {
     return this.chatService.createThread(user.id, dto)
   }
 
+  @Post('direct')
+  findOrCreateDirectThread(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: CreateDirectChatDto
+  ) {
+    return this.chatService.findOrCreateDirectThread(user.id, dto.email)
+  }
+
   @Get('threads/:threadId')
   getThread(
     @CurrentUser() user: AuthUser,
@@ -62,7 +71,7 @@ export class ChatController {
   ) {
     return this.chatService.getMessages(
       user.id,
-      workspaceId,
+      workspaceId || undefined,
       threadId,
       cursor,
       limit ? Number(limit) : 50
@@ -79,11 +88,22 @@ export class ChatController {
 
     this.chatGateway.emitToThread(threadId, 'chat:message_created', { threadId, message })
 
-    // Emit unread update to all workspace members (they'll refetch their count)
-    this.chatGateway.emitToWorkspace(dto.workspaceId, 'chat:unread_updated', {
-      workspaceId: dto.workspaceId,
-      threadId
-    })
+    if (message.workspaceId) {
+      // Workspace thread: emit to workspace room
+      this.chatGateway.emitToWorkspace(message.workspaceId, 'chat:unread_updated', {
+        workspaceId: message.workspaceId,
+        threadId
+      })
+    } else {
+      // DIRECT thread: emit to each participant's personal room
+      const participantIds = await this.chatService.getDirectParticipantIds(threadId)
+      for (const participantId of participantIds) {
+        this.chatGateway.emitToUser(participantId, 'chat:unread_updated', {
+          workspaceId: '',
+          threadId
+        })
+      }
+    }
 
     return message
   }
@@ -110,7 +130,11 @@ export class ChatController {
     @Param('messageId') messageId: string,
     @Query('workspaceId') workspaceId: string
   ) {
-    const message = await this.chatService.deleteMessage(user.id, messageId, workspaceId)
+    const message = await this.chatService.deleteMessage(
+      user.id,
+      messageId,
+      workspaceId || undefined
+    )
 
     if ('threadId' in message) {
       this.chatGateway.emitToThread(message.threadId, 'chat:message_deleted', {
@@ -128,7 +152,11 @@ export class ChatController {
     @Param('threadId') threadId: string,
     @Body('workspaceId') workspaceId: string
   ) {
-    const result = await this.chatService.markRead(user.id, workspaceId, threadId)
+    const result = await this.chatService.markRead(
+      user.id,
+      workspaceId || undefined,
+      threadId
+    )
 
     this.chatGateway.emitToUser(user.id, 'chat:thread_read', { threadId, workspaceId })
 

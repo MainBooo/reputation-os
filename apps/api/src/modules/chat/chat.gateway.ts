@@ -62,13 +62,13 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @SubscribeMessage('chat:join_thread')
   async handleJoinThread(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: { threadId: string; workspaceId: string }
+    @MessageBody() data: { threadId: string; workspaceId?: string }
   ) {
     const userId = client.data.userId as string | undefined
     if (!userId) return
 
     try {
-      await this.chatService.getThread(userId, data.workspaceId, data.threadId)
+      await this.chatService.getThread(userId, data.workspaceId || '', data.threadId)
       client.join(`chat-thread:${data.threadId}`)
     } catch {
       // Ignore access errors — client simply won't receive events

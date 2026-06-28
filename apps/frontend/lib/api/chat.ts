@@ -9,7 +9,7 @@ export interface ChatAuthor {
 export interface ChatMessage {
   id: string
   threadId: string
-  workspaceId: string
+  workspaceId?: string | null
   authorId: string
   body: string
   type: 'TEXT' | 'SYSTEM'
@@ -20,11 +20,16 @@ export interface ChatMessage {
   author: ChatAuthor
 }
 
+export interface ChatParticipant {
+  userId: string
+  user: ChatAuthor
+}
+
 export interface ChatThread {
   id: string
-  type: 'WORKSPACE' | 'COMPANY' | 'MENTION'
+  type: 'WORKSPACE' | 'COMPANY' | 'MENTION' | 'DIRECT'
   title?: string | null
-  workspaceId: string
+  workspaceId?: string | null
   companyId?: string | null
   mentionId?: string | null
   isArchived: boolean
@@ -32,6 +37,7 @@ export interface ChatThread {
   createdAt: string
   company?: { id: string; name: string } | null
   mention?: { id: string; preview: string; platform: string } | null
+  participants?: ChatParticipant[] | null
   lastMessage?: ChatMessage | null
   unreadCount: number
 }
@@ -53,8 +59,9 @@ export function getThread(threadId: string, workspaceId: string) {
   return apiFetch<ChatThread>(`/chat/threads/${threadId}?workspaceId=${workspaceId}`)
 }
 
-export function getMessages(threadId: string, workspaceId: string, cursor?: string, limit = 50) {
-  const qs = new URLSearchParams({ workspaceId, limit: String(limit) })
+export function getMessages(threadId: string, workspaceId: string | null | undefined, cursor?: string, limit = 50) {
+  const qs = new URLSearchParams({ limit: String(limit) })
+  if (workspaceId) qs.set('workspaceId', workspaceId)
   if (cursor) qs.set('cursor', cursor)
   return apiFetch<MessagesResponse>(`/chat/threads/${threadId}/messages?${qs}`)
 }
@@ -69,28 +76,36 @@ export function createThread(payload: {
   return apiFetch<ChatThread>('/chat/threads', { method: 'POST', body: JSON.stringify(payload) })
 }
 
-export function sendMessage(threadId: string, workspaceId: string, body: string) {
+export function createDirectChat(email: string) {
+  return apiFetch<ChatThread>('/chat/direct', {
+    method: 'POST',
+    body: JSON.stringify({ email })
+  })
+}
+
+export function sendMessage(threadId: string, workspaceId: string | null | undefined, body: string) {
   return apiFetch<ChatMessage>(`/chat/threads/${threadId}/messages`, {
     method: 'POST',
-    body: JSON.stringify({ workspaceId, body })
+    body: JSON.stringify({ workspaceId: workspaceId || undefined, body })
   })
 }
 
-export function editMessage(messageId: string, workspaceId: string, body: string) {
+export function editMessage(messageId: string, workspaceId: string | null | undefined, body: string) {
   return apiFetch<ChatMessage>(`/chat/messages/${messageId}`, {
     method: 'PATCH',
-    body: JSON.stringify({ workspaceId, body })
+    body: JSON.stringify({ workspaceId: workspaceId || undefined, body })
   })
 }
 
-export function deleteMessage(messageId: string, workspaceId: string) {
-  return apiFetch(`/chat/messages/${messageId}?workspaceId=${workspaceId}`, { method: 'DELETE' })
+export function deleteMessage(messageId: string, workspaceId: string | null | undefined) {
+  const qs = workspaceId ? `?workspaceId=${workspaceId}` : ''
+  return apiFetch(`/chat/messages/${messageId}${qs}`, { method: 'DELETE' })
 }
 
-export function markThreadRead(threadId: string, workspaceId: string) {
+export function markThreadRead(threadId: string, workspaceId: string | null | undefined) {
   return apiFetch(`/chat/threads/${threadId}/read`, {
     method: 'POST',
-    body: JSON.stringify({ workspaceId })
+    body: JSON.stringify({ workspaceId: workspaceId || undefined })
   })
 }
 
@@ -104,4 +119,10 @@ export function getOrCreateCompanyThread(companyId: string, workspaceId: string)
 
 export function getOrCreateMentionThread(mentionId: string, workspaceId: string) {
   return apiFetch<ChatThread>(`/chat/mention/${mentionId}/thread?workspaceId=${workspaceId}`)
+}
+
+export function getDirectPartner(thread: ChatThread, currentUserId: string): ChatAuthor | null {
+  if (thread.type !== 'DIRECT' || !thread.participants) return null
+  const other = thread.participants.find((p) => p.userId !== currentUserId)
+  return other?.user ?? null
 }

@@ -9,7 +9,7 @@ import type { ChatMessage } from '@/lib/api/chat'
 
 interface Props {
   threadId: string
-  workspaceId: string
+  workspaceId: string | null | undefined
   currentUserId: string
   canManage: boolean
 }

@@ -106,10 +106,11 @@ model User {
   auditLogsTargeted    AuditLog[]            @relation("AuditLogTarget")
   subscriptionsManaged Subscription[]        @relation("SubscriptionManagedBy")
 
-  chatThreadsCreated ChatThread[]   @relation("ChatThreadCreatedBy")
+  chatThreadsCreated ChatThread[]     @relation("ChatThreadCreatedBy")
   chatMessages       ChatMessage[]
   chatReadStates     ChatReadState[]
   chatMentions       ChatMention[]
+  chatParticipants   ChatParticipant[]
 }
 
 model Workspace {
@@ -698,6 +699,7 @@ enum ChatThreadType {
   WORKSPACE
   COMPANY
   MENTION
+  DIRECT
 }
 
 enum ChatMessageType {
@@ -707,7 +709,7 @@ enum ChatMessageType {
 
 model ChatThread {
   id            String         @id @default(cuid())
-  workspaceId   String
+  workspaceId   String?
   type          ChatThreadType
   companyId     String?
   mentionId     String?
@@ -718,24 +720,39 @@ model ChatThread {
   updatedAt     DateTime       @updatedAt
   lastMessageAt DateTime?
 
-  workspace  Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  company    Company?      @relation("CompanyChatThreads", fields: [companyId], references: [id], onDelete: Cascade)
-  mention    Mention?      @relation("MentionChatThreads", fields: [mentionId], references: [id], onDelete: Cascade)
-  createdBy  User?         @relation("ChatThreadCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  messages   ChatMessage[]
-  readStates ChatReadState[]
+  workspace    Workspace?       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  company      Company?         @relation("CompanyChatThreads", fields: [companyId], references: [id], onDelete: Cascade)
+  mention      Mention?         @relation("MentionChatThreads", fields: [mentionId], references: [id], onDelete: Cascade)
+  createdBy    User?            @relation("ChatThreadCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  messages     ChatMessage[]
+  readStates   ChatReadState[]
+  participants ChatParticipant[]
 
   @@index([workspaceId])
   @@index([workspaceId, type])
   @@index([workspaceId, lastMessageAt(sort: Desc)])
   @@index([companyId])
   @@index([mentionId])
+  @@index([type])
+}
+
+model ChatParticipant {
+  id        String   @id @default(cuid())
+  threadId  String
+  userId    String
+  createdAt DateTime @default(now())
+
+  thread ChatThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  user   User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([threadId, userId])
+  @@index([userId])
 }
 
 model ChatMessage {
   id          String          @id @default(cuid())
   threadId    String
-  workspaceId String
+  workspaceId String?
   authorId    String
 
   body      String
@@ -760,7 +777,7 @@ model ChatReadState {
   id                String   @id @default(cuid())
   threadId          String
   userId            String
-  workspaceId       String
+  workspaceId       String?
   lastReadAt        DateTime @default(now())
   lastReadMessageId String?
 

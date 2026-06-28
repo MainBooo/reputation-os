@@ -45,10 +45,27 @@ export class ChatService {
     return member?.role ?? null
   }
 
-  private async assertThreadAccess(userId: string, threadId: string) {
-    const thread = await this.prisma.chatThread.findUnique({ where: { id: threadId } })
+  private async assertDirectParticipant(userId: string, threadId: string) {
+    const participant = await this.prisma.chatParticipant.findUnique({
+      where: { threadId_userId: { threadId, userId } }
+    })
+    if (!participant) throw new ForbiddenException('Нет доступа к диалогу')
+    return participant
+  }
+
+  private async assertThreadAccess(userId: string, threadId: string, workspaceId?: string) {
+    const thread = await this.prisma.chatThread.findUnique({
+      where: { id: threadId }
+    })
     if (!thread) throw new NotFoundException('Тред не найден')
-    await this.assertMember(userId, thread.workspaceId)
+
+    if (thread.type === 'DIRECT') {
+      await this.assertDirectParticipant(userId, threadId)
+    } else {
+      const wid = workspaceId || thread.workspaceId!
+      await this.assertMember(userId, wid)
+    }
+
     return thread
   }
 
@@ -79,7 +96,6 @@ export class ChatService {
     filters: { type?: ChatThreadType; companyId?: string; mentionId?: string } = {}
   ) {
     await this.assertMember(userId, workspaceId)
-
     await this.ensureWorkspaceThread(userId, workspaceId)
 
     const where: any = { workspaceId, isArchived: false }
@@ -87,7 +103,7 @@ export class ChatService {
     if (filters.companyId) where.companyId = filters.companyId
     if (filters.mentionId) where.mentionId = filters.mentionId
 
-    const threads = await this.prisma.chatThread.findMany({
+    const workspaceThreads = await this.prisma.chatThread.findMany({
       where,
       orderBy: { lastMessageAt: 'desc' },
       include: {
@@ -102,13 +118,14 @@ export class ChatService {
       }
     })
 
-    const withUnread = await Promise.all(
-      threads.map(async (thread) => {
+    const workspaceWithUnread = await Promise.all(
+      workspaceThreads.map(async (thread) => {
         const unreadCount = await this.getUnreadForThread(userId, thread.id)
         return {
           id: thread.id,
           type: thread.type,
           title: thread.title,
+          workspaceId: thread.workspaceId,
           isArchived: thread.isArchived,
           lastMessageAt: thread.lastMessageAt,
           createdAt: thread.createdAt,
@@ -120,28 +137,82 @@ export class ChatService {
                 platform: thread.mention.platform
               }
             : null,
+          participants: null as null,
           lastMessage: thread.messages[0] ?? null,
           unreadCount
         }
       })
     )
 
-    return withUnread
+    // DIRECT threads for this user (not filtered by workspace)
+    const directParticipations = await this.prisma.chatParticipant.findMany({
+      where: { userId },
+      include: {
+        thread: {
+          include: {
+            participants: {
+              include: { user: { select: AUTHOR_SELECT } }
+            },
+            messages: {
+              where: { deletedAt: null },
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+              include: { author: { select: AUTHOR_SELECT } }
+            }
+          }
+        }
+      }
+    })
+
+    const directWithUnread = await Promise.all(
+      directParticipations
+        .filter((p) => !p.thread.isArchived)
+        .map(async (p) => {
+          const thread = p.thread
+          const unreadCount = await this.getUnreadForThread(userId, thread.id)
+          return {
+            id: thread.id,
+            type: thread.type,
+            title: thread.title,
+            workspaceId: thread.workspaceId,
+            isArchived: thread.isArchived,
+            lastMessageAt: thread.lastMessageAt,
+            createdAt: thread.createdAt,
+            company: null as null,
+            mention: null as null,
+            participants: thread.participants.map((participant) => ({
+              userId: participant.userId,
+              user: participant.user
+            })),
+            lastMessage: thread.messages[0] ?? null,
+            unreadCount
+          }
+        })
+    )
+
+    return [...workspaceWithUnread, ...directWithUnread]
   }
 
   // ─── Single thread ────────────────────────────────────────────────────────
 
   async getThread(userId: string, workspaceId: string, threadId: string) {
-    await this.assertMember(userId, workspaceId)
-
-    const thread = await this.prisma.chatThread.findFirst({
-      where: { id: threadId, workspaceId },
+    const thread = await this.prisma.chatThread.findUnique({
+      where: { id: threadId },
       include: {
         company: { select: { id: true, name: true } },
-        mention: { select: { id: true, content: true, platform: true } }
+        mention: { select: { id: true, content: true, platform: true } },
+        participants: { include: { user: { select: AUTHOR_SELECT } } }
       }
     })
     if (!thread) throw new NotFoundException('Тред не найден')
+
+    if (thread.type === 'DIRECT') {
+      await this.assertDirectParticipant(userId, threadId)
+    } else {
+      const wid = workspaceId || thread.workspaceId!
+      if (!wid) throw new ForbiddenException('Нет доступа')
+      await this.assertMember(userId, wid)
+    }
 
     const unreadCount = await this.getUnreadForThread(userId, threadId)
     return { ...thread, unreadCount }
@@ -151,17 +222,20 @@ export class ChatService {
 
   async getMessages(
     userId: string,
-    workspaceId: string,
+    workspaceId: string | undefined,
     threadId: string,
     cursor?: string,
     limit = 50
   ) {
-    await this.assertMember(userId, workspaceId)
-
-    const thread = await this.prisma.chatThread.findFirst({
-      where: { id: threadId, workspaceId }
-    })
+    const thread = await this.prisma.chatThread.findUnique({ where: { id: threadId } })
     if (!thread) throw new NotFoundException('Тред не найден')
+
+    if (thread.type === 'DIRECT') {
+      await this.assertDirectParticipant(userId, threadId)
+    } else {
+      const wid = workspaceId || thread.workspaceId!
+      await this.assertMember(userId, wid)
+    }
 
     const take = Math.min(limit, 100)
 
@@ -275,15 +349,77 @@ export class ChatService {
     throw new BadRequestException('Неверные параметры треда')
   }
 
+  // ─── Direct chat ──────────────────────────────────────────────────────────
+
+  async findOrCreateDirectThread(requesterId: string, email: string) {
+    const targetEmail = email.trim().toLowerCase()
+
+    const targetUser = await this.prisma.user.findFirst({
+      where: { email: targetEmail },
+      select: { id: true, email: true, fullName: true }
+    })
+    if (!targetUser) {
+      throw new NotFoundException('Пользователь с таким email не найден.')
+    }
+
+    if (targetUser.id === requesterId) {
+      throw new BadRequestException('Нельзя создать чат с самим собой.')
+    }
+
+    // Find existing DIRECT thread where both users are participants
+    const requesterParticipations = await this.prisma.chatParticipant.findMany({
+      where: { userId: requesterId },
+      select: { threadId: true }
+    })
+    const requesterThreadIds = requesterParticipations.map((p) => p.threadId)
+
+    const existingThread = await this.prisma.chatThread.findFirst({
+      where: {
+        id: { in: requesterThreadIds },
+        type: 'DIRECT',
+        participants: { some: { userId: targetUser.id } }
+      },
+      include: {
+        participants: { include: { user: { select: AUTHOR_SELECT } } }
+      }
+    })
+
+    if (existingThread) return existingThread
+
+    return this.prisma.chatThread.create({
+      data: {
+        type: 'DIRECT',
+        createdById: requesterId,
+        participants: {
+          create: [{ userId: requesterId }, { userId: targetUser.id }]
+        }
+      },
+      include: {
+        participants: { include: { user: { select: AUTHOR_SELECT } } }
+      }
+    })
+  }
+
+  async getDirectParticipantIds(threadId: string): Promise<string[]> {
+    const participants = await this.prisma.chatParticipant.findMany({
+      where: { threadId },
+      select: { userId: true }
+    })
+    return participants.map((p) => p.userId)
+  }
+
   // ─── Messages ─────────────────────────────────────────────────────────────
 
   async createMessage(userId: string, threadId: string, dto: CreateMessageDto) {
-    const thread = await this.prisma.chatThread.findFirst({
-      where: { id: threadId, workspaceId: dto.workspaceId }
-    })
+    const thread = await this.prisma.chatThread.findUnique({ where: { id: threadId } })
     if (!thread) throw new NotFoundException('Тред не найден')
 
-    await this.assertMember(userId, dto.workspaceId)
+    if (thread.type === 'DIRECT') {
+      await this.assertDirectParticipant(userId, threadId)
+    } else {
+      const wid = dto.workspaceId || thread.workspaceId!
+      await this.assertMember(userId, wid)
+    }
 
     const body = dto.body.trim()
     if (!body) throw new BadRequestException('Сообщение не может быть пустым')
@@ -292,7 +428,7 @@ export class ChatService {
       this.prisma.chatMessage.create({
         data: {
           threadId,
-          workspaceId: dto.workspaceId,
+          workspaceId: thread.workspaceId ?? undefined,
           authorId: userId,
           body
         },
@@ -308,17 +444,27 @@ export class ChatService {
   }
 
   async editMessage(userId: string, messageId: string, dto: EditMessageDto) {
-    const message = await this.prisma.chatMessage.findFirst({
-      where: { id: messageId, workspaceId: dto.workspaceId }
+    const message = await this.prisma.chatMessage.findUnique({
+      where: { id: messageId },
+      include: { thread: true }
     })
     if (!message) throw new NotFoundException('Сообщение не найдено')
     if (message.deletedAt) throw new BadRequestException('Нельзя редактировать удалённое сообщение')
 
-    const role = await this.getMemberRole(userId, dto.workspaceId)
-    if (!role) throw new ForbiddenException('Нет доступа')
-
-    if (message.authorId !== userId && role === WorkspaceRole.MEMBER) {
-      throw new ForbiddenException('Можно редактировать только свои сообщения')
+    if (message.thread.type === 'DIRECT') {
+      // Only author can edit in DIRECT
+      if (message.authorId !== userId) {
+        throw new ForbiddenException('Можно редактировать только свои сообщения')
+      }
+      // Verify participant access
+      await this.assertDirectParticipant(userId, message.threadId)
+    } else {
+      const workspaceId = dto.workspaceId || message.workspaceId || message.thread.workspaceId!
+      const role = await this.getMemberRole(userId, workspaceId)
+      if (!role) throw new ForbiddenException('Нет доступа')
+      if (message.authorId !== userId && role === WorkspaceRole.MEMBER) {
+        throw new ForbiddenException('Можно редактировать только свои сообщения')
+      }
     }
 
     const body = dto.body.trim()
@@ -331,18 +477,26 @@ export class ChatService {
     })
   }
 
-  async deleteMessage(userId: string, messageId: string, workspaceId: string) {
-    const message = await this.prisma.chatMessage.findFirst({
-      where: { id: messageId, workspaceId }
+  async deleteMessage(userId: string, messageId: string, workspaceId: string | undefined) {
+    const message = await this.prisma.chatMessage.findUnique({
+      where: { id: messageId },
+      include: { thread: true }
     })
     if (!message) throw new NotFoundException('Сообщение не найдено')
     if (message.deletedAt) return { ok: true }
 
-    const role = await this.getMemberRole(userId, workspaceId)
-    if (!role) throw new ForbiddenException('Нет доступа')
-
-    if (message.authorId !== userId && role === WorkspaceRole.MEMBER) {
-      throw new ForbiddenException('Можно удалять только свои сообщения')
+    if (message.thread.type === 'DIRECT') {
+      if (message.authorId !== userId) {
+        throw new ForbiddenException('Можно удалять только свои сообщения')
+      }
+      await this.assertDirectParticipant(userId, message.threadId)
+    } else {
+      const wid = workspaceId || message.workspaceId || message.thread.workspaceId!
+      const role = await this.getMemberRole(userId, wid)
+      if (!role) throw new ForbiddenException('Нет доступа')
+      if (message.authorId !== userId && role === WorkspaceRole.MEMBER) {
+        throw new ForbiddenException('Можно удалять только свои сообщения')
+      }
     }
 
     return this.prisma.chatMessage.update({
@@ -354,13 +508,16 @@ export class ChatService {
 
   // ─── Read state ───────────────────────────────────────────────────────────
 
-  async markRead(userId: string, workspaceId: string, threadId: string) {
-    const thread = await this.prisma.chatThread.findFirst({
-      where: { id: threadId, workspaceId }
-    })
+  async markRead(userId: string, workspaceId: string | undefined, threadId: string) {
+    const thread = await this.prisma.chatThread.findUnique({ where: { id: threadId } })
     if (!thread) throw new NotFoundException('Тред не найден')
 
-    await this.assertMember(userId, workspaceId)
+    if (thread.type === 'DIRECT') {
+      await this.assertDirectParticipant(userId, threadId)
+    } else {
+      const wid = workspaceId || thread.workspaceId!
+      await this.assertMember(userId, wid)
+    }
 
     const lastMessage = await this.prisma.chatMessage.findFirst({
       where: { threadId, deletedAt: null },
@@ -372,7 +529,7 @@ export class ChatService {
       create: {
         threadId,
         userId,
-        workspaceId,
+        workspaceId: thread.workspaceId ?? undefined,
         lastReadAt: new Date(),
         lastReadMessageId: lastMessage?.id
       },
@@ -388,13 +545,23 @@ export class ChatService {
   async getUnreadCount(userId: string, workspaceId: string) {
     await this.assertMember(userId, workspaceId)
 
-    const threads = await this.prisma.chatThread.findMany({
+    const workspaceThreads = await this.prisma.chatThread.findMany({
       where: { workspaceId, isArchived: false },
       select: { id: true }
     })
 
+    const directParticipations = await this.prisma.chatParticipant.findMany({
+      where: { userId },
+      select: { threadId: true }
+    })
+
+    const allThreadIds = [
+      ...workspaceThreads.map((t) => t.id),
+      ...directParticipations.map((p) => p.threadId)
+    ]
+
     const counts = await Promise.all(
-      threads.map((t) => this.getUnreadForThread(userId, t.id))
+      allThreadIds.map((id) => this.getUnreadForThread(userId, id))
     )
 
     return { unreadCount: counts.reduce((sum, c) => sum + c, 0) }
