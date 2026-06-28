@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { X, Sparkles } from 'lucide-react'
 import { useSubscription } from '@/lib/subscription/SubscriptionContext'
 import { isSubscriptionActive } from '@/lib/api/billing'
+import { WORKSPACE_STORAGE_KEY } from '@/lib/workspace-selection'
 
 const BLOCKED_PATHS = ['/billing', '/settings', '/team', '/admin']
 
@@ -24,9 +25,7 @@ export default function SubscriptionPopup() {
     if (isSubscriptionActive(entitlements)) return
     if (BLOCKED_PATHS.some((p) => pathname.startsWith(p))) return
 
-    const workspaceId = entitlements?.workspaceActive !== undefined
-      ? (entitlements as any).workspaceId ?? 'default'
-      : 'default'
+    const workspaceId = localStorage.getItem(WORKSPACE_STORAGE_KEY) ?? 'default'
     const key = getTodayKey(workspaceId)
 
     if (typeof window !== 'undefined' && !localStorage.getItem(key)) {
@@ -36,7 +35,7 @@ export default function SubscriptionPopup() {
   }, [loading, entitlements, pathname])
 
   function dismiss() {
-    const workspaceId = (entitlements as any)?.workspaceId ?? 'default'
+    const workspaceId = localStorage.getItem(WORKSPACE_STORAGE_KEY) ?? 'default'
     const key = getTodayKey(workspaceId)
     if (typeof window !== 'undefined') localStorage.setItem(key, '1')
     setVisible(false)
