@@ -115,6 +115,21 @@ export interface SystemHealth {
   push: { status: string; reason?: string }
 }
 
+export interface AdminPlan {
+  id: string
+  code: string
+  name: string
+  priceMonthly: number
+  isActive: boolean
+  limits: {
+    maxCompanies?: number
+    maxAiRepliesPerMonth?: number
+    platforms?: string[]
+    telegramNotifications?: boolean
+    advancedAnalytics?: boolean
+  }
+}
+
 export interface WorkspaceBillingUpdate {
   planCode?: string
   status?: string
@@ -161,6 +176,10 @@ export function getAdminWorkspaces(params?: Record<string, string>) {
 
 export function updateWorkspaceStatus(workspaceId: string, isActive: boolean) {
   return apiFetch(`/admin/workspaces/${workspaceId}/status`, { method: 'PATCH', body: JSON.stringify({ isActive }) })
+}
+
+export function getAdminPlans() {
+  return apiFetch<AdminPlan[]>('/admin/plans', undefined, [])
 }
 
 export function getAdminBilling() {

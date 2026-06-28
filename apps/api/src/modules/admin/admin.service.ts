@@ -387,6 +387,14 @@ export class AdminService {
 
   // ─── BILLING ────────────────────────────────────────────────────────────────
 
+  async getPlans() {
+    return this.prisma.plan.findMany({
+      where: { isActive: true },
+      orderBy: { priceMonthly: 'asc' },
+      select: { id: true, code: true, name: true, priceMonthly: true, isActive: true, limits: true }
+    })
+  }
+
   async getBillingOverview() {
     const workspaces = await this.prisma.workspace.findMany({
       orderBy: { createdAt: 'desc' },

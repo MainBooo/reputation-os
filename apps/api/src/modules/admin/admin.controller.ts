@@ -80,8 +80,13 @@ export class AdminController {
     return this.adminService.updateWorkspaceStatus(actor.id, actor.email ?? '', id, dto)
   }
 
+  @Get('plans')
+  getPlans() {
+    return this.adminService.getPlans()
+  }
+
   @Get('billing')
-  getBilling() {
+  getBillingOverview() {
     return this.adminService.getBillingOverview()
   }
 

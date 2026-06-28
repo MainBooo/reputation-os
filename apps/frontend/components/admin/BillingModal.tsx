@@ -1,20 +1,19 @@
 'use client'
 
 import { useState } from 'react'
-import type { AdminBillingRow, WorkspaceBillingUpdate } from '@/lib/api/admin'
+import type { AdminBillingRow, AdminPlan, WorkspaceBillingUpdate } from '@/lib/api/admin'
 import { updateWorkspaceBilling } from '@/lib/api/admin'
 import { AlertTriangle } from 'lucide-react'
 
-const PLANS = ['FREE', 'START', 'STARTER', 'PRO', 'BUSINESS', 'AGENCY', 'ENTERPRISE', 'CUSTOM']
 const STATUSES = ['TRIAL', 'ACTIVE', 'MANUAL', 'PAUSED', 'PAST_DUE', 'CANCELED', 'EXPIRED']
 
-// Higher index = higher tier
-const PLAN_TIER: Record<string, number> = {
-  FREE: 0, START: 1, STARTER: 1, PRO: 2, BUSINESS: 3, AGENCY: 3, ENTERPRISE: 4, CUSTOM: 5
+function planPrice(plans: AdminPlan[], code: string): number {
+  return plans.find((p) => p.code === code)?.priceMonthly ?? 0
 }
 
-function isDowngrade(from: string, to: string) {
-  return (PLAN_TIER[to] ?? 0) < (PLAN_TIER[from] ?? 0)
+function isDowngrade(plans: AdminPlan[], from: string, to: string): boolean {
+  if (from === to || !from || !to) return false
+  return planPrice(plans, to) < planPrice(plans, from)
 }
 
 function toDateInputValue(iso?: string | null) {
@@ -39,10 +38,12 @@ function validateLimits(fields: Record<string, string>): string | null {
 
 export default function BillingModal({
   workspace,
+  plans,
   onClose,
   onSaved
 }: {
   workspace: AdminBillingRow
+  plans: AdminPlan[]
   onClose: () => void
   onSaved: (updated: AdminBillingRow) => void
 }) {
@@ -65,7 +66,18 @@ export default function BillingModal({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
-  const downgradeWarning = isDowngrade(originalPlan, planCode)
+  const downgradeWarning = isDowngrade(plans, originalPlan, planCode)
+
+  function handlePlanChange(newCode: string) {
+    setPlanCode(newCode)
+    const plan = plans.find((p) => p.code === newCode)
+    if (plan) {
+      const l = plan.limits
+      if (l.maxCompanies !== undefined) setMaxCompanies(String(l.maxCompanies))
+      if (l.maxAiRepliesPerMonth !== undefined) setMaxAiReplies(String(l.maxAiRepliesPerMonth))
+      if (l.telegramNotifications !== undefined) setTelegramNotif(Boolean(l.telegramNotifications))
+    }
+  }
 
   async function handleSave() {
     const limitsError = validateLimits({
@@ -121,6 +133,19 @@ export default function BillingModal({
     }
   }
 
+  if (plans.length === 0) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+        <div className="mx-4 w-full max-w-sm rounded-[24px] border border-white/10 bg-[#070b16] p-6 text-center">
+          <div className="mb-3 text-amber-400"><AlertTriangle className="mx-auto h-8 w-8" /></div>
+          <div className="text-sm font-medium text-white">Тарифы не настроены</div>
+          <div className="mt-1 text-xs text-zinc-500">Проверьте таблицу Plan в базе данных</div>
+          <button onClick={onClose} className="mt-4 rounded-xl border border-white/10 px-4 py-2 text-sm text-zinc-300 hover:text-white">Закрыть</button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 backdrop-blur-sm py-10">
       <div className="mx-4 w-full max-w-lg rounded-[24px] border border-white/10 bg-[#070b16] shadow-2xl">
@@ -133,8 +158,12 @@ export default function BillingModal({
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className={labelCls}>Тариф</label>
-              <select value={planCode} onChange={(e) => setPlanCode(e.target.value)} className={selectCls}>
-                {PLANS.map((p) => <option key={p} value={p}>{p}</option>)}
+              <select value={planCode} onChange={(e) => handlePlanChange(e.target.value)} className={selectCls}>
+                {plans.map((p) => (
+                  <option key={p.code} value={p.code}>
+                    {p.name} ({p.code}) — {p.priceMonthly === 0 ? 'бесплатно' : `${p.priceMonthly.toLocaleString('ru-RU')} ₽/мес`}
+                  </option>
+                ))}
               </select>
             </div>
             <div>
@@ -145,13 +174,12 @@ export default function BillingModal({
             </div>
           </div>
 
-          {/* Downgrade warning */}
           {downgradeWarning && (
             <div className="flex items-start gap-2.5 rounded-xl border border-amber-400/25 bg-amber-500/10 px-3 py-2.5 text-sm text-amber-200">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
               <div>
-                <span className="font-medium">Понижение тарифа</span> с <span className="font-semibold">{originalPlan}</span> до <span className="font-semibold">{planCode}</span>.
-                Это может ограничить доступ workspace к текущим функциям (компании, источники, AI-ответы).
+                <span className="font-medium">Понижение тарифа</span> с <span className="font-semibold">{plans.find(p => p.code === originalPlan)?.name ?? originalPlan}</span> до <span className="font-semibold">{plans.find(p => p.code === planCode)?.name ?? planCode}</span>.
+                Это может ограничить доступ workspace к текущим функциям.
               </div>
             </div>
           )}
@@ -168,7 +196,7 @@ export default function BillingModal({
           </div>
 
           <div className="border-t border-white/[0.06] pt-4">
-            <div className="mb-3 text-xs font-semibold uppercase tracking-widest text-zinc-600">Лимиты (-1 = безлимит)</div>
+            <div className="mb-3 text-xs font-semibold uppercase tracking-widest text-zinc-600">Лимиты (-1 = безлимит, 0 = отключено)</div>
             <div className="grid grid-cols-2 gap-4">
               {([
                 ['Компании', maxCompanies, setMaxCompanies],
