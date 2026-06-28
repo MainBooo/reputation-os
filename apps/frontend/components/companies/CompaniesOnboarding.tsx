@@ -1,5 +1,8 @@
+'use client'
+
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { Building2, CheckCircle2, Database, Inbox, ArrowRight } from 'lucide-react'
+import { Building2, CheckCircle2, Database, Inbox, ArrowRight, X } from 'lucide-react'
 
 function getMentionsCount(company: any) {
   return Number(company?._count?.mentions || 0)
@@ -13,6 +16,15 @@ function getActiveSourceTargets(company: any) {
 export default function CompaniesOnboarding({ companies }: { companies: any[] }) {
   const safeCompanies = Array.isArray(companies) ? companies : []
   const firstCompany = safeCompanies[0] || null
+  const workspaceId = firstCompany?.workspaceId || ''
+  const storageKey = workspaceId ? `quick_start_dismissed_${workspaceId}` : ''
+
+  const [dismissed, setDismissed] = useState(false)
+
+  useEffect(() => {
+    if (!storageKey) return
+    setDismissed(localStorage.getItem(storageKey) === 'true')
+  }, [storageKey])
 
   const hasCompany = safeCompanies.length > 0
   const hasSource = safeCompanies.some((company) => getActiveSourceTargets(company).length > 0)
@@ -43,6 +55,14 @@ export default function CompaniesOnboarding({ companies }: { companies: any[] })
   ]
 
   const completed = steps.filter((step) => step.done).length
+  const allDone = completed === steps.length
+
+  function handleDismiss() {
+    if (storageKey) localStorage.setItem(storageKey, 'true')
+    setDismissed(true)
+  }
+
+  if (dismissed) return null
 
   return (
     <section className="mb-6 overflow-hidden rounded-[32px] border border-cyan-400/20 bg-[radial-gradient(circle_at_0%_0%,rgba(34,211,238,0.18),transparent_34%),#070b16] p-5 shadow-[0_22px_70px_rgba(0,0,0,0.34),0_0_44px_rgba(34,211,238,0.08)] sm:p-6">
@@ -56,8 +76,22 @@ export default function CompaniesOnboarding({ companies }: { companies: any[] })
           </div>
         </div>
 
-        <div className="inline-flex w-fit rounded-full border border-white/10 bg-white/[0.05] px-4 py-2 text-sm font-semibold text-cyan-100">
-          {completed}/3 готово
+        <div className="flex shrink-0 items-center gap-2">
+          <div className="inline-flex w-fit rounded-full border border-white/10 bg-white/[0.05] px-4 py-2 text-sm font-semibold text-cyan-100">
+            {completed}/3 готово
+          </div>
+
+          {allDone ? (
+            <button
+              type="button"
+              onClick={handleDismiss}
+              className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.05] px-3 py-2 text-sm font-medium text-slate-400 transition hover:border-white/20 hover:text-white"
+              title="Скрыть блок быстрого старта"
+            >
+              <X className="h-3.5 w-3.5" />
+              Скрыть
+            </button>
+          ) : null}
         </div>
       </div>
 
