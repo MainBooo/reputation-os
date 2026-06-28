@@ -153,6 +153,11 @@ export class WorkspacesService {
       throw new ForbiddenException('You cannot change your own workspace role')
     }
 
+    // Non-OWNER cannot manage an OWNER's role regardless of the new role being assigned
+    if (currentMember.role !== 'OWNER' && targetMember.role === 'OWNER') {
+      throw new ForbiddenException('Only OWNER can modify another OWNER\'s role')
+    }
+
     if (targetMember.role === 'OWNER' && dto.role !== 'OWNER') {
       await this.ensureOwnerWillRemain(workspaceId, memberId)
     }

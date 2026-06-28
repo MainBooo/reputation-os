@@ -14,6 +14,7 @@ import {
   type WorkspaceMember,
   type WorkspaceRole
 } from '@/lib/api/workspaces'
+import { WORKSPACE_STORAGE_KEY } from '@/lib/workspace-selection'
 
 const ROLE_LABELS: Record<WorkspaceRole, string> = {
   OWNER: 'Владелец',
@@ -21,7 +22,8 @@ const ROLE_LABELS: Record<WorkspaceRole, string> = {
   MEMBER: 'Участник'
 }
 
-const ROLE_OPTIONS: WorkspaceRole[] = ['OWNER', 'ADMIN', 'MEMBER']
+const ALL_ROLE_OPTIONS: WorkspaceRole[] = ['OWNER', 'ADMIN', 'MEMBER']
+const ADMIN_ROLE_OPTIONS: WorkspaceRole[] = ['ADMIN', 'MEMBER']
 const INVITE_ROLE_OPTIONS: WorkspaceRole[] = ['ADMIN', 'MEMBER']
 
 type Workspace = {
@@ -81,7 +83,17 @@ export default function WorkspaceTeamCard() {
     return members.find((member) => member.user?.email?.toLowerCase() === currentEmail) || null
   }, [currentUser?.email, members])
 
+  const ownersCount = members.filter((member) => member.role === 'OWNER').length
   const adminsCount = members.filter((member) => member.role === 'ADMIN').length
+
+  // Permission flags for the current viewer
+  const canManageTeam =
+    currentWorkspaceMember?.role === 'OWNER' || currentWorkspaceMember?.role === 'ADMIN'
+  const canManageOwners = currentWorkspaceMember?.role === 'OWNER'
+  const isOnlyOwner = currentWorkspaceMember?.role === 'OWNER' && ownersCount <= 1
+
+  // Role options available for the current user to assign
+  const assignableRoleOptions = canManageOwners ? ALL_ROLE_OPTIONS : ADMIN_ROLE_OPTIONS
 
   const workspaceAccessLabel =
     currentWorkspaceMember?.role === 'OWNER'
@@ -120,9 +132,16 @@ export default function WorkspaceTeamCard() {
     const nextWorkspaces: Workspace[] = Array.isArray(list) ? (list as Workspace[]) : []
     setWorkspaces(nextWorkspaces)
 
-    if (nextWorkspaces[0]?.id) {
-      setWorkspaceId(nextWorkspaces[0].id)
-      await loadMembers(nextWorkspaces[0].id)
+    const storedId = typeof window !== 'undefined' ? localStorage.getItem(WORKSPACE_STORAGE_KEY) : null
+    const nextId =
+      (storedId && nextWorkspaces.some((w) => w.id === storedId) ? storedId : null) ||
+      nextWorkspaces[0]?.id ||
+      ''
+
+    if (nextId) {
+      setWorkspaceId(nextId)
+      if (typeof window !== 'undefined') localStorage.setItem(WORKSPACE_STORAGE_KEY, nextId)
+      await loadMembers(nextId)
       return
     }
 
@@ -134,6 +153,8 @@ export default function WorkspaceTeamCard() {
   useEffect(() => {
     let mounted = true
 
+    const stored = typeof window !== 'undefined' ? localStorage.getItem(WORKSPACE_STORAGE_KEY) : null
+
     Promise.all([me(), getWorkspaces()])
       .then(([userData, workspaceData]) => {
         if (!mounted) return
@@ -143,9 +164,13 @@ export default function WorkspaceTeamCard() {
         const list: Workspace[] = Array.isArray(workspaceData) ? (workspaceData as Workspace[]) : []
         setWorkspaces(list)
 
-        if (list[0]?.id) {
-          setWorkspaceId(list[0].id)
-          return loadMembers(list[0].id)
+        // Use stored workspace if it's still valid, otherwise fall back to first
+        const activeId =
+          (stored && list.some((w) => w.id === stored) ? stored : null) || list[0]?.id || ''
+
+        if (activeId) {
+          setWorkspaceId(activeId)
+          return loadMembers(activeId)
         }
 
         setLoading(false)
@@ -159,10 +184,11 @@ export default function WorkspaceTeamCard() {
     return () => {
       mounted = false
     }
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleWorkspaceChange(nextWorkspaceId: string) {
     setWorkspaceId(nextWorkspaceId)
+    if (typeof window !== 'undefined') localStorage.setItem(WORKSPACE_STORAGE_KEY, nextWorkspaceId)
     await loadMembers(nextWorkspaceId)
   }
 
@@ -239,6 +265,61 @@ export default function WorkspaceTeamCard() {
     }
   }
 
+  function renderMemberActions(member: WorkspaceMember) {
+    // Current user's own row
+    if (isCurrentUserMember(member)) {
+      if (isOnlyOwner) {
+        return (
+          <div className="max-w-xs text-xs leading-5 text-zinc-500">
+            Вы владелец этого workspace. Чтобы выйти, сначала передайте роль владельца другому участнику.
+          </div>
+        )
+      }
+      return (
+        <button
+          type="button"
+          onClick={handleLeaveWorkspace}
+          disabled={saving}
+          className="h-11 rounded-2xl border border-amber-300/20 bg-amber-500/[0.08] px-4 text-sm font-medium text-amber-100 transition hover:border-amber-300/35 hover:bg-amber-500/[0.12] disabled:opacity-60"
+        >
+          Выйти из workspace
+        </button>
+      )
+    }
+
+    // MEMBER viewer: no management controls for other members
+    if (!canManageTeam) return null
+
+    // ADMIN viewer: cannot manage OWNER members
+    if (!canManageOwners && member.role === 'OWNER') return null
+
+    return (
+      <>
+        <select
+          value={member.role}
+          onChange={(event) => handleRoleChange(member.id, event.target.value as WorkspaceRole)}
+          disabled={saving}
+          className={`${selectClass} min-w-32 flex-1 sm:flex-none`}
+        >
+          {assignableRoleOptions.map((item) => (
+            <option key={item} value={item}>
+              {ROLE_LABELS[item]}
+            </option>
+          ))}
+        </select>
+
+        <button
+          type="button"
+          onClick={() => handleRemove(member.id)}
+          disabled={saving}
+          className="h-11 rounded-2xl border border-red-400/20 bg-red-500/[0.05] px-3 text-sm font-medium text-red-200/85 transition hover:border-red-300/20 hover:bg-red-500/[0.09] disabled:opacity-60"
+        >
+          Удалить
+        </button>
+      </>
+    )
+  }
+
   return (
     <Card className="overflow-hidden p-0 xl:col-span-2">
       <div className="relative border-b border-white/10 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.16),transparent_30%),radial-gradient(circle_at_top_right,rgba(59,130,246,0.10),transparent_28%),linear-gradient(135deg,rgba(255,255,255,0.06),rgba(255,255,255,0.015))] p-5">
@@ -279,45 +360,56 @@ export default function WorkspaceTeamCard() {
       </div>
 
       <div className="p-5">
-        <div className="rounded-[1.35rem] border border-white/10 bg-[#0b1220]/75 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <div>
-              <div className="text-sm font-semibold text-white">
-                {selectedWorkspace?.name || selectedWorkspace?.slug || 'Workspace'}
+        {canManageTeam ? (
+          <div className="rounded-[1.35rem] border border-white/10 bg-[#0b1220]/75 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold text-white">
+                  {selectedWorkspace?.name || selectedWorkspace?.slug || 'Workspace'}
+                </div>
+                <div className="mt-1 text-xs text-zinc-500">Пригласите зарегистрированного пользователя</div>
               </div>
-              <div className="mt-1 text-xs text-zinc-500">Пригласите зарегистрированного пользователя</div>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-[1fr_155px_auto]">
+              <Input
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                placeholder="Email зарегистрированного пользователя"
+              />
+
+              <select
+                value={role}
+                onChange={(event) => setRole(event.target.value as WorkspaceRole)}
+                className={selectClass}
+              >
+                {INVITE_ROLE_OPTIONS.map((item) => (
+                  <option key={item} value={item}>
+                    {ROLE_LABELS[item]}
+                  </option>
+                ))}
+              </select>
+
+              <button
+                type="button"
+                onClick={handleAddMember}
+                disabled={saving || !email.trim()}
+                className="h-11 rounded-2xl border border-cyan-300/20 bg-[linear-gradient(135deg,rgba(34,211,238,0.34),rgba(79,70,229,0.34),rgba(168,85,247,0.28))] px-6 text-sm font-semibold text-white shadow-[0_20px_50px_rgba(34,211,238,0.16),0_10px_30px_rgba(168,85,247,0.10),inset_0_1px_0_rgba(255,255,255,0.18)] transition hover:border-cyan-200/35 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-45"
+              >
+                {saving ? 'Отправляем...' : 'Пригласить'}
+              </button>
             </div>
           </div>
-
-          <div className="grid gap-3 md:grid-cols-[1fr_155px_auto]">
-            <Input
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              placeholder="Email зарегистрированного пользователя"
-            />
-
-            <select
-              value={role}
-              onChange={(event) => setRole(event.target.value as WorkspaceRole)}
-              className={selectClass}
-            >
-              {INVITE_ROLE_OPTIONS.map((item) => (
-                <option key={item} value={item}>
-                  {ROLE_LABELS[item]}
-                </option>
-              ))}
-            </select>
-
-            <button
-              type="button"
-              onClick={handleAddMember}
-              disabled={saving || !email.trim()}
-              className="h-11 rounded-2xl border border-cyan-300/20 bg-[linear-gradient(135deg,rgba(34,211,238,0.34),rgba(79,70,229,0.34),rgba(168,85,247,0.28))] px-6 text-sm font-semibold text-white shadow-[0_20px_50px_rgba(34,211,238,0.16),0_10px_30px_rgba(168,85,247,0.10),inset_0_1px_0_rgba(255,255,255,0.18)] transition hover:border-cyan-200/35 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-45"
-            >
-              {saving ? 'Отправляем...' : 'Пригласить'}
-            </button>
+        ) : (
+          <div className="rounded-[1.35rem] border border-white/10 bg-[#0b1220]/75 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+            <div className="text-sm font-semibold text-white">
+              {selectedWorkspace?.name || selectedWorkspace?.slug || 'Workspace'}
+            </div>
+            <div className="mt-1 text-xs text-zinc-500">
+              Приглашать участников могут только владелец и администраторы.
+            </div>
           </div>
-        </div>
+        )}
 
         {message ? (
           <div className="mt-3 rounded-2xl border border-white/10 bg-white/[0.035] px-4 py-3 text-sm text-zinc-300">
@@ -358,40 +450,7 @@ export default function WorkspaceTeamCard() {
                 </div>
 
                 <div className="flex items-center gap-2 sm:justify-end">
-                  {isCurrentUserMember(member) ? (
-                    <button
-                      type="button"
-                      onClick={handleLeaveWorkspace}
-                      disabled={saving}
-                      className="h-11 rounded-2xl border border-amber-300/20 bg-amber-500/[0.08] px-4 text-sm font-medium text-amber-100 transition hover:border-amber-300/35 hover:bg-amber-500/[0.12] disabled:opacity-60"
-                    >
-                      Выйти из workspace
-                    </button>
-                  ) : (
-                    <>
-                      <select
-                        value={member.role}
-                        onChange={(event) => handleRoleChange(member.id, event.target.value as WorkspaceRole)}
-                        disabled={saving}
-                        className={`${selectClass} min-w-32 flex-1 sm:flex-none`}
-                      >
-                        {ROLE_OPTIONS.map((item) => (
-                          <option key={item} value={item}>
-                            {ROLE_LABELS[item]}
-                          </option>
-                        ))}
-                      </select>
-
-                      <button
-                        type="button"
-                        onClick={() => handleRemove(member.id)}
-                        disabled={saving}
-                        className="h-11 rounded-2xl border border-red-400/20 bg-red-500/[0.05] px-3 text-sm font-medium text-red-200/85 transition hover:border-red-300/20 hover:bg-red-500/[0.09] disabled:opacity-60"
-                      >
-                        Удалить
-                      </button>
-                    </>
-                  )}
+                  {renderMemberActions(member)}
                 </div>
               </div>
             ))

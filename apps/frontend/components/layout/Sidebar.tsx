@@ -31,11 +31,10 @@ export default function Sidebar() {
         setUser(userData)
 
         const list = Array.isArray(workspaces) ? workspaces : []
+        // All workspace members (including MEMBER role) can view /team
         const allowed = list.some((workspace: any) =>
           Array.isArray(workspace?.members) &&
-          workspace.members.some((member: any) =>
-            member?.userId === userData.id && ['OWNER', 'ADMIN'].includes(member?.role)
-          )
+          workspace.members.some((member: any) => member?.userId === userData.id)
         )
 
         setCanManageTeam(allowed)
