@@ -337,7 +337,16 @@ export class WorkspacesService {
     }
 
     if (invite.acceptedAt) {
-      throw new BadRequestException('Invite already accepted')
+      // Already accepted — just mark the notification as read and succeed silently
+      await this.prisma.notification.updateMany({
+        where: {
+          userId,
+          type: 'WORKSPACE_INVITE',
+          data: { path: ['inviteId'], equals: invite.id }
+        },
+        data: { readAt: new Date() }
+      })
+      return { ok: true }
     }
 
     if (invite.declinedAt) {
@@ -383,9 +392,17 @@ export class WorkspacesService {
 
     await this.prisma.workspaceInvite.update({
       where: { id: invite.id },
-      data: {
-        acceptedAt: new Date()
-      }
+      data: { acceptedAt: new Date() }
+    })
+
+    // Mark the invite notification as read
+    await this.prisma.notification.updateMany({
+      where: {
+        userId,
+        type: 'WORKSPACE_INVITE',
+        data: { path: ['inviteId'], equals: invite.id }
+      },
+      data: { readAt: new Date() }
     })
 
     return { ok: true }

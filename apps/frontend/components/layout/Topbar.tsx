@@ -104,17 +104,16 @@ export default function Topbar() {
         const data = await me()
         if (mounted) setUser(data)
 
-        // Initialize workspace ID for chat
+        // Initialize workspace ID for chat — always validate against actual membership
         const stored = localStorage.getItem(WORKSPACE_STORAGE_KEY)
-        if (stored) {
-          setWorkspaceId(stored)
-        } else {
-          const workspaces = await apiFetch<{ id: string }[]>('/workspaces', undefined, [])
-          const id = Array.isArray(workspaces) && workspaces[0]?.id ? workspaces[0].id : ''
-          if (id) {
-            localStorage.setItem(WORKSPACE_STORAGE_KEY, id)
-            if (mounted) setWorkspaceId(id)
-          }
+        if (stored) setWorkspaceId(stored) // optimistic set from cache
+        const workspaces = await apiFetch<{ id: string }[]>('/workspaces', undefined, [])
+        const validId = Array.isArray(workspaces) && workspaces.length
+          ? (workspaces.find((w) => w.id === stored)?.id ?? workspaces[0].id)
+          : stored ?? ''
+        if (validId) {
+          if (validId !== stored) localStorage.setItem(WORKSPACE_STORAGE_KEY, validId)
+          if (mounted) setWorkspaceId(validId)
         }
       } catch {
         if (mounted) setUser(null)

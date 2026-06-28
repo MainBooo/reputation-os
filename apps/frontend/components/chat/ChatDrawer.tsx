@@ -15,8 +15,17 @@ export default function ChatDrawer() {
   const [loadingThreads, setLoadingThreads] = useState(false)
   const [currentUserId, setCurrentUserId] = useState('')
   const [canManage, setCanManage] = useState(false)
+  const [didAutoSelect, setDidAutoSelect] = useState(false)
 
   const selectedThread = threads.find((t) => t.id === selectedThreadId) ?? null
+
+  // Reset auto-select flag when drawer closes
+  useEffect(() => {
+    if (!isOpen) {
+      setDidAutoSelect(false)
+      setThreads([])
+    }
+  }, [isOpen])
 
   useEffect(() => {
     me().then((user) => {
@@ -39,6 +48,16 @@ export default function ChatDrawer() {
   useEffect(() => {
     if (isOpen && workspaceId) loadThreads()
   }, [isOpen, workspaceId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-select the WORKSPACE thread when threads first load
+  useEffect(() => {
+    if (didAutoSelect || selectedThreadId || threads.length === 0) return
+    const workspaceThread = threads.find((t) => t.type === 'WORKSPACE')
+    if (workspaceThread) {
+      setSelectedThreadId(workspaceThread.id)
+      setDidAutoSelect(true)
+    }
+  }, [threads]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Refresh thread list on new messages (update unread badges)
   useEffect(() => {
@@ -116,7 +135,7 @@ export default function ChatDrawer() {
                 threads={threads}
                 selectedId={null}
                 onSelect={handleSelectThread}
-                loading={loadingThreads}
+                loading={loadingThreads || (isOpen && !workspaceId)}
               />
             </div>
           )}
