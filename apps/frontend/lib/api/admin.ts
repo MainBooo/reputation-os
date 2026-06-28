@@ -169,6 +169,10 @@ export function updateUserStatus(userId: string, isActive: boolean) {
   return apiFetch(`/admin/users/${userId}/status`, { method: 'PATCH', body: JSON.stringify({ isActive }) })
 }
 
+export function deleteAdminUser(userId: string) {
+  return apiFetch<{ ok: boolean }>(`/admin/users/${userId}`, { method: 'DELETE' })
+}
+
 export function getAdminWorkspaces(params?: Record<string, string>) {
   const q = params && Object.keys(params).length ? '?' + new URLSearchParams(params).toString() : ''
   return apiFetch<Paginated<AdminWorkspace>>(`/admin/workspaces${q}`)

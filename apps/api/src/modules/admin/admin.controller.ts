@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Query, UseGuards } from '@nestjs/common'
+import { Body, Controller, Delete, Get, Param, Patch, Query, UseGuards } from '@nestjs/common'
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard'
 import { SuperAdminGuard } from '../../common/guards/super-admin.guard'
 import { CurrentUser } from '../../common/decorators/current-user.decorator'
@@ -59,6 +59,14 @@ export class AdminController {
     @Body() dto: AdminUpdateUserStatusDto
   ) {
     return this.adminService.updateUserStatus(actor.id, actor.email ?? '', id, dto)
+  }
+
+  @Delete('users/:id')
+  deleteUser(
+    @CurrentUser() actor: AuthUser,
+    @Param('id') id: string
+  ) {
+    return this.adminService.deleteUser(actor.id, actor.email ?? '', id)
   }
 
   @Get('workspaces')

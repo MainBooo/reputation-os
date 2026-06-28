@@ -3,6 +3,7 @@ import PushSettingsCard from '@/components/settings/PushSettingsCard'
 import BillingCard from '@/components/billing/BillingCard'
 import FeatureGate from '@/components/billing/FeatureGate'
 import { TelegramConnectSection } from '@/components/settings/TelegramConnectSection'
+import DeleteAccountSection from '@/components/settings/DeleteAccountSection'
 
 export default function SettingsPage() {
   return (
@@ -20,6 +21,7 @@ export default function SettingsPage() {
         <FeatureGate feature="telegramNotifications">
           <TelegramConnectSection />
         </FeatureGate>
+        <DeleteAccountSection />
       </div>
     </div>
   )

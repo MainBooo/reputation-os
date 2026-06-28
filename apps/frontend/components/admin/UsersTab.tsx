@@ -5,7 +5,7 @@ import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import ConfirmModal from './ConfirmModal'
-import { getAdminUsers, updateUserRole, updateUserStatus, type AdminUser, type AdminSystemRole } from '@/lib/api/admin'
+import { getAdminUsers, updateUserRole, updateUserStatus, deleteAdminUser, type AdminUser, type AdminSystemRole } from '@/lib/api/admin'
 
 function fmt(d?: string | null) {
   if (!d) return '—'
@@ -34,6 +34,10 @@ export default function UsersTab({ onToast }: { onToast: (msg: string, ok?: bool
   const [statusFilter, setStatusFilter] = useState('')
   const [savingId, setSavingId] = useState('')
   const [confirm, setConfirm] = useState<{ userId: string; isActive: boolean; name: string } | null>(null)
+  const [deleteConfirm, setDeleteConfirm] = useState<{ userId: string; email: string } | null>(null)
+  const [deleteEmailInput, setDeleteEmailInput] = useState('')
+  const [deleteError, setDeleteError] = useState('')
+  const [deleting, setDeleting] = useState(false)
 
   const limit = 20
 
@@ -79,6 +83,24 @@ export default function UsersTab({ onToast }: { onToast: (msg: string, ok?: bool
     doStatusChange(userId, isActive)
   }
 
+  async function handleDeleteConfirm() {
+    if (!deleteConfirm || deleteEmailInput !== deleteConfirm.email || deleting) return
+    setDeleting(true)
+    setDeleteError('')
+    try {
+      await deleteAdminUser(deleteConfirm.userId)
+      setUsers((prev) => prev.filter((u) => u.id !== deleteConfirm.userId))
+      setTotal((t) => t - 1)
+      onToast('Аккаунт удалён')
+      setDeleteConfirm(null)
+      setDeleteEmailInput('')
+    } catch (e: any) {
+      setDeleteError(e.message || 'Ошибка удаления')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   async function doStatusChange(userId: string, isActive: boolean) {
     setSavingId(userId)
     try {
@@ -105,6 +127,51 @@ export default function UsersTab({ onToast }: { onToast: (msg: string, ok?: bool
           onConfirm={() => { doStatusChange(confirm.userId, confirm.isActive); setConfirm(null) }}
           onCancel={() => setConfirm(null)}
         />
+      )}
+
+      {deleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="mx-4 w-full max-w-md rounded-[24px] border border-white/10 bg-[#070b16] p-6 shadow-2xl">
+            <div className="mb-1 text-lg font-semibold text-white">Удалить аккаунт?</div>
+            <div className="mb-4 text-sm text-zinc-400">
+              Аккаунт будет деактивирован, персональные данные скрыты. Это действие нельзя отменить.
+            </div>
+            <div className="mb-4">
+              <label className="mb-1.5 block text-xs text-zinc-500">
+                Введите email пользователя для подтверждения
+              </label>
+              <input
+                type="text"
+                value={deleteEmailInput}
+                onChange={(e) => setDeleteEmailInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleDeleteConfirm()}
+                placeholder={deleteConfirm.email}
+                autoFocus
+                className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2.5 text-sm text-white placeholder-zinc-600 outline-none focus:border-white/20"
+              />
+            </div>
+            {deleteError && (
+              <div className="mb-4 rounded-xl border border-red-400/20 bg-red-500/[0.05] px-3 py-2 text-sm text-red-300">
+                {deleteError}
+              </div>
+            )}
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => { setDeleteConfirm(null); setDeleteEmailInput(''); setDeleteError('') }}
+                className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-zinc-300 transition hover:text-white"
+              >
+                Отмена
+              </button>
+              <button
+                onClick={handleDeleteConfirm}
+                disabled={deleteEmailInput !== deleteConfirm.email || deleting}
+                className="rounded-xl border border-red-500/30 bg-red-500/15 px-4 py-2 text-sm font-medium text-red-300 transition hover:bg-red-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {deleting ? 'Удаление...' : 'Удалить аккаунт'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       <Card className="overflow-hidden p-0">
@@ -182,16 +249,26 @@ export default function UsersTab({ onToast }: { onToast: (msg: string, ok?: bool
                   <td className="px-5 py-4 text-zinc-500 text-xs">{fmt(user.lastLoginAt)}</td>
                   <td className="px-5 py-4 text-zinc-500 text-xs">{fmt(user.createdAt)}</td>
                   <td className="px-5 py-4 text-right">
-                    <button
-                      disabled={savingId === user.id}
-                      onClick={() => handleStatusToggle(user.id, !user.isActive, user.email)}
-                      className={user.isActive
-                        ? 'rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-300 transition hover:bg-red-500/20 disabled:opacity-60'
-                        : 'rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-300 transition hover:bg-emerald-500/20 disabled:opacity-60'
-                      }
-                    >
-                      {savingId === user.id ? '...' : user.isActive ? 'Отключить' : 'Включить'}
-                    </button>
+                    <div className="flex items-center justify-end gap-2">
+                      <button
+                        disabled={savingId === user.id}
+                        onClick={() => handleStatusToggle(user.id, !user.isActive, user.email)}
+                        className={user.isActive
+                          ? 'rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-300 transition hover:bg-red-500/20 disabled:opacity-60'
+                          : 'rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-300 transition hover:bg-emerald-500/20 disabled:opacity-60'
+                        }
+                      >
+                        {savingId === user.id ? '...' : user.isActive ? 'Отключить' : 'Включить'}
+                      </button>
+                      <button
+                        disabled={savingId === user.id}
+                        onClick={() => { setDeleteConfirm({ userId: user.id, email: user.email }); setDeleteEmailInput(''); setDeleteError('') }}
+                        className="rounded-lg border border-red-900/40 bg-red-900/10 px-3 py-1.5 text-xs font-medium text-red-500/80 transition hover:bg-red-900/20 hover:text-red-400 disabled:opacity-60"
+                        title="Удалить аккаунт"
+                      >
+                        Удалить
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

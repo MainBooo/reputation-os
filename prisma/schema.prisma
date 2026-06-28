@@ -93,6 +93,8 @@ model User {
   telegramChatId    BigInt?   @unique
   telegramLinkedAt  DateTime?
   updatedAt    DateTime   @updatedAt
+  deletedAt    DateTime?
+  deletedById  String?
 
   workspaceMembers     WorkspaceMember[]
   workspaceInvitesSent WorkspaceInvite[]

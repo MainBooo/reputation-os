@@ -26,6 +26,10 @@ export function me() {
   return apiFetch<AuthMe>('/auth/me')
 }
 
+export function deleteMyAccount() {
+  return apiFetch<{ ok: boolean }>('/auth/me', { method: 'DELETE' })
+}
+
 export function logoutLocal() {
   if (typeof window === 'undefined') return
   try {

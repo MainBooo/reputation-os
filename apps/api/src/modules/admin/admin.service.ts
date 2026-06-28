@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common'
-import { JobStatus, Prisma, SystemRole } from '@prisma/client'
+import { JobStatus, Prisma, SystemRole, TelegramDeliveryStatus } from '@prisma/client'
 import { PrismaService } from '../../common/prisma/prisma.service'
 import { AuditLogService } from './audit-log.service'
 import { AdminUsersQueryDto } from './dto/admin-users-query.dto'
@@ -105,7 +105,7 @@ export class AdminService {
     const limit = Math.min(100, Math.max(1, query.limit ?? 50))
     const skip = (page - 1) * limit
 
-    const where: Prisma.UserWhereInput = {}
+    const where: Prisma.UserWhereInput = { deletedAt: null }
 
     if (query.q?.trim()) {
       const q = query.q.trim()
@@ -440,6 +440,89 @@ export class AdminService {
         overrides: overrideMap
       }
     })
+  }
+
+  // ─── USER DELETION ──────────────────────────────────────────────────────────
+
+  async deleteUser(actorId: string, actorEmail: string, targetId: string) {
+    if (actorId === targetId) {
+      throw new BadRequestException('Для удаления собственного аккаунта используйте страницу настроек')
+    }
+
+    const target = await this.prisma.user.findUnique({
+      where: { id: targetId },
+      select: {
+        id: true, email: true, systemRole: true, isActive: true, deletedAt: true,
+        workspaceMembers: { select: { workspaceId: true, role: true } }
+      }
+    })
+    if (!target) throw new NotFoundException('User not found')
+    if (target.deletedAt) throw new BadRequestException('Пользователь уже удалён')
+
+    if (target.systemRole === SystemRole.SUPER_ADMIN) {
+      const count = await this.prisma.user.count({
+        where: { systemRole: SystemRole.SUPER_ADMIN, isActive: true, deletedAt: null }
+      })
+      if (count <= 1) throw new BadRequestException('Нельзя удалить последнего SUPER_ADMIN')
+    }
+
+    const soleOwnerNames: string[] = []
+    for (const m of target.workspaceMembers) {
+      if (m.role !== 'OWNER') continue
+      const otherOwners = await this.prisma.workspaceMember.count({
+        where: { workspaceId: m.workspaceId, role: 'OWNER', userId: { not: targetId } }
+      })
+      if (otherOwners === 0) {
+        const ws = await this.prisma.workspace.findUnique({
+          where: { id: m.workspaceId }, select: { name: true }
+        })
+        if (ws) soleOwnerNames.push(ws.name)
+      }
+    }
+
+    if (soleOwnerNames.length > 0) {
+      throw new BadRequestException(
+        `Нельзя удалить пользователя — он единственный владелец workspace: ${soleOwnerNames.join(', ')}. Сначала назначьте другого владельца.`
+      )
+    }
+
+    const prevEmail = target.email
+    await this.prisma.$transaction([
+      this.prisma.webPushSubscription.deleteMany({ where: { userId: targetId } }),
+      this.prisma.telegramLinkToken.deleteMany({ where: { userId: targetId } }),
+      this.prisma.telegramMentionDelivery.deleteMany({
+        where: { userId: targetId, status: TelegramDeliveryStatus.PENDING }
+      }),
+      this.prisma.workspaceMember.deleteMany({ where: { userId: targetId } }),
+      this.prisma.workspaceInvite.deleteMany({
+        where: { invitedById: targetId, acceptedAt: null, declinedAt: null }
+      }),
+      this.prisma.user.update({
+        where: { id: targetId },
+        data: {
+          email: `deleted_${targetId}@deleted.local`,
+          fullName: 'Удалённый пользователь',
+          passwordHash: `DELETED_${targetId}`,
+          isActive: false,
+          deletedAt: new Date(),
+          deletedById: actorId,
+          telegramChatId: null,
+          telegramLinkedAt: null,
+        }
+      })
+    ])
+
+    await this.auditLog.log({
+      actorUserId: actorId,
+      actorEmail,
+      action: 'USER_DELETED',
+      entityType: 'User',
+      entityId: targetId,
+      targetUserId: targetId,
+      beforeJson: { email: prevEmail, systemRole: target.systemRole }
+    })
+
+    return { ok: true }
   }
 
   async updateWorkspaceBilling(
