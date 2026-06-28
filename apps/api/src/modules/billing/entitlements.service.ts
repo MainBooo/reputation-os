@@ -67,6 +67,7 @@ export interface WorkspaceEntitlements {
   effective: PlanLimits
   overrides: Partial<Record<FeatureKey, unknown>>
   usage: { companies: number; companiesCount: number; aiRepliesThisMonth: number }
+  workspaceActive: boolean
 }
 
 @Injectable()
@@ -97,7 +98,7 @@ export class EntitlementsService {
     monthStart.setUTCDate(1)
     monthStart.setUTCHours(0, 0, 0, 0)
 
-    const [subscription, overrides, companies, aiRepliesThisMonth] = await Promise.all([
+    const [subscription, overrides, companies, aiRepliesThisMonth, workspace] = await Promise.all([
       this.prisma.subscription.findUnique({
         where: { workspaceId },
         include: { plan: true }
@@ -106,7 +107,8 @@ export class EntitlementsService {
       this.prisma.company.count({ where: { workspaceId } }),
       this.prisma.aIReplyDraft.count({
         where: { company: { workspaceId }, createdAt: { gte: monthStart } }
-      })
+      }),
+      this.prisma.workspace.findUnique({ where: { id: workspaceId }, select: { isActive: true } })
     ])
 
     let planCode: PlanCode = PlanCode.FREE
@@ -154,7 +156,8 @@ export class EntitlementsService {
       limits,
       effective: limits,
       overrides: overrideMap,
-      usage: { companies, companiesCount: companies, aiRepliesThisMonth }
+      usage: { companies, companiesCount: companies, aiRepliesThisMonth },
+      workspaceActive: workspace?.isActive ?? true
     }
   }
 

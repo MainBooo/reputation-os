@@ -531,7 +531,12 @@ export class CompaniesService {
       where: { workspaceId: dto.workspaceId }
     })
 
-    const { limits } = await this.entitlements.getForWorkspace(dto.workspaceId)
+    const { limits, workspaceActive } = await this.entitlements.getForWorkspace(dto.workspaceId)
+
+    if (!workspaceActive) {
+      throw new ForbiddenException('Workspace is disabled')
+    }
+
     const maxCompanies = Number(limits.maxCompanies)
 
     if (maxCompanies >= 0 && companiesCount >= maxCompanies) {
@@ -1231,12 +1236,28 @@ export class CompaniesService {
       ? (await this.prisma.source.findUnique({ where: { id: dto.sourceId }, select: { platform: true } }))?.platform
       : null)
 
+    const ent = await this.entitlements.getForWorkspace(company.workspaceId)
+
+    if (!ent.workspaceActive) {
+      throw new ForbiddenException('Workspace is disabled')
+    }
+
     if (targetPlatform) {
-      const { limits } = await this.entitlements.getForWorkspace(company.workspaceId)
-      const allowedPlatforms = Array.isArray(limits.platforms) ? limits.platforms : []
+      const allowedPlatforms = Array.isArray(ent.limits.platforms) ? ent.limits.platforms : []
 
       if (!allowedPlatforms.includes(targetPlatform)) {
         throw new ForbiddenException({ code: 'PLAN_LIMIT', feature: 'platforms', platform: targetPlatform })
+      }
+    }
+
+    // maxSources enforcement
+    const maxSources = Number(ent.limits.maxSources)
+    if (maxSources >= 0) {
+      const currentSourcesCount = await this.prisma.companySourceTarget.count({
+        where: { company: { workspaceId: company.workspaceId }, isActive: true }
+      })
+      if (currentSourcesCount >= maxSources) {
+        throw new ForbiddenException({ code: 'PLAN_LIMIT', feature: 'maxSources', limit: maxSources })
       }
     }
 
@@ -1338,6 +1359,17 @@ export class CompaniesService {
 
     if (!target || target.companyId !== companyId) {
       throw new NotFoundException('Company source target not found')
+    }
+
+    // workspace.isActive + WEB platform guard when reactivating
+    const updateEnt = await this.entitlements.getForWorkspace(company.workspaceId)
+
+    if (!updateEnt.workspaceActive) {
+      throw new ForbiddenException('Workspace is disabled')
+    }
+
+    if (dto.isActive === true && target.source?.platform === 'WEB' && !updateEnt.limits.webMonitoringEnabled) {
+      throw new ForbiddenException({ code: 'PLAN_LIMIT', feature: 'webMonitoringEnabled' })
     }
 
     const updatedTarget = await this.prisma.companySourceTarget.update({

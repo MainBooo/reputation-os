@@ -22,8 +22,8 @@ export const FREE_LIMITS: PlanLimits = {
   platforms: [Platform.YANDEX],
   telegramNotifications: false,
   advancedAnalytics: false,
-  maxSources: -1,
-  maxMembers: -1,
+  maxSources: 1,
+  maxMembers: 1,
   maxWebPages: 0,
   webMonitoringEnabled: false,
   pushNotificationsEnabled: false
