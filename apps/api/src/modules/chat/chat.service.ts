@@ -108,7 +108,7 @@ export class ChatService {
       orderBy: { lastMessageAt: 'desc' },
       include: {
         company: { select: { id: true, name: true } },
-        mention: { select: { id: true, content: true, platform: true } },
+        mention: { select: { id: true, content: true, platform: true, companyId: true } },
         messages: {
           where: { deletedAt: null },
           orderBy: { createdAt: 'desc' },
@@ -126,6 +126,8 @@ export class ChatService {
           type: thread.type,
           title: thread.title,
           workspaceId: thread.workspaceId,
+          companyId: thread.companyId ?? thread.mention?.companyId ?? null,
+          mentionId: thread.mentionId,
           isArchived: thread.isArchived,
           lastMessageAt: thread.lastMessageAt,
           createdAt: thread.createdAt,
@@ -200,7 +202,7 @@ export class ChatService {
       where: { id: threadId },
       include: {
         company: { select: { id: true, name: true } },
-        mention: { select: { id: true, content: true, platform: true } },
+        mention: { select: { id: true, content: true, platform: true, companyId: true } },
         participants: { include: { user: { select: AUTHOR_SELECT } } }
       }
     })
@@ -215,7 +217,11 @@ export class ChatService {
     }
 
     const unreadCount = await this.getUnreadForThread(userId, threadId)
-    return { ...thread, unreadCount }
+    return {
+      ...thread,
+      companyId: thread.companyId ?? thread.mention?.companyId ?? null,
+      unreadCount
+    }
   }
 
   // ─── Messages (cursor pagination) ────────────────────────────────────────
