@@ -30,6 +30,28 @@ export class AuthService {
       return
     }
 
+    // Проверить entitlements workspace: telegramNotifications
+    const workspaceMember = await this.prisma.workspaceMember.findFirst({
+      where: { userId: linkToken.userId },
+      orderBy: { createdAt: 'asc' },
+      select: { workspaceId: true }
+    })
+    if (workspaceMember) {
+      const workspaceSub = await (this.prisma as any).subscription.findUnique({
+        where: { workspaceId: workspaceMember.workspaceId },
+        include: { plan: true }
+      })
+      const wLimits = (workspaceSub?.plan?.limits ?? {}) as Record<string, unknown>
+      if (!wLimits.telegramNotifications) {
+        await ctx.reply(
+          '❌ *Telegram-уведомления недоступны на вашем текущем тарифе.*\n\n' +
+          'Для подключения Telegram обновите тариф в личном кабинете.',
+          { parse_mode: 'Markdown' }
+        )
+        return
+      }
+    }
+
     // Проверить: уже привязан?
     const existingUser = await this.prisma.user.findUnique({
       where: { telegramChatId: BigInt(chatId) },

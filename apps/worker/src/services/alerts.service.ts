@@ -45,6 +45,20 @@ export class AlertsService {
     return filtered.length ? filtered : ['NEGATIVE']
   }
 
+  /** Возвращает true, если план workspace разрешает push-уведомления */
+  private async isWorkspacePushEnabled(workspaceId: string, cache: Map<string, boolean>): Promise<boolean> {
+    if (cache.has(workspaceId)) return cache.get(workspaceId)!
+    const prismaAny = this.prisma as any
+    const sub = await prismaAny.subscription.findUnique({
+      where: { workspaceId },
+      include: { plan: true }
+    })
+    const limits = (sub?.plan?.limits ?? {}) as Record<string, unknown>
+    const enabled = limits.pushNotificationsEnabled === true
+    cache.set(workspaceId, enabled)
+    return enabled
+  }
+
   async checkAndSend() {
     const prismaAny = this.prisma as any
     const now = new Date()
@@ -57,9 +71,22 @@ export class AlertsService {
     let checked = 0
     let sent = 0
     let failed = 0
+    let skippedNoPlan = 0
+    const pushEnabledCache = new Map<string, boolean>()
 
     for (const subscription of subscriptions) {
       checked += 1
+
+      const pushAllowed = await this.isWorkspacePushEnabled(subscription.workspaceId, pushEnabledCache)
+      if (!pushAllowed) {
+        skippedNoPlan += 1
+        this.logger.debug(`Push skip: workspaceId=${subscription.workspaceId} reason=pushNotificationsEnabled=false`)
+        await prismaAny.webPushSubscription.update({
+          where: { id: subscription.id },
+          data: { lastAlertCheckedAt: now }
+        }).catch(() => null)
+        continue
+      }
 
       const sentiments = this.normalizeSentiments(subscription.alertSentiments)
       const since = subscription.lastAlertCheckedAt || new Date(now.getTime() - ALERT_INITIAL_LOOKBACK_MS)
@@ -158,10 +185,10 @@ export class AlertsService {
     const { telegramSent, telegramFailed } = await this.checkAndSendTelegram()
 
     this.logger.log(
-      `Alert check finished subscriptions=${subscriptions.length} checked=${checked} sent=${sent} failed=${failed} telegramSent=${telegramSent} telegramFailed=${telegramFailed}`
+      `Alert check finished subscriptions=${subscriptions.length} checked=${checked} skippedNoPlan=${skippedNoPlan} sent=${sent} failed=${failed} telegramSent=${telegramSent} telegramFailed=${telegramFailed}`
     )
 
-    return { subscriptions: subscriptions.length, checked, sent, failed, telegramSent, telegramFailed }
+    return { subscriptions: subscriptions.length, checked, skippedNoPlan, sent, failed, telegramSent, telegramFailed }
   }
 
   private async checkAndSendTelegram() {
@@ -178,6 +205,17 @@ export class AlertsService {
     })
 
     for (const rule of rules) {
+      // Проверяем entitlements workspace перед отправкой в Telegram
+      const workspaceSub = await prismaAny.subscription.findUnique({
+        where: { workspaceId: rule.workspaceId },
+        include: { plan: true }
+      })
+      const wLimits = (workspaceSub?.plan?.limits ?? {}) as Record<string, unknown>
+      if (!wLimits.telegramNotifications) {
+        this.logger.debug(`Telegram skip: workspaceId=${rule.workspaceId} reason=telegramNotifications=false`)
+        continue
+      }
+
       const recipients = await prismaAny.user.findMany({
         where: {
           telegramChatId: { not: null },

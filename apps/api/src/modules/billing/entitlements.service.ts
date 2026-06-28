@@ -1,7 +1,60 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common'
-import { PlanCode, SubscriptionStatus } from '@prisma/client'
+import { Platform, PlanCode, SubscriptionStatus } from '@prisma/client'
 import { PrismaService } from '../../common/prisma/prisma.service'
 import { FEATURE_KEYS, FREE_LIMITS, FeatureKey, PlanLimits } from './billing.constants'
+
+/** Дефолтные лимиты по коду плана — используются как база поверх FREE_LIMITS,
+ *  затем перекрываются реальными limits из БД. */
+const CODE_DEFAULTS: Partial<Record<PlanCode, PlanLimits>> = {
+  [PlanCode.FREE]: {
+    maxCompanies: 1,
+    maxAiRepliesPerMonth: 5,
+    platforms: [Platform.YANDEX],
+    telegramNotifications: false,
+    advancedAnalytics: false,
+    pushNotificationsEnabled: false,
+    webMonitoringEnabled: false,
+    maxSources: 1,
+    maxMembers: 1,
+    maxWebPages: 0
+  },
+  [PlanCode.START]: {
+    maxCompanies: 3,
+    maxAiRepliesPerMonth: 50,
+    platforms: [Platform.YANDEX, Platform.TWOGIS],
+    telegramNotifications: false,
+    advancedAnalytics: false,
+    pushNotificationsEnabled: true,
+    webMonitoringEnabled: false,
+    maxSources: 2,
+    maxMembers: 2,
+    maxWebPages: 0
+  },
+  [PlanCode.PRO]: {
+    maxCompanies: 10,
+    maxAiRepliesPerMonth: -1,
+    platforms: [Platform.YANDEX, Platform.TWOGIS, Platform.GOOGLE, Platform.WEB],
+    telegramNotifications: true,
+    advancedAnalytics: true,
+    pushNotificationsEnabled: true,
+    webMonitoringEnabled: true,
+    maxSources: 10,
+    maxMembers: 5,
+    maxWebPages: 20
+  },
+  [PlanCode.AGENCY]: {
+    maxCompanies: -1,
+    maxAiRepliesPerMonth: -1,
+    platforms: [Platform.YANDEX, Platform.TWOGIS, Platform.GOOGLE, Platform.WEB],
+    telegramNotifications: true,
+    advancedAnalytics: true,
+    pushNotificationsEnabled: true,
+    webMonitoringEnabled: true,
+    maxSources: -1,
+    maxMembers: -1,
+    maxWebPages: -1
+  }
+}
 
 export interface WorkspaceEntitlements {
   workspaceId: string
@@ -76,7 +129,9 @@ export class EntitlementsService {
       planCode = subscription!.plan.code
       planName = subscription!.plan.name
       priceMonthly = subscription!.plan.priceMonthly
-      limits = { ...FREE_LIMITS, ...(subscription!.plan.limits as Partial<PlanLimits>) }
+      // Merge: FREE_LIMITS (fallback) <- code defaults <- DB plan.limits
+      const codeBase = CODE_DEFAULTS[planCode] ?? FREE_LIMITS
+      limits = { ...FREE_LIMITS, ...codeBase, ...(subscription!.plan.limits as Partial<PlanLimits>) }
     }
 
     const overrideMap: Partial<Record<FeatureKey, unknown>> = {}

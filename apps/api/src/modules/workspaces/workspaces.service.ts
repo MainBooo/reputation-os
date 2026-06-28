@@ -2,16 +2,18 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { WorkspaceRole } from '@prisma/client'
 import { randomBytes } from 'crypto'
 import { PrismaService } from '../../common/prisma/prisma.service'
+import { EntitlementsService } from '../billing/entitlements.service'
 import { CreateWorkspaceDto } from './dto/create-workspace.dto'
 import { AddWorkspaceMemberDto } from './dto/add-workspace-member.dto'
 import { UpdateWorkspaceMemberRoleDto } from './dto/update-workspace-member-role.dto'
 import { CreateWorkspaceInviteDto } from './dto/create-workspace-invite.dto'
 
-const WORKSPACE_USERS_LIMIT = 4
-
 @Injectable()
 export class WorkspacesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly entitlements: EntitlementsService
+  ) {}
 
   async findAllForUser(userId: string) {
     return this.prisma.workspace.findMany({
@@ -84,6 +86,12 @@ export class WorkspacesService {
   }
 
   private async assertWorkspaceUserLimit(workspaceId: string) {
+    const { limits } = await this.entitlements.getForWorkspace(workspaceId)
+    const maxMembers = Number(limits.maxMembers)
+
+    // -1 = безлимит
+    if (maxMembers < 0) return
+
     const [membersCount, pendingInvitesCount] = await Promise.all([
       this.prisma.workspaceMember.count({ where: { workspaceId } }),
       this.prisma.workspaceInvite.count({
@@ -96,8 +104,8 @@ export class WorkspacesService {
       })
     ])
 
-    if (membersCount + pendingInvitesCount >= WORKSPACE_USERS_LIMIT) {
-      throw new BadRequestException(`Workspace user limit reached: ${WORKSPACE_USERS_LIMIT}`)
+    if (membersCount + pendingInvitesCount >= maxMembers) {
+      throw new BadRequestException(`Workspace member limit reached for your plan: ${maxMembers}`)
     }
   }
 

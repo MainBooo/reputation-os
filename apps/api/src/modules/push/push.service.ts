@@ -1,6 +1,7 @@
 import { ForbiddenException, Injectable, InternalServerErrorException, Logger } from '@nestjs/common'
 import * as webPush from 'web-push'
 import { PrismaService } from '../../common/prisma/prisma.service'
+import { EntitlementsService } from '../billing/entitlements.service'
 import { SubscribePushDto } from './dto/subscribe-push.dto'
 import { UnsubscribePushDto } from './dto/unsubscribe-push.dto'
 import { TestPushDto } from './dto/test-push.dto'
@@ -9,7 +10,10 @@ import { TestPushDto } from './dto/test-push.dto'
 export class PushService {
   private readonly logger = new Logger(PushService.name)
 
-  constructor(private readonly prisma: PrismaService) {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly entitlements: EntitlementsService
+  ) {
     const publicKey = process.env.WEB_PUSH_PUBLIC_KEY
     const privateKey = process.env.WEB_PUSH_PRIVATE_KEY
     const subject = process.env.WEB_PUSH_SUBJECT || 'mailto:admin@reputationos.local'
@@ -72,6 +76,11 @@ export class PushService {
 
   async subscribe(userId: string, dto: SubscribePushDto) {
     await this.assertWorkspaceAccess(userId, dto.workspaceId)
+
+    const { limits } = await this.entitlements.getForWorkspace(dto.workspaceId)
+    if (!limits.pushNotificationsEnabled) {
+      throw new ForbiddenException('Push notifications are not available on your current plan')
+    }
 
     const alertSentiments = this.normalizeAlertSentiments(dto.alertSentiments)
 

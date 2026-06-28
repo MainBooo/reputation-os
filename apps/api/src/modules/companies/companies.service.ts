@@ -622,7 +622,7 @@ export class CompaniesService {
       this.logger.log(`[CompanyCreate] skip 2gis init companyId=${company.id} reason=no_two_gis_url`)
     }
 
-    if (!allowedPlatforms.length || allowedPlatforms.includes('WEB')) {
+    if (allowedPlatforms.includes('WEB') && limits.webMonitoringEnabled) {
       const webSource = await this.ensureWebSource(dto.workspaceId)
       const existingWebTarget = await this.prisma.companySourceTarget.findFirst({
         where: { companyId: company.id, sourceId: webSource.id, externalUrl: null }

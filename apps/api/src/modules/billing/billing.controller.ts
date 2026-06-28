@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Post, UseGuards } from '@nestjs/common'
+import { Body, Controller, ForbiddenException, Get, Headers, HttpCode, Post, UseGuards } from '@nestjs/common'
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard'
 import { CurrentUser } from '../../common/decorators/current-user.decorator'
 import { AuthUser } from '../../common/auth/auth-user.type'
@@ -37,10 +37,17 @@ export class BillingController {
   }
 
   // Публичный эндпоинт: его вызывает ЮKassa (или mock-checkout страница).
-  // TODO перед боевой ЮKassa: проверка подписи/allowlist IP ЮKassa.
+  // Проверяет заголовок x-billing-webhook-secret против BILLING_WEBHOOK_SECRET.
   @Post('webhook')
   @HttpCode(200)
-  handleWebhook(@Body() payload: YookassaWebhookPayload) {
+  handleWebhook(
+    @Headers('x-billing-webhook-secret') secret: string | undefined,
+    @Body() payload: YookassaWebhookPayload
+  ) {
+    const expected = process.env.BILLING_WEBHOOK_SECRET
+    if (!expected || secret !== expected) {
+      throw new ForbiddenException('Invalid webhook secret')
+    }
     return this.billing.handleWebhook(payload)
   }
 }
