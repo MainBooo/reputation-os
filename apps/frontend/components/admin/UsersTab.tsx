@@ -134,7 +134,7 @@ export default function UsersTab({ onToast }: { onToast: (msg: string, ok?: bool
           <div className="mx-4 w-full max-w-md rounded-[24px] border border-white/10 bg-[#070b16] p-6 shadow-2xl">
             <div className="mb-1 text-lg font-semibold text-white">Удалить аккаунт?</div>
             <div className="mb-4 text-sm text-zinc-400">
-              Аккаунт будет деактивирован, персональные данные скрыты. Это действие нельзя отменить.
+              Аккаунт будет деактивирован, персональные данные скрыты. Личные workspace, где пользователь — единственный участник, будут архивированы. Это действие нельзя отменить.
             </div>
             <div className="mb-4">
               <label className="mb-1.5 block text-xs text-zinc-500">

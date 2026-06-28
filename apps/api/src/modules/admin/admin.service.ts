@@ -466,51 +466,45 @@ export class AdminService {
       if (count <= 1) throw new BadRequestException('Нельзя удалить последнего SUPER_ADMIN')
     }
 
-    const soleOwnerNames: string[] = []
-    for (const m of target.workspaceMembers) {
-      if (m.role !== 'OWNER') continue
-      const otherOwners = await this.prisma.workspaceMember.count({
-        where: { workspaceId: m.workspaceId, role: 'OWNER', userId: { not: targetId } }
-      })
-      if (otherOwners === 0) {
-        const ws = await this.prisma.workspace.findUnique({
-          where: { id: m.workspaceId }, select: { name: true }
-        })
-        if (ws) soleOwnerNames.push(ws.name)
-      }
-    }
-
-    if (soleOwnerNames.length > 0) {
+    const { toArchive, blockers } = await this.classifyWorkspaceMemberships(targetId, target.workspaceMembers)
+    if (blockers.length > 0) {
       throw new BadRequestException(
-        `Нельзя удалить пользователя — он единственный владелец workspace: ${soleOwnerNames.join(', ')}. Сначала назначьте другого владельца.`
+        `Нельзя удалить пользователя — он единственный владелец workspace с другими участниками: ${blockers.map((w) => w.name).join(', ')}. Сначала назначьте другого владельца.`
       )
     }
 
     const prevEmail = target.email
-    await this.prisma.$transaction([
-      this.prisma.webPushSubscription.deleteMany({ where: { userId: targetId } }),
-      this.prisma.telegramLinkToken.deleteMany({ where: { userId: targetId } }),
-      this.prisma.telegramMentionDelivery.deleteMany({
+    await this.prisma.$transaction(async (tx) => {
+      const now = new Date()
+      for (const ws of toArchive) {
+        await tx.workspace.update({
+          where: { id: ws.id },
+          data: { deletedAt: now, deletedById: actorId }
+        })
+      }
+      await tx.webPushSubscription.deleteMany({ where: { userId: targetId } })
+      await tx.telegramLinkToken.deleteMany({ where: { userId: targetId } })
+      await tx.telegramMentionDelivery.deleteMany({
         where: { userId: targetId, status: TelegramDeliveryStatus.PENDING }
-      }),
-      this.prisma.workspaceMember.deleteMany({ where: { userId: targetId } }),
-      this.prisma.workspaceInvite.deleteMany({
+      })
+      await tx.workspaceMember.deleteMany({ where: { userId: targetId } })
+      await tx.workspaceInvite.deleteMany({
         where: { invitedById: targetId, acceptedAt: null, declinedAt: null }
-      }),
-      this.prisma.user.update({
+      })
+      await tx.user.update({
         where: { id: targetId },
         data: {
           email: `deleted_${targetId}@deleted.local`,
           fullName: 'Удалённый пользователь',
           passwordHash: `DELETED_${targetId}`,
           isActive: false,
-          deletedAt: new Date(),
+          deletedAt: now,
           deletedById: actorId,
           telegramChatId: null,
           telegramLinkedAt: null,
         }
       })
-    ])
+    })
 
     await this.auditLog.log({
       actorUserId: actorId,
@@ -519,10 +513,40 @@ export class AdminService {
       entityType: 'User',
       entityId: targetId,
       targetUserId: targetId,
-      beforeJson: { email: prevEmail, systemRole: target.systemRole }
+      beforeJson: { email: prevEmail, systemRole: target.systemRole, archivedWorkspaces: toArchive.map((w) => w.name) }
     })
 
-    return { ok: true }
+    return { ok: true, archivedWorkspaces: toArchive }
+  }
+
+  private async classifyWorkspaceMemberships(
+    userId: string,
+    memberships: { workspaceId: string; role: string }[]
+  ): Promise<{ toArchive: { id: string; name: string }[]; blockers: { id: string; name: string }[] }> {
+    const toArchive: { id: string; name: string }[] = []
+    const blockers: { id: string; name: string }[] = []
+
+    for (const m of memberships) {
+      if (m.role !== 'OWNER') continue
+
+      const ws = await this.prisma.workspace.findUnique({
+        where: { id: m.workspaceId },
+        select: { id: true, name: true, _count: { select: { members: true } } }
+      })
+      if (!ws) continue
+
+      const otherOwnerCount = await this.prisma.workspaceMember.count({
+        where: { workspaceId: m.workspaceId, role: 'OWNER', userId: { not: userId } }
+      })
+
+      if (ws._count.members === 1) {
+        toArchive.push({ id: ws.id, name: ws.name })
+      } else if (otherOwnerCount === 0) {
+        blockers.push({ id: ws.id, name: ws.name })
+      }
+    }
+
+    return { toArchive, blockers }
   }
 
   async updateWorkspaceBilling(

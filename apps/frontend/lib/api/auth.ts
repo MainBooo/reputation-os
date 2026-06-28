@@ -26,8 +26,18 @@ export function me() {
   return apiFetch<AuthMe>('/auth/me')
 }
 
+export type DeletePreview = {
+  canDelete: boolean
+  archivedWorkspaces: { id: string; name: string }[]
+  blockerWorkspaces: { id: string; name: string }[]
+}
+
+export function getDeletePreview() {
+  return apiFetch<DeletePreview>('/auth/me/delete-preview')
+}
+
 export function deleteMyAccount() {
-  return apiFetch<{ ok: boolean }>('/auth/me', { method: 'DELETE' })
+  return apiFetch<{ ok: boolean; archivedWorkspaces: { id: string; name: string }[] }>('/auth/me', { method: 'DELETE' })
 }
 
 export function logoutLocal() {

@@ -27,6 +27,12 @@ export class AuthController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Get('me/delete-preview')
+  getDeletePreview(@CurrentUser() user: AuthUser) {
+    return this.authService.getDeletePreview(user.id)
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Delete('me')
   deleteMe(@CurrentUser() user: AuthUser) {
     return this.authService.deleteMyAccount(user.id)

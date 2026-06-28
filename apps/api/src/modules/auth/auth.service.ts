@@ -85,7 +85,38 @@ export class AuthService {
     })
   }
 
-  async deleteMyAccount(userId: string): Promise<{ ok: boolean }> {
+  async getDeletePreview(userId: string): Promise<{
+    canDelete: boolean
+    archivedWorkspaces: { id: string; name: string }[]
+    blockerWorkspaces: { id: string; name: string }[]
+  }> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true, systemRole: true, deletedAt: true,
+        workspaceMembers: { select: { workspaceId: true, role: true } }
+      }
+    })
+    if (!user || user.deletedAt) throw new BadRequestException('Аккаунт не найден')
+
+    if (user.systemRole === SystemRole.SUPER_ADMIN) {
+      const count = await this.prisma.user.count({
+        where: { systemRole: SystemRole.SUPER_ADMIN, isActive: true, deletedAt: null }
+      })
+      if (count <= 1) {
+        return { canDelete: false, archivedWorkspaces: [], blockerWorkspaces: [] }
+      }
+    }
+
+    const { toArchive, blockers } = await this.classifyWorkspaceMemberships(userId, user.workspaceMembers)
+    return {
+      canDelete: blockers.length === 0,
+      archivedWorkspaces: toArchive,
+      blockerWorkspaces: blockers,
+    }
+  }
+
+  async deleteMyAccount(userId: string): Promise<{ ok: boolean; archivedWorkspaces: { id: string; name: string }[] }> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -102,62 +133,83 @@ export class AuthService {
       if (count <= 1) throw new BadRequestException('Нельзя удалить последнего SUPER_ADMIN')
     }
 
-    const soleOwnerNames = await this.getSoleOwnerWorkspaceNames(userId, user.workspaceMembers)
-    if (soleOwnerNames.length > 0) {
+    const { toArchive, blockers } = await this.classifyWorkspaceMemberships(userId, user.workspaceMembers)
+    if (blockers.length > 0) {
       throw new BadRequestException(
-        `Нельзя удалить аккаунт, пока вы единственный владелец workspace: ${soleOwnerNames.join(', ')}. Передайте роль другому участнику или удалите workspace.`
+        `Нельзя удалить аккаунт, пока вы единственный владелец workspace с другими участниками: ${blockers.map((w) => w.name).join(', ')}. Передайте роль другому участнику.`
       )
     }
 
-    await this.anonymizeUser(userId)
-    return { ok: true }
+    await this.anonymizeUser(userId, undefined, toArchive)
+    return { ok: true, archivedWorkspaces: toArchive }
   }
 
-  private async getSoleOwnerWorkspaceNames(
+  private async classifyWorkspaceMemberships(
     userId: string,
     memberships: { workspaceId: string; role: string }[]
-  ): Promise<string[]> {
-    const names: string[] = []
+  ): Promise<{ toArchive: { id: string; name: string }[]; blockers: { id: string; name: string }[] }> {
+    const toArchive: { id: string; name: string }[] = []
+    const blockers: { id: string; name: string }[] = []
+
     for (const m of memberships) {
       if (m.role !== 'OWNER') continue
-      const otherOwners = await this.prisma.workspaceMember.count({
+
+      const ws = await this.prisma.workspace.findUnique({
+        where: { id: m.workspaceId },
+        select: { id: true, name: true, _count: { select: { members: true } } }
+      })
+      if (!ws) continue
+
+      const otherOwnerCount = await this.prisma.workspaceMember.count({
         where: { workspaceId: m.workspaceId, role: 'OWNER', userId: { not: userId } }
       })
-      if (otherOwners === 0) {
-        const ws = await this.prisma.workspace.findUnique({
-          where: { id: m.workspaceId }, select: { name: true }
-        })
-        if (ws) names.push(ws.name)
+
+      if (ws._count.members === 1) {
+        toArchive.push({ id: ws.id, name: ws.name })
+      } else if (otherOwnerCount === 0) {
+        blockers.push({ id: ws.id, name: ws.name })
       }
     }
-    return names
+
+    return { toArchive, blockers }
   }
 
-  private async anonymizeUser(userId: string, deletedById?: string): Promise<void> {
-    await this.prisma.$transaction([
-      this.prisma.webPushSubscription.deleteMany({ where: { userId } }),
-      this.prisma.telegramLinkToken.deleteMany({ where: { userId } }),
-      this.prisma.telegramMentionDelivery.deleteMany({
+  private async anonymizeUser(
+    userId: string,
+    deletedById?: string,
+    workspacesToArchive: { id: string; name: string }[] = []
+  ): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      const now = new Date()
+      for (const ws of workspacesToArchive) {
+        await tx.workspace.update({
+          where: { id: ws.id },
+          data: { deletedAt: now, deletedById: deletedById ?? userId }
+        })
+      }
+      await tx.webPushSubscription.deleteMany({ where: { userId } })
+      await tx.telegramLinkToken.deleteMany({ where: { userId } })
+      await tx.telegramMentionDelivery.deleteMany({
         where: { userId, status: TelegramDeliveryStatus.PENDING }
-      }),
-      this.prisma.workspaceMember.deleteMany({ where: { userId } }),
-      this.prisma.workspaceInvite.deleteMany({
+      })
+      await tx.workspaceMember.deleteMany({ where: { userId } })
+      await tx.workspaceInvite.deleteMany({
         where: { invitedById: userId, acceptedAt: null, declinedAt: null }
-      }),
-      this.prisma.user.update({
+      })
+      await tx.user.update({
         where: { id: userId },
         data: {
           email: `deleted_${userId}@deleted.local`,
           fullName: 'Удалённый пользователь',
           passwordHash: `DELETED_${userId}`,
           isActive: false,
-          deletedAt: new Date(),
+          deletedAt: now,
           deletedById: deletedById ?? null,
           telegramChatId: null,
           telegramLinkedAt: null,
         }
       })
-    ])
+    })
   }
 
   private buildAuthResponse(userId: string, email: string) {
