@@ -15,6 +15,7 @@ export default async function CompanyInboxPage({
     rating?: string
     from?: string
     to?: string
+    mentionId?: string
   }
 }) {
   let response: any = { data: [], meta: { total: 0, page: 1, limit: 20 } }
@@ -90,6 +91,7 @@ export default async function CompanyInboxPage({
           initialRatedCount={ratedCount}
           isAwaitingInitialYandexData={isAwaitingInitialYandexData}
           initialFilters={initialFilters}
+          highlightId={searchParams?.mentionId}
         />
       )}
 

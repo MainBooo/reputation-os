@@ -8,6 +8,7 @@ import type { ChatMessage } from '@/lib/api/chat'
 interface ChatContextValue {
   isOpen: boolean
   openChat: () => void
+  openThread: (threadId: string) => void
   closeChat: () => void
   selectedThreadId: string | null
   setSelectedThreadId: (id: string | null) => void
@@ -154,10 +155,16 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     return () => { typingHandlers.current.delete(h) }
   }, [])
 
+  const openThread = useCallback((threadId: string) => {
+    setIsOpen(true)
+    setSelectedThreadId(threadId)
+  }, [])
+
   return (
     <ChatContext.Provider value={{
       isOpen,
       openChat: () => setIsOpen(true),
+      openThread,
       closeChat: () => setIsOpen(false),
       selectedThreadId,
       setSelectedThreadId,

@@ -126,7 +126,8 @@ export default function InboxMentionsList({
   initialAverageRating,
   initialRatedCount,
   isAwaitingInitialYandexData,
-  initialFilters
+  initialFilters,
+  highlightId
 }: {
   companyId: string
   workspaceId?: string
@@ -142,6 +143,7 @@ export default function InboxMentionsList({
     from?: string
     to?: string
   }
+  highlightId?: string
 }) {
   const [mentions, setMentions] = useState<any[]>(
     sortMentionsDesc(Array.isArray(initialMentions) ? initialMentions : [])
@@ -174,6 +176,18 @@ export default function InboxMentionsList({
   )
   const [ratedCount, setRatedCount] = useState(Number(initialRatedCount || 0))
   const requestIdRef = useRef(0)
+  const [highlightedId, setHighlightedId] = useState(highlightId || '')
+
+  useEffect(() => {
+    if (!highlightId) return
+    const el = document.getElementById(`mention-${highlightId}`)
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      setHighlightedId(highlightId)
+      const timer = setTimeout(() => setHighlightedId(''), 3000)
+      return () => clearTimeout(timer)
+    }
+  }, [highlightId, mentions]) // re-run when mentions load
 
   const filterQuery = useMemo(() => {
     const params = new URLSearchParams()
@@ -548,7 +562,16 @@ export default function InboxMentionsList({
 
             <div className="space-y-3">
               {visibleMentions.map((mention: any) => (
-                <div key={mention.id} className="grid gap-2 sm:grid-cols-[auto_1fr] sm:items-start">
+                <div
+                  key={mention.id}
+                  id={`mention-${mention.id}`}
+                  className={clsx(
+                    'grid gap-2 rounded-2xl sm:grid-cols-[auto_1fr] sm:items-start',
+                    highlightedId === mention.id
+                      ? 'ring-2 ring-cyan-400/60 ring-offset-2 ring-offset-[#060e1c] transition-all duration-700'
+                      : ''
+                  )}
+                >
                   <label className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] transition hover:border-cyan-400/30">
                     <input type="checkbox" checked={selectedIds.includes(mention.id)} onChange={() => toggleMentionSelection(mention.id)} className="h-4 w-4 accent-cyan-400" />
                   </label>

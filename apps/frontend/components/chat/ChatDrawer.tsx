@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ArrowLeft, X } from 'lucide-react'
+import Link from 'next/link'
+import { ArrowLeft, ExternalLink, X } from 'lucide-react'
 import { getThreads, getDirectPartner } from '@/lib/api/chat'
 import { me } from '@/lib/api/auth'
 import { useChatContext } from '@/lib/chat/ChatContext'
@@ -15,16 +16,12 @@ export default function ChatDrawer() {
   const [loadingThreads, setLoadingThreads] = useState(false)
   const [currentUserId, setCurrentUserId] = useState('')
   const [canManage, setCanManage] = useState(false)
-  const [didAutoSelect, setDidAutoSelect] = useState(false)
 
   const selectedThread = threads.find((t) => t.id === selectedThreadId) ?? null
 
-  // Reset auto-select flag when drawer closes
+  // Clear threads when drawer closes
   useEffect(() => {
-    if (!isOpen) {
-      setDidAutoSelect(false)
-      setThreads([])
-    }
+    if (!isOpen) setThreads([])
   }, [isOpen])
 
   useEffect(() => {
@@ -48,16 +45,6 @@ export default function ChatDrawer() {
   useEffect(() => {
     if (isOpen && workspaceId) loadThreads()
   }, [isOpen, workspaceId]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Auto-select the WORKSPACE thread when threads first load
-  useEffect(() => {
-    if (didAutoSelect || selectedThreadId || threads.length === 0) return
-    const workspaceThread = threads.find((t) => t.type === 'WORKSPACE')
-    if (workspaceThread) {
-      setSelectedThreadId(workspaceThread.id)
-      setDidAutoSelect(true)
-    }
-  }, [threads]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Refresh thread list on new messages (update unread badges)
   useEffect(() => {
@@ -120,6 +107,17 @@ export default function ChatDrawer() {
               <div className="mt-0.5 text-xs text-slate-500">Личный диалог</div>
             ) : null}
           </div>
+
+          {selectedThread?.type === 'MENTION' && selectedThread.companyId && selectedThread.mentionId ? (
+            <Link
+              href={`/companies/${selectedThread.companyId}/inbox?mentionId=${selectedThread.mentionId}`}
+              onClick={closeChat}
+              className="flex shrink-0 items-center gap-1.5 rounded-xl border border-cyan-400/25 bg-cyan-500/[0.10] px-2.5 py-1.5 text-xs font-medium text-cyan-200 transition hover:border-cyan-400/45 hover:bg-cyan-500/[0.18]"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+              К отзыву
+            </Link>
+          ) : null}
 
           <button
             type="button"
