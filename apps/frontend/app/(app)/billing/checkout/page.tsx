@@ -2,12 +2,15 @@
 
 import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { Sparkles } from 'lucide-react'
 import Card from '@/components/ui/Card'
 import {
   getBillingPlans,
   createCheckout,
+  getTrialDaysLeft,
   type BillingPlan,
 } from '@/lib/api/billing'
+import { useSubscription } from '@/lib/subscription/SubscriptionContext'
 
 function formatPrice(price: number) {
   return price.toLocaleString('ru-RU') + ' ₽/мес'
@@ -96,6 +99,7 @@ function CheckoutInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const initialPlan = searchParams.get('plan') ?? ''
+  const { entitlements } = useSubscription()
 
   const [plans, setPlans] = useState<BillingPlan[]>([])
   const [selectedCode, setSelectedCode] = useState(initialPlan)
@@ -168,6 +172,9 @@ function CheckoutInner() {
     )
   }
 
+  const isTrialActive = entitlements?.subscriptionStatus === 'TRIAL'
+  const trialDays = getTrialDaysLeft(entitlements ?? null)
+
   return (
     <div className="mx-auto max-w-2xl px-4 py-10">
       <div className="mb-8">
@@ -176,6 +183,27 @@ function CheckoutInner() {
           Выберите план и подтвердите оплату.
         </div>
       </div>
+
+      {isTrialActive && (
+        <div className="mb-6 rounded-[20px] border border-cyan-400/20 bg-cyan-500/[0.06] p-4">
+          <div className="flex items-start gap-3">
+            <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-cyan-300" />
+            <div>
+              <div className="text-sm font-semibold text-cyan-100">
+                Пробный период активен
+                {trialDays !== null && (
+                  trialDays === 0 ? ' — истекает сегодня' :
+                  trialDays === 1 ? ' — остался 1 день' :
+                  ` — осталось ${trialDays} дн.`
+                )}
+              </div>
+              <div className="mt-0.5 text-xs text-zinc-400">
+                Подключите тариф сейчас, чтобы продолжить работу без перерыва после окончания триала.
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="mb-6 grid gap-3 sm:grid-cols-3">
         {plans.map((plan) => (

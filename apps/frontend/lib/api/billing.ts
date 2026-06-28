@@ -45,9 +45,21 @@ export function isSubscriptionActive(ent: BillingEntitlements | null): boolean {
   return s === 'ACTIVE' || s === 'MANUAL' || s === 'TRIAL'
 }
 
+export function getTrialDaysLeft(ent: BillingEntitlements | null): number | null {
+  if (!ent || ent.subscriptionStatus !== 'TRIAL' || !ent.trialEndsAt) return null
+  const ms = new Date(ent.trialEndsAt).getTime() - Date.now()
+  return Math.max(0, Math.floor(ms / (1000 * 60 * 60 * 24)))
+}
+
 export function getPlanBadgeLabel(ent: BillingEntitlements | null): string {
   if (!ent || !isSubscriptionActive(ent)) return 'Нет тарифа'
-  if (ent.subscriptionStatus === 'TRIAL') return 'Триал'
+  if (ent.subscriptionStatus === 'TRIAL') {
+    const days = getTrialDaysLeft(ent)
+    if (days === null) return 'Триал'
+    if (days === 0) return 'Триал: сегодня'
+    if (days === 1) return 'Триал: 1 день'
+    return `Триал: ${days} дн.`
+  }
   return ent.planName || ent.planCode || 'Нет тарифа'
 }
 

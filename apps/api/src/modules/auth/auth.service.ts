@@ -1,4 +1,5 @@
-import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common'
+import { BadRequestException, Injectable, Logger, UnauthorizedException } from '@nestjs/common'
+import { PlanCode, SubscriptionStatus } from '@prisma/client'
 import { PrismaService } from '../../common/prisma/prisma.service'
 import { JwtService } from '@nestjs/jwt'
 import * as bcrypt from 'bcrypt'
@@ -7,6 +8,8 @@ import { LoginDto } from './dto/login.dto'
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name)
+
   constructor(private readonly prisma: PrismaService, private readonly jwtService: JwtService) {}
 
   async register(dto: RegisterDto) {
@@ -40,6 +43,22 @@ export class AuthService {
     await this.prisma.workspaceMember.create({
       data: { workspaceId: workspace.id, userId: user.id, role: 'OWNER' }
     })
+
+    const proPlan = await this.prisma.plan.findUnique({ where: { code: PlanCode.PRO } })
+    if (proPlan) {
+      const trialEndsAt = new Date()
+      trialEndsAt.setDate(trialEndsAt.getDate() + 7)
+      await this.prisma.subscription.create({
+        data: {
+          workspaceId: workspace.id,
+          planId: proPlan.id,
+          status: SubscriptionStatus.TRIAL,
+          trialEndsAt,
+        }
+      })
+    } else {
+      this.logger.warn('PRO plan not found in DB — trial subscription skipped')
+    }
 
     return this.buildAuthResponse(user.id, user.email)
   }

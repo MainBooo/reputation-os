@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { Sparkles } from 'lucide-react'
 import Card from '@/components/ui/Card'
 import Input from '@/components/ui/Input'
 import Button from '@/components/ui/Button'
@@ -58,6 +59,18 @@ export default function RegisterPage() {
         <div className="text-sm uppercase tracking-[0.2em] text-zinc-300">Reputation OS</div>
         <h1 className="mt-3 text-2xl font-semibold text-brand">Регистрация</h1>
         <p className="mt-2 text-sm text-zinc-300">Создайте рабочее пространство и начните мониторинг.</p>
+
+        <div className="mt-5 rounded-[16px] border border-cyan-400/15 bg-cyan-500/[0.06] p-4">
+          <div className="flex items-center gap-2 text-sm font-semibold text-cyan-100">
+            <Sparkles className="h-4 w-4 shrink-0" />
+            7 дней бесплатно — тариф «Бизнес»
+          </div>
+          <ul className="mt-2 space-y-1 text-xs text-zinc-400">
+            <li>◆ До 10 компаний и все платформы: Яндекс, 2ГИС, Google, Веб</li>
+            <li>◆ AI-ответы без лимита</li>
+            <li>◆ Telegram-уведомления и расширенная аналитика</li>
+          </ul>
+        </div>
 
         <form className="mt-8 space-y-4" onSubmit={handleSubmit}>
           <Input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Имя" />

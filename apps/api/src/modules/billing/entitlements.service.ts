@@ -63,6 +63,7 @@ export interface WorkspaceEntitlements {
   priceMonthly: number
   subscriptionStatus: SubscriptionStatus | null
   currentPeriodEnd: Date | null
+  trialEndsAt: Date | null
   limits: PlanLimits
   effective: PlanLimits
   overrides: Partial<Record<FeatureKey, unknown>>
@@ -153,6 +154,7 @@ export class EntitlementsService {
       priceMonthly,
       subscriptionStatus: subscription?.status ?? null,
       currentPeriodEnd: subscription?.currentPeriodEnd ?? null,
+      trialEndsAt: subscription?.trialEndsAt ?? null,
       limits,
       effective: limits,
       overrides: overrideMap,
