@@ -18,6 +18,7 @@ import { AlertsCheckProcessor } from './processors/alerts-check.processor'
 import { TelegramNotificationsModule } from './telegram/telegram-notifications.module'
 import { PageWatchProcessor } from './processors/page-watch.processor'
 import { PageWatchDispatcherProcessor } from './processors/page-watch-dispatcher.processor'
+import { SubscriptionReminderProcessor } from './processors/subscription-reminder.processor'
 
 @Module({
   imports: [ConfigModule.forRoot({ isGlobal: true, envFilePath: ['apps/worker/.env', '.env'] }), PrismaModule, BullmqModule, TelegramNotificationsModule],
@@ -36,7 +37,8 @@ import { PageWatchDispatcherProcessor } from './processors/page-watch-dispatcher
     NotificationsProcessor,
     AlertsCheckProcessor,
     PageWatchProcessor,
-    PageWatchDispatcherProcessor
+    PageWatchDispatcherProcessor,
+    SubscriptionReminderProcessor
   ]
 })
 export class AppModule {}

@@ -24,18 +24,31 @@ const PLATFORM_LABELS: Record<string, string> = {
   WEB: 'Веб-поиск',
 }
 
+function planCompaniesLabel(n: number) {
+  if (n === -1) return '∞ компаний'
+  if (n === 1) return '1 компания'
+  if (n >= 5) return `${n} компаний`
+  return `${n} компании`
+}
+
 function PlanCard({
   plan,
   selected,
   onSelect,
   isCurrent,
+  period,
 }: {
   plan: BillingPlan
   selected: boolean
   onSelect: () => void
   isCurrent?: boolean
+  period: 'monthly' | 'yearly'
 }) {
   const platforms = plan.limits.platforms.map((p) => PLATFORM_LABELS[p] ?? p).join(', ')
+  const price = period === 'yearly' && plan.priceYearly ? plan.priceYearly : plan.priceMonthly
+  const priceLabel = period === 'yearly' && plan.priceYearly
+    ? `${plan.priceYearly.toLocaleString('ru-RU')} ₽/год`
+    : formatPrice(plan.priceMonthly)
 
   return (
     <button
@@ -55,7 +68,12 @@ function PlanCard({
 
       <div>
         <div className="text-xs font-medium uppercase tracking-wider text-zinc-500">{plan.name}</div>
-        <div className="mt-1 text-2xl font-bold text-white">{formatPrice(plan.priceMonthly)}</div>
+        <div className="mt-1 text-2xl font-bold text-white">{priceLabel}</div>
+        {period === 'yearly' && plan.priceYearly && (
+          <div className="mt-0.5 text-xs text-emerald-400/80">
+            {Math.round((1 - plan.priceYearly / (plan.priceMonthly * 12)) * 100)}% экономия
+          </div>
+        )}
       </div>
 
       <div className="h-px w-full bg-white/[0.06]" />
@@ -63,9 +81,7 @@ function PlanCard({
       <div className="space-y-1.5 text-sm">
         <div className="flex items-center gap-2 text-zinc-300">
           <span className="text-cyan-400">◆</span>
-          <span>
-            {plan.limits.maxCompanies === -1 ? '∞ компаний' : `${plan.limits.maxCompanies} ${plan.limits.maxCompanies === 1 ? 'компания' : 'компании'}`}
-          </span>
+          <span>{planCompaniesLabel(plan.limits.maxCompanies)}</span>
         </div>
         <div className="flex items-center gap-2 text-zinc-300">
           <span className="text-cyan-400">◆</span>
@@ -104,6 +120,7 @@ function CheckoutInner() {
 
   const [plans, setPlans] = useState<BillingPlan[]>([])
   const [selectedCode, setSelectedCode] = useState(initialPlan)
+  const [period, setPeriod] = useState<'monthly' | 'yearly'>('monthly')
   const [step, setStep] = useState<'select' | 'success' | 'error'>('select')
   const [loading, setLoading] = useState(true)
   const [processing, setProcessing] = useState(false)
@@ -129,7 +146,7 @@ function CheckoutInner() {
     setProcessing(true)
     setErrorMsg('')
     try {
-      const result = await createCheckout(selectedCode)
+      const result = await createCheckout(selectedCode, period)
       if (result?.confirmationUrl?.startsWith('http')) {
         window.location.href = result.confirmationUrl
         return
@@ -181,10 +198,26 @@ function CheckoutInner() {
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-10">
-      <div className="mb-8">
-        <div className="text-2xl font-bold text-white">Выбор тарифа</div>
-        <div className="mt-1 text-sm text-zinc-400">
-          Выберите план и подтвердите оплату.
+      <div className="mb-6 flex items-end justify-between gap-4">
+        <div>
+          <div className="text-2xl font-bold text-white">Выбор тарифа</div>
+          <div className="mt-1 text-sm text-zinc-400">Выберите план и подтвердите оплату.</div>
+        </div>
+        <div className="flex rounded-xl border border-white/10 bg-white/[0.03] p-1 text-xs">
+          <button
+            type="button"
+            onClick={() => setPeriod('monthly')}
+            className={`rounded-lg px-3 py-1.5 font-medium transition-all ${period === 'monthly' ? 'bg-white/10 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+          >
+            Месяц
+          </button>
+          <button
+            type="button"
+            onClick={() => setPeriod('yearly')}
+            className={`rounded-lg px-3 py-1.5 font-medium transition-all ${period === 'yearly' ? 'bg-white/10 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+          >
+            Год <span className="text-emerald-400/80">−17%</span>
+          </button>
         </div>
       </div>
 
@@ -217,6 +250,7 @@ function CheckoutInner() {
             selected={selectedCode === plan.code}
             onSelect={() => setSelectedCode(plan.code)}
             isCurrent={entitlements?.planCode === plan.code}
+            period={period}
           />
         ))}
       </div>
@@ -226,7 +260,11 @@ function CheckoutInner() {
           <div>
             <div className="text-sm font-semibold text-white">{selected?.name ?? '—'}</div>
             {selected && (
-              <div className="mt-0.5 text-xs text-zinc-500">{formatPrice(selected.priceMonthly)}</div>
+              <div className="mt-0.5 text-xs text-zinc-500">
+                {period === 'yearly' && selected.priceYearly
+                  ? `${selected.priceYearly.toLocaleString('ru-RU')} ₽/год`
+                  : formatPrice(selected.priceMonthly)}
+              </div>
             )}
           </div>
           <button

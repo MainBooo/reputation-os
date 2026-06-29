@@ -9,12 +9,12 @@ const CODE_DEFAULTS: Partial<Record<PlanCode, PlanLimits>> = {
   [PlanCode.FREE]: {
     maxCompanies: 1,
     maxAiRepliesPerMonth: 5,
-    platforms: [Platform.YANDEX],
+    platforms: [Platform.YANDEX, Platform.TWOGIS],
     telegramNotifications: false,
     advancedAnalytics: false,
-    pushNotificationsEnabled: false,
+    pushNotificationsEnabled: true,
     webMonitoringEnabled: false,
-    maxSources: 1,
+    maxSources: 2,
     maxMembers: 1,
     maxWebPages: 0
   },
@@ -26,7 +26,7 @@ const CODE_DEFAULTS: Partial<Record<PlanCode, PlanLimits>> = {
     advancedAnalytics: false,
     pushNotificationsEnabled: true,
     webMonitoringEnabled: false,
-    maxSources: 2,
+    maxSources: 6,
     maxMembers: 2,
     maxWebPages: 0
   },
@@ -38,21 +38,21 @@ const CODE_DEFAULTS: Partial<Record<PlanCode, PlanLimits>> = {
     advancedAnalytics: true,
     pushNotificationsEnabled: true,
     webMonitoringEnabled: true,
-    maxSources: 10,
+    maxSources: 40,
     maxMembers: 5,
-    maxWebPages: 20
+    maxWebPages: 50
   },
   [PlanCode.AGENCY]: {
-    maxCompanies: -1,
+    maxCompanies: 100,
     maxAiRepliesPerMonth: -1,
     platforms: [Platform.YANDEX, Platform.TWOGIS, Platform.GOOGLE, Platform.WEB],
     telegramNotifications: true,
     advancedAnalytics: true,
     pushNotificationsEnabled: true,
     webMonitoringEnabled: true,
-    maxSources: -1,
-    maxMembers: -1,
-    maxWebPages: -1
+    maxSources: 500,
+    maxMembers: 20,
+    maxWebPages: 200
   }
 }
 

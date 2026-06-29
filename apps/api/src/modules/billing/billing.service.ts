@@ -4,7 +4,8 @@ import { PrismaService } from '../../common/prisma/prisma.service'
 import { EntitlementsService } from './entitlements.service'
 import { PaymentProvider, createPaymentProvider } from './billing.providers'
 
-const PERIOD_DAYS = 30
+const PERIOD_DAYS_MONTHLY = 30
+const PERIOD_DAYS_YEARLY = 365
 
 export interface YookassaWebhookPayload {
   type?: string
@@ -26,7 +27,7 @@ export class BillingService {
     private readonly entitlements: EntitlementsService
   ) {}
 
-  async createCheckout(userId: string, planCode: PlanCode) {
+  async createCheckout(userId: string, planCode: PlanCode, period: 'monthly' | 'yearly' = 'monthly') {
     const workspaceId = await this.entitlements.resolveWorkspaceId(userId)
 
     const plan = await this.prisma.plan.findUnique({ where: { code: planCode } })
@@ -34,24 +35,30 @@ export class BillingService {
     if (!plan || !plan.isActive) throw new NotFoundException('Plan not found')
     if (plan.priceMonthly <= 0) throw new BadRequestException('Plan is free, no checkout required')
 
+    const amount = period === 'yearly' && (plan as any).priceYearly
+      ? (plan as any).priceYearly
+      : plan.priceMonthly
+
     const payment = await this.prisma.payment.create({
       data: {
         workspaceId,
         userId,
         planCode,
-        amount: plan.priceMonthly,
+        amount,
+        billingPeriod: period,
         provider: this.provider.name === 'YOOKASSA' ? BillingProvider.YOOKASSA : BillingProvider.MOCK
-      }
+      } as any
     })
 
     const returnUrl =
       process.env.YOOKASSA_RETURN_URL ||
       `${process.env.FRONTEND_URL || 'https://reputation.generationweb.ru'}/billing/payment-result`
 
+    const periodLabel = period === 'yearly' ? 'годовая' : 'месячная'
     const providerPayment = await this.provider.createPayment({
       paymentId: payment.id,
-      amount: plan.priceMonthly,
-      description: `Подписка ${plan.name} — ReputationOS`,
+      amount,
+      description: `Подписка ${plan.name} (${periodLabel}) — ReputationOS`,
       metadata: { paymentId: payment.id, workspaceId, planCode },
       returnUrl
     })
@@ -99,7 +106,8 @@ export class BillingService {
     if (!plan) throw new NotFoundException('Plan not found')
 
     const now = new Date()
-    const periodMs = PERIOD_DAYS * 24 * 60 * 60 * 1000
+    const periodDays = (payment as any).billingPeriod === 'yearly' ? PERIOD_DAYS_YEARLY : PERIOD_DAYS_MONTHLY
+    const periodMs = periodDays * 24 * 60 * 60 * 1000
 
     // Если подписка уже активна — продлеваем от текущего конца периода, иначе от now
     const existingSub = await this.prisma.subscription.findUnique({

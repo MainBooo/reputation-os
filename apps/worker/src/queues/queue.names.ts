@@ -7,5 +7,6 @@ export const QUEUES = {
   NOTIFICATIONS: 'notifications',
   ALERT_CHECK: 'alert_check',
   PAGE_WATCH: 'page_watch',
-  PAGE_WATCH_DISPATCHER: 'page_watch_dispatcher'
+  PAGE_WATCH_DISPATCHER: 'page_watch_dispatcher',
+  SUBSCRIPTION_REMINDER: 'subscription_reminder'
 } as const

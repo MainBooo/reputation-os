@@ -7,5 +7,6 @@ export const JOBS = {
   NOTIFICATIONS: 'notifications.evaluate',
   ALERT_CHECK: 'alerts.check',
   PAGE_WATCH: 'page.watch',
-  PAGE_WATCH_DISPATCHER: 'page.watch.dispatcher'
+  PAGE_WATCH_DISPATCHER: 'page.watch.dispatcher',
+  SUBSCRIPTION_REMINDER: 'subscription.reminder.check'
 } as const

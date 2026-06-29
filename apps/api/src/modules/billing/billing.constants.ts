@@ -19,14 +19,14 @@ export type FeatureKey = keyof PlanLimits
 export const FREE_LIMITS: PlanLimits = {
   maxCompanies: 1,
   maxAiRepliesPerMonth: 5,
-  platforms: [Platform.YANDEX],
+  platforms: [Platform.YANDEX, Platform.TWOGIS],
   telegramNotifications: false,
   advancedAnalytics: false,
-  maxSources: 1,
+  maxSources: 2,
   maxMembers: 1,
   maxWebPages: 0,
   webMonitoringEnabled: false,
-  pushNotificationsEnabled: false
+  pushNotificationsEnabled: true
 }
 
 export const FEATURE_KEYS: FeatureKey[] = [

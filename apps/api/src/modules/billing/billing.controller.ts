@@ -20,7 +20,7 @@ export class BillingController {
     return this.prisma.plan.findMany({
       where: { isActive: true },
       orderBy: { priceMonthly: 'asc' },
-      select: { code: true, name: true, priceMonthly: true, limits: true }
+      select: { code: true, name: true, priceMonthly: true, priceYearly: true, limits: true }
     })
   }
 
@@ -41,7 +41,7 @@ export class BillingController {
   @UseGuards(JwtAuthGuard)
   @Post('yookassa/create-payment')
   createYookassaPayment(@CurrentUser() user: AuthUser, @Body() dto: CreateCheckoutDto) {
-    return this.billing.createCheckout(user.id, dto.planCode)
+    return this.billing.createCheckout(user.id, dto.planCode, dto.period ?? 'monthly')
   }
 
   // ── YooKassa: sync pending payments ────────────────────────────────────────

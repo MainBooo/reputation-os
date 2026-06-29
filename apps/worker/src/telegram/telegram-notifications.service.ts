@@ -84,6 +84,45 @@ export class TelegramNotificationsService {
     }
   }
 
+  async sendBillingReminder(chatId: bigint, text: string): Promise<boolean> {
+    if (!this.token) {
+      this.logger.warn('TELEGRAM_BOT_TOKEN is not configured, billing reminder skipped')
+      return false
+    }
+
+    try {
+      const res = await fetch(
+        `https://api.telegram.org/bot${this.token}/sendMessage`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: chatId.toString(),
+            text,
+            parse_mode: 'Markdown',
+            reply_markup: {
+              inline_keyboard: [
+                [{ text: '💳 Перейти к оплате', url: `${APP_URL}/billing/checkout` }]
+              ]
+            }
+          })
+        }
+      )
+
+      if (!res.ok) {
+        const body = await res.text()
+        this.logger.error(`Telegram billing reminder API error: ${res.status} ${body}`)
+        return false
+      }
+
+      this.logger.log(`Billing reminder sent via Telegram chatId=${chatId}`)
+      return true
+    } catch (err) {
+      this.logger.error(`Ошибка отправки billing reminder в Telegram: ${err}`)
+      return false
+    }
+  }
+
   private escapeMarkdown(text: string): string {
     // Экранируем только символы, ломающие Markdown v1
     return text.replace(/([_*`\[])/g, '\\$1')

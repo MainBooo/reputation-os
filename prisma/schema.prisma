@@ -79,6 +79,7 @@ enum NotificationType {
   DAILY_DIGEST
   AI_REPLY_READY
   WORKSPACE_INVITE
+  SUBSCRIPTION_REMINDER
 }
 
 model User {
@@ -543,9 +544,10 @@ model Plan {
   id           String   @id @default(cuid())
   code         PlanCode @unique
   name         String
-  priceMonthly Int // рубли в месяц
+  priceMonthly Int      // рубли в месяц
+  priceYearly  Int?     // рубли в год (скидка ~20%)
   isActive     Boolean  @default(true)
-  limits       Json // { maxCompanies, maxAiRepliesPerMonth, platforms[], telegramNotifications, advancedAnalytics }
+  limits       Json     // { maxCompanies, maxAiRepliesPerMonth, platforms[], telegramNotifications, advancedAnalytics }
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -570,8 +572,25 @@ model Subscription {
   plan           Plan      @relation(fields: [planId], references: [id])
   updatedByAdmin User?     @relation("SubscriptionManagedBy", fields: [updatedByAdminId], references: [id], onDelete: SetNull)
   Company        Company[]
+  reminderLogs   SubscriptionReminderLog[]
 
   @@index([status, currentPeriodEnd])
+  @@index([status, trialEndsAt])
+}
+
+model SubscriptionReminderLog {
+  id             String   @id @default(cuid())
+  subscriptionId String
+  reminderType   String   // TRIAL_ENDING | SUBSCRIPTION_ENDING
+  daysBefore     Int      // 3, 1, 0
+  periodEndDate  DateTime // trialEndsAt or currentPeriodEnd (для идемпотентности)
+  sentAt         DateTime @default(now())
+  channels       String[] // ['PUSH', 'TELEGRAM', 'IN_APP']
+
+  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@unique([subscriptionId, reminderType, daysBefore, periodEndDate])
+  @@index([sentAt(sort: Desc)])
 }
 
 model Payment {
@@ -579,8 +598,9 @@ model Payment {
   workspaceId       String
   userId            String?
   planCode          PlanCode
-  amount            Int // рубли
+  amount            Int             // рубли
   currency          String          @default("RUB")
+  billingPeriod     String          @default("monthly") // 'monthly' | 'yearly'
   status            PaymentStatus   @default(PENDING)
   provider          BillingProvider @default(MOCK)
   providerPaymentId String?         @unique

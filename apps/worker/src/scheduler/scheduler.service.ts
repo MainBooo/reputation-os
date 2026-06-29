@@ -25,6 +25,7 @@ export class SchedulerService implements OnModuleInit {
     @Inject(`QUEUE_${QUEUES.ALERT_CHECK}`) private readonly alertCheckQueue: Queue,
     @Inject(`QUEUE_${QUEUES.PAGE_WATCH}`) private readonly pageWatchQueue: Queue,
     @Inject(`QUEUE_${QUEUES.PAGE_WATCH_DISPATCHER}`) private readonly pageWatchDispatcherQueue: Queue,
+    @Inject(`QUEUE_${QUEUES.SUBSCRIPTION_REMINDER}`) private readonly subscriptionReminderQueue: Queue,
     private readonly pageWatchDispatcher: PageWatchDispatcherProcessor
   ) {}
 
@@ -208,8 +209,21 @@ export class SchedulerService implements OnModuleInit {
       this.logger.warn(`Failed to ensure page-watch dispatcher cron: ${error?.message || error}`)
     })
 
+    // Subscription reminder: daily check for trial/subscription expiry (3d, 1d, 0d before end)
+    await this.subscriptionReminderQueue.add(
+      JOBS.SUBSCRIPTION_REMINDER,
+      { autoCron: true },
+      {
+        ...CRON_JOB_OPTIONS,
+        repeat: { every: 24 * 60 * 60 * 1000 },
+        jobId: 'subscription-reminder:daily'
+      }
+    ).catch((error) => {
+      this.logger.warn(`Failed to ensure subscription reminder cron: ${error?.message || error}`)
+    })
+
     this.logger.log(
-      `Scheduler initialized reviewCronTargets=${reviewTargets.length} webCronCompanies=${webTargetsByCompany.size} alertCheckEveryMinutes=5 pageWatchDispatcherEveryMinutes=5`
+      `Scheduler initialized reviewCronTargets=${reviewTargets.length} webCronCompanies=${webTargetsByCompany.size} alertCheckEveryMinutes=5 pageWatchDispatcherEveryMinutes=5 subscriptionReminderEveryHours=24`
     )
   }
 }

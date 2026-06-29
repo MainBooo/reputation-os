@@ -19,6 +19,7 @@ export interface BillingPlan {
   code: string
   name: string
   priceMonthly: number
+  priceYearly?: number | null
   limits: PlanLimits
 }
 
@@ -91,10 +92,10 @@ export function getMyEntitlements() {
 }
 
 /** POST /billing/yookassa/create-payment — создаёт платёж через ЮKassa, возвращает confirmationUrl */
-export function createCheckout(planCode: string) {
+export function createCheckout(planCode: string, period: 'monthly' | 'yearly' = 'monthly') {
   return apiFetch<CheckoutResult>('/billing/yookassa/create-payment', {
     method: 'POST',
-    body: JSON.stringify({ planCode }),
+    body: JSON.stringify({ planCode, period }),
   })
 }
 
