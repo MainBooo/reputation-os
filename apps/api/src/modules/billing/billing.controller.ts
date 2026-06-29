@@ -44,6 +44,13 @@ export class BillingController {
     return this.billing.createCheckout(user.id, dto.planCode)
   }
 
+  // ── YooKassa: sync pending payments ────────────────────────────────────────
+  @UseGuards(JwtAuthGuard)
+  @Post('yookassa/sync')
+  syncPendingPayments(@CurrentUser() user: AuthUser) {
+    return this.billing.syncPendingPayments(user.id)
+  }
+
   // ── YooKassa: webhook (no secret header — YooKassa uses IP allowlisting) ──
   // Idempotent: repeated events are safely ignored.
   @Post('yookassa/webhook')

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { CheckCircle2, Loader2, AlertCircle, RotateCcw } from 'lucide-react'
-import { getMyEntitlements } from '@/lib/api/billing'
+import { getMyEntitlements, syncPendingPayments } from '@/lib/api/billing'
 import { useSubscription } from '@/lib/subscription/SubscriptionContext'
 
 const MAX_POLLS = 10
@@ -44,7 +44,9 @@ export default function PaymentResultPage() {
       }
     }
 
-    // Short initial delay so webhook has time to fire before first check
+    // Сначала синхронизируем статус с ЮKassa (fallback если webhook не пришёл),
+    // затем начинаем polling entitlements
+    syncPendingPayments().catch(() => {})
     const timer = setTimeout(poll, 1500)
     return () => {
       cancelled = true

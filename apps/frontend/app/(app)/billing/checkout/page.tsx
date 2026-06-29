@@ -7,6 +7,7 @@ import Card from '@/components/ui/Card'
 import {
   getBillingPlans,
   createCheckout,
+  syncPendingPayments,
   getTrialDaysLeft,
   type BillingPlan,
 } from '@/lib/api/billing'
@@ -109,6 +110,9 @@ function CheckoutInner() {
   const [errorMsg, setErrorMsg] = useState('')
 
   useEffect(() => {
+    // Синхронизируем незавершённые платежи при открытии страницы
+    syncPendingPayments().catch(() => {})
+
     getBillingPlans()
       .then((data) => {
         const paid = (Array.isArray(data) ? data : []).filter((p) => p.priceMonthly > 0)

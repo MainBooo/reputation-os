@@ -98,6 +98,11 @@ export function createCheckout(planCode: string) {
   })
 }
 
+/** POST /billing/yookassa/sync — синхронизирует PENDING-платежи с ЮKassa (вызывать при открытии биллинга) */
+export function syncPendingPayments() {
+  return apiFetch<{ synced: number }>('/billing/yookassa/sync', { method: 'POST' })
+}
+
 // ─── Admin ─────────────────────────────────────────────────────────────────
 
 /** GET /admin/billing/workspaces — только SUPER_ADMIN */

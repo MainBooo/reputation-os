@@ -99,7 +99,21 @@ export class BillingService {
     if (!plan) throw new NotFoundException('Plan not found')
 
     const now = new Date()
-    const currentPeriodEnd = new Date(now.getTime() + PERIOD_DAYS * 24 * 60 * 60 * 1000)
+    const periodMs = PERIOD_DAYS * 24 * 60 * 60 * 1000
+
+    // Если подписка уже активна — продлеваем от текущего конца периода, иначе от now
+    const existingSub = await this.prisma.subscription.findUnique({
+      where: { workspaceId: payment.workspaceId },
+      select: { currentPeriodEnd: true, status: true }
+    })
+
+    const isCurrentlyActive =
+      existingSub?.status === SubscriptionStatus.ACTIVE &&
+      existingSub.currentPeriodEnd != null &&
+      existingSub.currentPeriodEnd > now
+
+    const baseDate = isCurrentlyActive ? existingSub!.currentPeriodEnd! : now
+    const currentPeriodEnd = new Date(baseDate.getTime() + periodMs)
 
     await this.prisma.$transaction([
       this.prisma.payment.update({
@@ -132,7 +146,9 @@ export class BillingService {
       })
     ])
 
-    this.logger.log(`Subscription activated: workspace=${payment.workspaceId} plan=${plan.code}`)
+    this.logger.log(
+      `Subscription ${isCurrentlyActive ? 'extended' : 'activated'}: workspace=${payment.workspaceId} plan=${plan.code} periodEnd=${currentPeriodEnd.toISOString()}`
+    )
 
     return { ok: true }
   }
@@ -158,5 +174,65 @@ export class BillingService {
     this.logger.log(`Payment canceled: ${providerPaymentId}`)
 
     return { ok: true }
+  }
+
+  // Синхронизирует статус PENDING-платежей с ЮKassa.
+  // Вызывается при открытии страницы биллинга — защита от потери платежа
+  // при закрытии вкладки после оплаты (до получения webhook).
+  async syncPendingPayments(userId: string): Promise<{ synced: number }> {
+    const workspaceId = await this.entitlements.resolveWorkspaceId(userId)
+
+    const pending = await this.prisma.payment.findMany({
+      where: {
+        workspaceId,
+        provider: BillingProvider.YOOKASSA,
+        status: PaymentStatus.PENDING,
+        providerPaymentId: { not: null }
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 10
+    })
+
+    if (!pending.length) return { synced: 0 }
+
+    const shopId = process.env.YOOKASSA_SHOP_ID
+    const secretKey = process.env.YOOKASSA_SECRET_KEY
+
+    if (!shopId || !secretKey) return { synced: 0 }
+
+    const credentials = Buffer.from(`${shopId}:${secretKey}`).toString('base64')
+    let synced = 0
+
+    for (const payment of pending) {
+      try {
+        const resp = await fetch(`https://api.yookassa.ru/v3/payments/${payment.providerPaymentId}`, {
+          headers: { Authorization: `Basic ${credentials}` },
+          signal: AbortSignal.timeout(8000)
+        })
+
+        if (!resp.ok) continue
+
+        const data: any = await resp.json()
+        const remoteStatus: string = data?.status ?? ''
+
+        if (remoteStatus === 'succeeded') {
+          await this.handlePaymentSucceeded(
+            { event: 'payment.succeeded', object: { id: payment.providerPaymentId!, status: 'succeeded', metadata: {} } },
+            payment.providerPaymentId!
+          )
+          synced++
+        } else if (remoteStatus === 'canceled') {
+          await this.handlePaymentCanceled(
+            { event: 'payment.canceled', object: { id: payment.providerPaymentId!, status: 'canceled', metadata: {} } },
+            payment.providerPaymentId!
+          )
+          synced++
+        }
+      } catch {
+        // сетевая ошибка — пропускаем, попробуем в следующий раз
+      }
+    }
+
+    return { synced }
   }
 }
