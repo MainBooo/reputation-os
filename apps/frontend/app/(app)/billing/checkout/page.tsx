@@ -72,7 +72,7 @@ function PlanCard({
           <span>
             {plan.limits.maxAiRepliesPerMonth === -1
               ? 'Безлимит AI-ответов'
-              : `${plan.limits.maxAiRepliesPerMonth} AI-ответог/мес`}
+              : `${plan.limits.maxAiRepliesPerMonth} AI-ответов/мес`}
           </span>
         </div>
         <div className="flex items-center gap-2 text-zinc-300">
@@ -216,6 +216,7 @@ function CheckoutInner() {
             plan={plan}
             selected={selectedCode === plan.code}
             onSelect={() => setSelectedCode(plan.code)}
+            isCurrent={entitlements?.planCode === plan.code}
           />
         ))}
       </div>
