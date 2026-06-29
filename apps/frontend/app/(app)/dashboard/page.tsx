@@ -4,8 +4,11 @@ import Card from '@/components/ui/Card'
 import EmptyState from '@/components/ui/EmptyState'
 import DashboardCharts from '@/components/dashboard/DashboardCharts'
 import UpgradeBanner from '@/components/billing/UpgradeBanner'
+import WelcomeCard from '@/components/onboarding/WelcomeCard'
+import QuickStartChecklist from '@/components/onboarding/QuickStartChecklist'
 import { getCompanies } from '@/lib/api/companies'
-import { me } from '@/lib/api/auth'
+import { me, type AuthMe } from '@/lib/api/auth'
+import { getWebPushSubscriptions } from '@/lib/api/push'
 import { getCompanyMentions } from '@/lib/api/mentions'
 import { filterByWorkspace, pickWorkspaceId } from '@/lib/workspace-selection'
 import { BriefcaseBusiness, Radar, MessageSquareText, Star, BellRing, Activity, Inbox, Plus, Building2, ArrowRight, AlertTriangle, ShieldCheck, Clock3, ExternalLink, type LucideIcon } from 'lucide-react'
@@ -66,7 +69,6 @@ function isValidDashboardMention(mention: any) {
   const sourceUrl = String(mention?.url || mention?.sourceUrl || '').toLowerCase()
   const title = String(mention?.title || '').toLowerCase()
 
-  if (platform === 'GOOGLE') return false
   if (sourceUrl.includes('example.com')) return false
 
   return true
@@ -480,12 +482,18 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
   let dashboardMeta: any = { total: 0, averageRating: null, ratedCount: 0 }
   let companyMentionEntries: CompanyDashboardMentionEntry[] = []
   let authRequired = false
+  let meData: AuthMe | null = null
+  let hasPush = false
 
   try {
-    await me()
-
-    const companiesResult = await getCompanies()
+    const [meResult, companiesResult, pushResult] = await Promise.all([
+      me(),
+      getCompanies(),
+      getWebPushSubscriptions().catch(() => null),
+    ])
+    meData = meResult
     companies = Array.isArray(companiesResult) ? companiesResult : []
+    hasPush = Array.isArray(pushResult?.data) && pushResult.data.length > 0
 
       companyMentionEntries = await Promise.all(
         companies.map(async (company) => {
@@ -546,6 +554,20 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
     )
   }
 
+  // Onboarding progress
+  const hasActiveSources = companies.some(
+    (c: any) => Array.isArray(c.sourceTargets) && c.sourceTargets.some((t: any) => t.isActive)
+  )
+  const telegramLinked = meData?.telegramLinked ?? false
+  const onboardingSteps = {
+    companyAdded: companies.length > 0,
+    sourcesConnected: hasActiveSources,
+    monitoringActive: hasActiveSources,
+    notificationsEnabled: hasPush || telegramLinked,
+  }
+  const onboardingProgress = Object.values(onboardingSteps).filter(Boolean).length * 25
+  const welcomeSeen = meData?.welcomeSeen ?? true
+
   const firstCompany = getDashboardCompany(companies)
   const totalCompanies = companies.length
   const companyStats = buildCompanyDashboardStats(companyMentionEntries)
@@ -579,7 +601,6 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
   }
 
   const platforms = Array.from(platformCounts.entries())
-    .filter(([platform]) => !['GOOGLE'].includes(String(platform || '').toUpperCase()))
     .map(([platform, count]) => ({ platform, count }))
     .sort((a, b) => b.count - a.count)
 
@@ -805,6 +826,9 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
 
       <UpgradeBanner />
 
+      <WelcomeCard initialWelcomeSeen={welcomeSeen} />
+      <QuickStartChecklist steps={onboardingSteps} progress={onboardingProgress} />
+
       <Card className="relative mb-5 overflow-hidden rounded-[30px] border-white/10 bg-[radial-gradient(circle_at_0%_0%,rgba(34,211,238,0.16),transparent_34%),#0b111c]/95 p-5 shadow-[0_22px_70px_rgba(0,0,0,0.34),0_0_44px_rgba(34,211,238,0.06)] sm:p-6">
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
@@ -903,7 +927,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
 
         {latestMentions.length > 0 ? (
           <div className="space-y-3">
-            {latestMentions.map((mention: any) => {
+            {latestMentions.map((mention: any, mentionIndex: number) => {
                 const sentiment = getMentionSentiment(mention)
                 const sourceUrl = getSourceUrl(mention)
                 const sourceHostname = getSourceHostname(sourceUrl)
@@ -915,7 +939,8 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
                   <Link
                     key={mention.id}
                     href={firstCompany ? `/companies/${firstCompany.id}/inbox` : '/companies'}
-                    className="group grid gap-3 rounded-[22px] border border-white/10 bg-white/[0.025] p-4 transition hover:border-cyan-400/20 hover:bg-cyan-500/[0.04] sm:grid-cols-[52px_1fr_auto] sm:items-center"
+                    className="animate-fade-slide-up stagger-item group grid gap-3 rounded-[22px] border border-white/10 bg-white/[0.025] p-4 transition hover:border-cyan-400/20 hover:bg-cyan-500/[0.04] hover:-translate-y-0.5 sm:grid-cols-[52px_1fr_auto] sm:items-center"
+                    style={{ animationDelay: `${mentionIndex * 60}ms` }}
                   >
                     <div
                       title={sourceHostname || getPlatformLabel(mention.platform)}

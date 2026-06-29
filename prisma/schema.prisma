@@ -90,6 +90,7 @@ model User {
   isActive     Boolean    @default(true)
   systemRole   SystemRole @default(USER)
   lastLoginAt  DateTime?
+  welcomeSeen  Boolean    @default(false)
   createdAt    DateTime   @default(now())
   telegramChatId    BigInt?   @unique
   telegramLinkedAt  DateTime?

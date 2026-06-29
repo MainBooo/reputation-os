@@ -79,10 +79,33 @@ export class AuthService {
   }
 
   async me(userId: string) {
-    return this.prisma.user.findUnique({
+    const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, email: true, fullName: true, isActive: true, systemRole: true, createdAt: true }
+      select: {
+        id: true, email: true, fullName: true, isActive: true,
+        systemRole: true, createdAt: true,
+        welcomeSeen: true, telegramChatId: true,
+      }
     })
+    if (!user) return null
+    return {
+      id: user.id,
+      email: user.email,
+      fullName: user.fullName,
+      isActive: user.isActive,
+      systemRole: user.systemRole,
+      createdAt: user.createdAt,
+      welcomeSeen: user.welcomeSeen,
+      telegramLinked: user.telegramChatId !== null,
+    }
+  }
+
+  async markWelcomeSeen(userId: string) {
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { welcomeSeen: true },
+    })
+    return { ok: true }
   }
 
   async getDeletePreview(userId: string): Promise<{

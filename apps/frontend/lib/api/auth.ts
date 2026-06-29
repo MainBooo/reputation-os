@@ -6,6 +6,8 @@ export type AuthMe = {
   fullName?: string | null
   isActive?: boolean
   systemRole?: 'USER' | 'SUPER_ADMIN'
+  welcomeSeen?: boolean
+  telegramLinked?: boolean
 }
 
 export function login(payload: { email: string; password: string }) {

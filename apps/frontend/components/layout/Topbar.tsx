@@ -24,6 +24,8 @@ import { getPlanBadgeLabel, isSubscriptionActive } from '@/lib/api/billing'
 import NotificationsBell from './NotificationsBell'
 import ChatButton from '@/components/chat/ChatButton'
 import WorkspaceSwitcher from './WorkspaceSwitcher'
+import HelpCenterDrawer from '@/components/help/HelpCenterDrawer'
+import { HelpCircle } from 'lucide-react'
 
 const navItems = [
   {
@@ -85,6 +87,7 @@ export default function Topbar() {
   const router = useRouter()
   const [user, setUser] = useState<AuthMe | null>(null)
   const [loading, setLoading] = useState(true)
+  const [helpOpen, setHelpOpen] = useState(false)
   const { setWorkspaceId } = useChatContext()
   const { entitlements } = useSubscription()
   const planLabel = getPlanBadgeLabel(entitlements)
@@ -140,6 +143,7 @@ export default function Topbar() {
   }
 
   return (
+    <>
     <header className="sticky top-0 z-30 print:hidden border-b border-cyan-300/10 bg-[#050d18]/78 shadow-[0_18px_80px_rgba(0,0,0,0.35)] backdrop-blur-2xl">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_14%_0%,rgba(59,130,246,0.26),transparent_38%),radial-gradient(circle_at_78%_10%,rgba(139,92,246,0.14),transparent_32%)]" />
       <div className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-cyan-300/35 to-transparent" />
@@ -193,6 +197,17 @@ export default function Topbar() {
                   title="Перейти к выбору тарифа"
                 >
                   {planLabel}
+                </button>
+              ) : null}
+              {user ? (
+                <button
+                  type="button"
+                  onClick={() => setHelpOpen(true)}
+                  className="inline-flex shrink-0 items-center gap-2 rounded-[18px] border border-white/10 bg-white/[0.05] px-3 py-2 text-sm font-medium text-slate-300 transition hover:border-cyan-400/25 hover:bg-cyan-500/[0.09] hover:text-white active:scale-[0.97]"
+                  title="Помощь и руководство"
+                >
+                  <HelpCircle className="h-4 w-4" />
+                  <span className="hidden sm:inline">Помощь</span>
                 </button>
               ) : null}
               {user ? <ChatButton /> : null}
@@ -260,5 +275,8 @@ export default function Topbar() {
         </div>
       </div>
     </header>
+
+    <HelpCenterDrawer open={helpOpen} onClose={() => setHelpOpen(false)} />
+  </>
   )
 }
