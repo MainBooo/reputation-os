@@ -90,9 +90,9 @@ export function getMyEntitlements() {
   return apiFetch<BillingEntitlements | null>('/billing/entitlements', undefined, null)
 }
 
-/** POST /billing/checkout — создаёт платёж, возвращает confirmationUrl */
+/** POST /billing/yookassa/create-payment — создаёт платёж через ЮKassa, возвращает confirmationUrl */
 export function createCheckout(planCode: string) {
-  return apiFetch<CheckoutResult>('/billing/checkout', {
+  return apiFetch<CheckoutResult>('/billing/yookassa/create-payment', {
     method: 'POST',
     body: JSON.stringify({ planCode }),
   })

@@ -30,14 +30,29 @@ export class BillingController {
     return this.entitlements.getForUser(user.id)
   }
 
+  // ── Legacy checkout (mock-provider, keeps backward compat) ─────────────────
   @UseGuards(JwtAuthGuard)
   @Post('checkout')
   createCheckout(@CurrentUser() user: AuthUser, @Body() dto: CreateCheckoutDto) {
     return this.billing.createCheckout(user.id, dto.planCode)
   }
 
-  // Публичный эндпоинт: его вызывает ЮKassa (или mock-checkout страница).
-  // Проверяет заголовок x-billing-webhook-secret против BILLING_WEBHOOK_SECRET.
+  // ── YooKassa: create payment ───────────────────────────────────────────────
+  @UseGuards(JwtAuthGuard)
+  @Post('yookassa/create-payment')
+  createYookassaPayment(@CurrentUser() user: AuthUser, @Body() dto: CreateCheckoutDto) {
+    return this.billing.createCheckout(user.id, dto.planCode)
+  }
+
+  // ── YooKassa: webhook (no secret header — YooKassa uses IP allowlisting) ──
+  // Idempotent: repeated events are safely ignored.
+  @Post('yookassa/webhook')
+  @HttpCode(200)
+  handleYookassaWebhook(@Body() payload: YookassaWebhookPayload) {
+    return this.billing.handleWebhook(payload)
+  }
+
+  // ── Legacy webhook: requires internal secret header ────────────────────────
   @Post('webhook')
   @HttpCode(200)
   handleWebhook(

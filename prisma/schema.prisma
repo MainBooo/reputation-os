@@ -577,13 +577,17 @@ model Subscription {
 model Payment {
   id                String          @id @default(cuid())
   workspaceId       String
+  userId            String?
   planCode          PlanCode
   amount            Int // рубли
   currency          String          @default("RUB")
   status            PaymentStatus   @default(PENDING)
   provider          BillingProvider @default(MOCK)
   providerPaymentId String?         @unique
+  confirmationUrl   String?
   rawPayload        Json?
+  paidAt            DateTime?
+  canceledAt        DateTime?
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
 

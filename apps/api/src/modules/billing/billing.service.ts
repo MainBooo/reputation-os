@@ -6,7 +6,6 @@ import { PaymentProvider, createPaymentProvider } from './billing.providers'
 
 const PERIOD_DAYS = 30
 
-// Формат вебхука ЮKassa: { type: 'notification', event: 'payment.succeeded', object: { id, ... } }
 export interface YookassaWebhookPayload {
   type?: string
   event?: string
@@ -38,23 +37,31 @@ export class BillingService {
     const payment = await this.prisma.payment.create({
       data: {
         workspaceId,
+        userId,
         planCode,
         amount: plan.priceMonthly,
         provider: this.provider.name === 'YOOKASSA' ? BillingProvider.YOOKASSA : BillingProvider.MOCK
       }
     })
 
+    const returnUrl =
+      process.env.YOOKASSA_RETURN_URL ||
+      `${process.env.FRONTEND_URL || 'https://reputation.generationweb.ru'}/billing/payment-result`
+
     const providerPayment = await this.provider.createPayment({
       paymentId: payment.id,
       amount: plan.priceMonthly,
       description: `Подписка ${plan.name} — ReputationOS`,
       metadata: { paymentId: payment.id, workspaceId, planCode },
-      returnUrl: `${process.env.FRONTEND_URL || 'https://reputation.generationweb.ru'}/settings/billing`
+      returnUrl
     })
 
     await this.prisma.payment.update({
       where: { id: payment.id },
-      data: { providerPaymentId: providerPayment.id }
+      data: {
+        providerPaymentId: providerPayment.id,
+        confirmationUrl: providerPayment.confirmationUrl
+      }
     })
 
     return { paymentId: payment.id, confirmationUrl: providerPayment.confirmationUrl }
@@ -63,28 +70,43 @@ export class BillingService {
   async handleWebhook(payload: YookassaWebhookPayload) {
     this.logger.log(`Billing webhook received: ${payload?.event ?? 'unknown'}`)
 
-    if (payload?.event !== 'payment.succeeded') return { ok: true, ignored: true }
-
-    const providerPaymentId = payload.object?.id
+    const event = payload?.event
+    const providerPaymentId = payload?.object?.id
 
     if (!providerPaymentId) throw new BadRequestException('object.id is required')
 
+    if (event === 'payment.succeeded') {
+      return this.handlePaymentSucceeded(payload, providerPaymentId)
+    }
+
+    if (event === 'payment.canceled') {
+      return this.handlePaymentCanceled(payload, providerPaymentId)
+    }
+
+    return { ok: true, ignored: true }
+  }
+
+  private async handlePaymentSucceeded(payload: YookassaWebhookPayload, providerPaymentId: string) {
     const payment = await this.prisma.payment.findUnique({ where: { providerPaymentId } })
 
     if (!payment) throw new NotFoundException('Payment not found')
-    if (payment.status === PaymentStatus.SUCCEEDED) return { ok: true, alreadyProcessed: true }
+    if (payment.status === PaymentStatus.SUCCEEDED) {
+      this.logger.log(`payment.succeeded already processed: ${providerPaymentId}`)
+      return { ok: true, alreadyProcessed: true }
+    }
 
     const plan = await this.prisma.plan.findUnique({ where: { code: payment.planCode } })
-
     if (!plan) throw new NotFoundException('Plan not found')
 
-    const currentPeriodEnd = new Date(Date.now() + PERIOD_DAYS * 24 * 60 * 60 * 1000)
+    const now = new Date()
+    const currentPeriodEnd = new Date(now.getTime() + PERIOD_DAYS * 24 * 60 * 60 * 1000)
 
     await this.prisma.$transaction([
       this.prisma.payment.update({
         where: { id: payment.id },
         data: {
           status: PaymentStatus.SUCCEEDED,
+          paidAt: now,
           rawPayload: payload as Prisma.InputJsonValue
         }
       }),
@@ -95,18 +117,45 @@ export class BillingService {
           planId: plan.id,
           status: SubscriptionStatus.ACTIVE,
           currentPeriodEnd,
+          trialEndsAt: null,
+          cancelAtPeriodEnd: false,
           provider: payment.provider
         },
         update: {
           planId: plan.id,
           status: SubscriptionStatus.ACTIVE,
           currentPeriodEnd,
+          trialEndsAt: null,
+          cancelAtPeriodEnd: false,
           provider: payment.provider
         }
       })
     ])
 
     this.logger.log(`Subscription activated: workspace=${payment.workspaceId} plan=${plan.code}`)
+
+    return { ok: true }
+  }
+
+  private async handlePaymentCanceled(payload: YookassaWebhookPayload, providerPaymentId: string) {
+    const payment = await this.prisma.payment.findUnique({ where: { providerPaymentId } })
+
+    if (!payment) throw new NotFoundException('Payment not found')
+    if (payment.status === PaymentStatus.CANCELED) {
+      this.logger.log(`payment.canceled already processed: ${providerPaymentId}`)
+      return { ok: true, alreadyProcessed: true }
+    }
+
+    await this.prisma.payment.update({
+      where: { id: payment.id },
+      data: {
+        status: PaymentStatus.CANCELED,
+        canceledAt: new Date(),
+        rawPayload: payload as Prisma.InputJsonValue
+      }
+    })
+
+    this.logger.log(`Payment canceled: ${providerPaymentId}`)
 
     return { ok: true }
   }
