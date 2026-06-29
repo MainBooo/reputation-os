@@ -661,6 +661,11 @@ model WatchedPage {
   lastError         String?
   contentHash       String?
   checkIntervalMin  Int       @default(1440)
+  nextCheckAt       DateTime?
+  etag              String?
+  lastModifiedHeader String?
+  consecutiveErrors Int       @default(0)
+  disabledReason    String?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
@@ -672,6 +677,7 @@ model WatchedPage {
   @@unique([companyId, url])
   @@index([companyId])
   @@index([enabled, lastCheckedAt])
+  @@index([enabled, nextCheckAt])
 }
 
 model WatchedPageItem {

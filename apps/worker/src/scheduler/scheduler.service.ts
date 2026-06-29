@@ -4,6 +4,7 @@ import { PrismaService } from '../common/prisma/prisma.service'
 import { QUEUES } from '../queues/queue.names'
 import { JOBS } from '../queues/job.names'
 import { CRON_JOB_OPTIONS } from '../queues/job-options'
+import { PageWatchDispatcherProcessor } from '../processors/page-watch-dispatcher.processor'
 
 const HEARTBEAT_KEY = 'worker:heartbeat'
 const HEARTBEAT_TTL_SECONDS = 120
@@ -22,7 +23,9 @@ export class SchedulerService implements OnModuleInit {
     @Inject(`QUEUE_${QUEUES.RATING_REFRESH}`) private readonly ratingRefreshQueue: Queue,
     @Inject(`QUEUE_${QUEUES.RECONCILE}`) private readonly reconcileQueue: Queue,
     @Inject(`QUEUE_${QUEUES.ALERT_CHECK}`) private readonly alertCheckQueue: Queue,
-    @Inject(`QUEUE_${QUEUES.PAGE_WATCH}`) private readonly pageWatchQueue: Queue
+    @Inject(`QUEUE_${QUEUES.PAGE_WATCH}`) private readonly pageWatchQueue: Queue,
+    @Inject(`QUEUE_${QUEUES.PAGE_WATCH_DISPATCHER}`) private readonly pageWatchDispatcherQueue: Queue,
+    private readonly pageWatchDispatcher: PageWatchDispatcherProcessor
   ) {}
 
   private async writeHeartbeat() {
@@ -199,27 +202,14 @@ export class SchedulerService implements OnModuleInit {
       })
     }
 
-    const watchedPages = await prismaAny.watchedPage.findMany({
-      where: { enabled: true }
-    }).catch(() => [])
-
-    for (const page of watchedPages) {
-      const intervalMs = (page.checkIntervalMin || 60) * 60 * 1000
-      await this.pageWatchQueue.add(
-        JOBS.PAGE_WATCH,
-        { watchedPageId: page.id },
-        {
-          ...CRON_JOB_OPTIONS,
-          repeat: { every: intervalMs },
-          jobId: `page-watch:${page.id}`
-        }
-      ).catch((error) => {
-        this.logger.warn(`Failed to ensure page-watch cron pageId=${page.id}: ${error?.message || error}`)
-      })
-    }
+    // Dispatcher pattern: one recurring job every 5 min finds due pages and dispatches individual jobs.
+    // This allows new WatchedPages to be picked up without worker restart.
+    await this.pageWatchDispatcher.ensureCron(this.pageWatchDispatcherQueue).catch((error) => {
+      this.logger.warn(`Failed to ensure page-watch dispatcher cron: ${error?.message || error}`)
+    })
 
     this.logger.log(
-      `Scheduler initialized reviewCronTargets=${reviewTargets.length} webCronCompanies=${webTargetsByCompany.size} alertCheckEveryMinutes=5 watchedPages=${watchedPages.length}`
+      `Scheduler initialized reviewCronTargets=${reviewTargets.length} webCronCompanies=${webTargetsByCompany.size} alertCheckEveryMinutes=5 pageWatchDispatcherEveryMinutes=5`
     )
   }
 }

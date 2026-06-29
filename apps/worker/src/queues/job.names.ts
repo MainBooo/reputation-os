@@ -6,5 +6,6 @@ export const JOBS = {
   RECONCILE: 'reconcile.run',
   NOTIFICATIONS: 'notifications.evaluate',
   ALERT_CHECK: 'alerts.check',
-  PAGE_WATCH: 'page.watch'
+  PAGE_WATCH: 'page.watch',
+  PAGE_WATCH_DISPATCHER: 'page.watch.dispatcher'
 } as const
