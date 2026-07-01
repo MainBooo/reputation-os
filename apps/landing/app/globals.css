@@ -1075,10 +1075,94 @@
     line-height: 1.62;
   }
 }
-/* Mobile-only hero text safe inset */
-@media (max-width: 640px) {
-  .hero-mobile-copy {
-    padding-left: 28px !important;
-    padding-right: 20px !important;
+@keyframes sphere-particle {
+  to {
+    transform: translateY(-4px) scale(0.8);
+    opacity: 0.06;
   }
+}
+
+
+/* =====================================================
+   HERO: unified single-image architecture
+   One sphere element, one mask, responsive via CSS only.
+   No duplicate layers, no desktop/mobile forks.
+===================================================== */
+
+/* Mobile */
+.hero-section {
+  min-height: 560px;
+}
+
+/* Tablet */
+@media (min-width: 768px) {
+  .hero-section {
+    min-height: 490px;
+  }
+}
+
+/* Desktop */
+@media (min-width: 1024px) {
+  .hero-section {
+    min-height: 620px;
+  }
+}
+
+/*
+  .hero-sphere — one absolute image, responsive via CSS.
+  Mobile: bigger sphere, shifted left & up to sit level with heading.
+  Tablet: upper-right with sphere core near heading level.
+  Desktop: shifted left to reduce empty air on right half.
+*/
+.hero-sphere {
+  z-index: 10;
+  width: clamp(430px, 115vw, 590px);
+  right: 5px;
+  top: 28%;
+  bottom: auto;
+  filter: drop-shadow(0 0 48px rgba(34, 211, 238, 0.42)) drop-shadow(0 0 110px rgba(34, 211, 238, 0.22));
+}
+
+@media (min-width: 768px) {
+  .hero-sphere {
+    width: clamp(440px, 60vw, 680px);
+    right: clamp(-30px, -1vw, 10px);
+    top: clamp(50px, 10vh, 140px);
+    bottom: auto;
+  }
+}
+
+@media (min-width: 1024px) {
+  .hero-sphere {
+    width: clamp(660px, 70vw, 1120px);
+    right: clamp(-10px, 2vw, 60px);
+    top: clamp(-60px, -3vh, -10px);
+    bottom: auto;
+  }
+}
+
+/* Atmospheric outer glow behind sphere — wider to bleed toward text */
+.hero-bg-glow {
+  inset: 0;
+  z-index: 0;
+  background: radial-gradient(
+    ellipse 82% 80% at 74% 48%,
+    rgba(34, 211, 238, 0.22) 0%,
+    rgba(56, 189, 248, 0.10) 44%,
+    transparent 72%
+  );
+  filter: blur(48px);
+}
+
+/* Concentrated bloom at sphere core — desktop only */
+.hero-bg-bloom {
+  inset: 0;
+  z-index: 1;
+  background: radial-gradient(
+    ellipse 38% 32% at 74% 48%,
+    rgba(103, 232, 249, 0.32) 0%,
+    rgba(34, 211, 238, 0.14) 48%,
+    transparent 80%
+  );
+  filter: blur(10px);
 }
