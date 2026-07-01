@@ -1075,94 +1075,282 @@
     line-height: 1.62;
   }
 }
-@keyframes sphere-particle {
-  to {
-    transform: translateY(-4px) scale(0.8);
-    opacity: 0.06;
-  }
-}
-
-
 /* =====================================================
-   HERO: unified single-image architecture
-   One sphere element, one mask, responsive via CSS only.
-   No duplicate layers, no desktop/mobile forks.
+   HERO: the illustration is a single oversized layer that
+   bleeds past the section's edges at every breakpoint — on
+   mobile it grows *larger* than the viewport (never shrinks),
+   on desktop it fills most of the right half and runs off the
+   right edge. It is intentionally NOT a grid sibling of the
+   text: a scrim layer keeps the copy readable wherever the two
+   overlap, so legibility is solved with darkening, not by
+   moving or shrinking the artwork.
 ===================================================== */
 
-/* Mobile */
 .hero-section {
-  min-height: 560px;
+  min-height: 820px;
+  isolation: isolate;
 }
 
-/* Tablet */
-@media (min-width: 768px) {
+@media (min-width: 480px) {
   .hero-section {
-    min-height: 490px;
+    min-height: 760px;
   }
 }
 
-/* Desktop */
-@media (min-width: 1024px) {
-  .hero-section {
-    min-height: 620px;
-  }
-}
-
-/*
-  .hero-sphere — one absolute image, responsive via CSS.
-  Mobile: bigger sphere, shifted left & up to sit level with heading.
-  Tablet: upper-right with sphere core near heading level.
-  Desktop: shifted left to reduce empty air on right half.
-*/
-.hero-sphere {
-  z-index: 10;
-  width: clamp(430px, 115vw, 590px);
-  right: 5px;
-  top: 28%;
-  bottom: auto;
-  filter: drop-shadow(0 0 48px rgba(34, 211, 238, 0.42)) drop-shadow(0 0 110px rgba(34, 211, 238, 0.22));
-}
-
 @media (min-width: 768px) {
-  .hero-sphere {
-    width: clamp(440px, 60vw, 680px);
-    right: clamp(-30px, -1vw, 10px);
-    top: clamp(50px, 10vh, 140px);
-    bottom: auto;
+  .hero-section {
+    min-height: 680px;
   }
 }
 
 @media (min-width: 1024px) {
-  .hero-sphere {
-    width: clamp(660px, 70vw, 1120px);
-    right: clamp(-10px, 2vw, 60px);
-    top: clamp(-60px, -3vh, -10px);
-    bottom: auto;
+  .hero-section {
+    min-height: 760px;
   }
 }
 
-/* Atmospheric outer glow behind sphere — wider to bleed toward text */
-.hero-bg-glow {
+@media (min-width: 1440px) {
+  .hero-section {
+    min-height: 780px;
+  }
+}
+
+/* Illustration — oversized and bled off the right edge of the
+   section at every breakpoint. On mobile/tablet it is anchored
+   from the top and allowed to run behind the copy and off the
+   bottom of the section; on desktop it is vertically centered
+   in its own right-hand zone and bleeds off the right edge
+   instead. Width-driven; height follows the source's own
+   portrait ratio (353x745). */
+.hero-art {
+  top: -60px;
+  right: -138vw;
+  width: 188vw;
+  max-width: 910px;
+  z-index: 1;
+}
+
+/* Bottom-fade distances below are in px, measured from THIS element's
+   own top (not from the viewport) — that's what lets a single fixed
+   pair of stops track "where the Hero section's bottom edge falls, plus
+   ~110px of bleed into FeaturesSection" across an entire breakpoint's
+   width range, even though .hero-art itself is scaled with vw and its
+   rendered height varies a lot across that range. The distances were
+   derived from the live section-bottom-minus-art-top gap at each
+   breakpoint (Playwright getBoundingClientRect), then +110px bleed
+   target, then a small safety margin. If Hero's min-height or hero-art's
+   top offset changes later, these need re-deriving the same way — they
+   are NOT arbitrary. See [[project-landing-hero]] for the measurements. */
+.hero-art-img {
+  display: block;
+  width: 100%;
+  height: auto;
+  filter: drop-shadow(0 0 60px rgba(34, 211, 238, 0.30)) drop-shadow(0 0 140px rgba(124, 92, 255, 0.20));
+  -webkit-mask-image:
+    linear-gradient(100deg, transparent 0%, transparent 4%, black 48%),
+    linear-gradient(to bottom, black 0px, black 840px, transparent 1010px);
+  mask-image:
+    linear-gradient(100deg, transparent 0%, transparent 4%, black 48%),
+    linear-gradient(to bottom, black 0px, black 840px, transparent 1010px);
+  -webkit-mask-composite: source-in;
+  mask-composite: intersect;
+}
+
+/* Very narrow phones (e.g. iPhone SE): the vw-driven bleed above is
+   tuned for ~390px+ and starts crowding the copy column below that,
+   so pull the illustration in a bit further right here specifically. */
+@media (max-width: 359px) {
+  .hero-art {
+    right: -155vw;
+    width: 188vw;
+  }
+}
+
+@media (min-width: 480px) {
+  .hero-art {
+    top: -40px;
+    right: -68vw;
+    width: 118vw;
+    max-width: 920px;
+  }
+
+  .hero-art-img {
+    -webkit-mask-image:
+      linear-gradient(100deg, transparent 0%, transparent 4%, black 48%),
+      linear-gradient(to bottom, black 0px, black 760px, transparent 930px);
+    mask-image:
+      linear-gradient(100deg, transparent 0%, transparent 4%, black 48%),
+      linear-gradient(to bottom, black 0px, black 760px, transparent 930px);
+  }
+}
+
+@media (min-width: 768px) {
+  .hero-art {
+    top: 15px;
+    right: -14vw;
+    width: 70vw;
+    max-width: 730px;
+  }
+
+  .hero-art-img {
+    -webkit-mask-image:
+      linear-gradient(100deg, transparent 0%, transparent 4%, black 48%),
+      linear-gradient(to bottom, black 0px, black 625px, transparent 795px);
+    mask-image:
+      linear-gradient(100deg, transparent 0%, transparent 4%, black 48%),
+      linear-gradient(to bottom, black 0px, black 625px, transparent 795px);
+  }
+}
+
+@media (min-width: 1024px) {
+  .hero-art {
+    top: 12.6px;
+    right: -12vw;
+    width: 42vw;
+    max-width: 620px;
+  }
+
+  /* Desktop-only: the drop-shadow filter on .hero-art-img blurs the
+     illustration's full rectangular alpha channel (edge pixels never
+     quite hit 0), which reads as a faint box halo around the whole
+     image — that box, not the sphere's own silhouette, is what looks
+     like a hard vertical seam on the left. A mask clips that halo away
+     and, since mask is applied after filter, gives us a clean, much
+     wider fade: the sphere emerges from darkness on the left instead
+     of starting at a visible edge, and eases into FeaturesSection
+     instead of stopping abruptly at the old overflow clip (removed —
+     see .hero-bleed-region in page.tsx). */
+  .hero-art-img {
+    -webkit-mask-image:
+      linear-gradient(to right, transparent 0%, transparent 5%, black 58%),
+      linear-gradient(to bottom, black 0px, black 687px, transparent 887px);
+    mask-image:
+      linear-gradient(to right, transparent 0%, transparent 5%, black 58%),
+      linear-gradient(to bottom, black 0px, black 687px, transparent 887px);
+    -webkit-mask-composite: source-in;
+    mask-composite: intersect;
+  }
+}
+
+@media (min-width: 1440px) {
+  .hero-art {
+    top: -51px;
+    right: -6vw;
+    width: 34vw;
+    max-width: 700px;
+  }
+
+  .hero-art-img {
+    -webkit-mask-image:
+      linear-gradient(to right, transparent 0%, transparent 5%, black 58%),
+      linear-gradient(to bottom, black 0px, black 771px, transparent 971px);
+    mask-image:
+      linear-gradient(to right, transparent 0%, transparent 5%, black 58%),
+      linear-gradient(to bottom, black 0px, black 771px, transparent 971px);
+  }
+}
+
+/* Scrim — horizontal fade keeps the left (text) side dark;
+   vertical fade keeps the CTA/badges row legible where the
+   illustration runs underneath it on mobile. Both fade out
+   almost entirely by the desktop breakpoint, where the
+   illustration and the text column no longer overlap. */
+.hero-scrim {
+  z-index: 2;
+  background:
+    linear-gradient(200deg, rgba(2, 3, 11, 0.92) 0%, rgba(2, 3, 11, 0.72) 28%, rgba(2, 3, 11, 0.32) 44%, transparent 56%),
+    linear-gradient(0deg, rgba(2, 3, 11, 0.14) 0%, rgba(2, 3, 11, 0.42) 10%, rgba(2, 3, 11, 0.16) 28%, transparent 44%);
+  /* Every layer above is confined to this element's own box (matching
+     .hero-section's height), so whatever value a layer still has right
+     at the box's bottom edge ends there as a hard cliff — the section
+     below has none of it. This mask fades the whole scrim (regardless
+     of how many layers or which direction) to nothing over the last
+     ~12% of the box, so no layer can end on a visible step. */
+  -webkit-mask-image: linear-gradient(to bottom, black 0%, black 88%, transparent 100%);
+  mask-image: linear-gradient(to bottom, black 0%, black 88%, transparent 100%);
+}
+
+@media (min-width: 768px) {
+  .hero-scrim {
+    background:
+      linear-gradient(200deg, rgba(2, 3, 11, 0.95) 0%, rgba(2, 3, 11, 0.85) 34%, rgba(2, 3, 11, 0.55) 56%, rgba(2, 3, 11, 0.16) 70%, transparent 82%),
+      linear-gradient(0deg, rgba(2, 3, 11, 0.12) 0%, rgba(2, 3, 11, 0.38) 8%, transparent 26%);
+  }
+}
+
+@media (min-width: 1024px) {
+  .hero-scrim {
+    background:
+      linear-gradient(100deg, rgba(2, 3, 11, 0.85) 0%, rgba(2, 3, 11, 0.55) 26%, rgba(2, 3, 11, 0.12) 42%, transparent 56%),
+      linear-gradient(180deg, rgba(2, 3, 11, 1) 0%, transparent 6%);
+  }
+}
+
+/* Single atmospheric glow layer behind the illustration. Its
+   center follows the illustration's position via custom
+   properties so the light source always reads as one thing. */
+.hero-glow {
+  --glow-x: 72%;
+  --glow-y: 22%;
   inset: 0;
   z-index: 0;
-  background: radial-gradient(
-    ellipse 82% 80% at 74% 48%,
-    rgba(34, 211, 238, 0.22) 0%,
-    rgba(56, 189, 248, 0.10) 44%,
-    transparent 72%
-  );
-  filter: blur(48px);
+  background:
+    radial-gradient(ellipse 55% 42% at var(--glow-x) var(--glow-y), rgba(103, 232, 249, 0.32) 0%, rgba(34, 211, 238, 0.14) 48%, transparent 78%),
+    radial-gradient(ellipse 85% 70% at var(--glow-x) var(--glow-y), rgba(124, 92, 255, 0.22) 0%, rgba(56, 189, 248, 0.1) 46%, transparent 74%);
+  filter: blur(50px);
 }
 
-/* Concentrated bloom at sphere core — desktop only */
-.hero-bg-bloom {
-  inset: 0;
-  z-index: 1;
-  background: radial-gradient(
-    ellipse 38% 32% at 74% 48%,
-    rgba(103, 232, 249, 0.32) 0%,
-    rgba(34, 211, 238, 0.14) 48%,
-    transparent 80%
-  );
-  filter: blur(10px);
+@media (min-width: 1024px) {
+  .hero-glow {
+    --glow-x: 74%;
+    --glow-y: 44%;
+    filter: blur(60px);
+  }
+}
+
+.hero-content {
+  z-index: 10;
+  max-width: 80rem;
+  margin: 0 auto;
+  padding: 2.75rem 1.75rem 3rem;
+}
+
+@media (min-width: 1024px) {
+  .hero-content {
+    padding: 7rem 2rem;
+  }
+}
+
+.hero-copy {
+  max-width: 34rem;
+}
+
+@media (max-width: 767px) {
+  .hero-copy {
+    max-width: min(17.5rem, 62vw);
+  }
+}
+
+@media (min-width: 480px) and (max-width: 767px) {
+  .hero-copy {
+    max-width: 21rem;
+  }
+}
+
+.hero-heading {
+  line-height: 1.15;
+}
+
+.hero-lead {
+  line-height: 1.75rem;
+}
+
+.hero-cta-row {
+  margin-top: 1.5rem;
+}
+
+@media (min-width: 1024px) {
+  .hero-cta-row {
+    margin-top: 2rem;
+  }
 }

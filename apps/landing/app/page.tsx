@@ -49,9 +49,11 @@ export default function HomePage() {
         <div className="space-noise" />
         <LandingHeader />
         <main>
-          <HeroSection />
-          <TrustLogosSection />
-          <FeaturesSection />
+          <div className="hero-bleed-region relative overflow-hidden">
+            <HeroSection />
+            <TrustLogosSection />
+            <FeaturesSection />
+          </div>
           <CommandCenterSection />
           <HowItWorksSection />
           <PricingSection />
