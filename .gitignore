@@ -45,6 +45,8 @@ temp/
 
 # coverage
 coverage/
+test-results/
+playwright-report/
 
 # misc
 *.swp
@@ -68,10 +70,6 @@ cookies.txt
 *.har
 *.trace
 *.webm
-*.png
-*.jpg
-*.jpeg
-*.html
 
 # accidental CLI output files
 api@*
