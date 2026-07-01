@@ -41,7 +41,7 @@ const PLAN_LIMITS = [
     limits: {
       maxCompanies: 10,
       maxAiRepliesPerMonth: -1,
-      platforms: ['YANDEX', 'TWOGIS', 'GOOGLE', 'WEB'],
+      platforms: ['YANDEX', 'TWOGIS', 'WEB'],
       telegramNotifications: true,
       advancedAnalytics: true,
       pushNotificationsEnabled: true,
@@ -56,7 +56,7 @@ const PLAN_LIMITS = [
     limits: {
       maxCompanies: -1,
       maxAiRepliesPerMonth: -1,
-      platforms: ['YANDEX', 'TWOGIS', 'GOOGLE', 'WEB'],
+      platforms: ['YANDEX', 'TWOGIS', 'WEB'],
       telegramNotifications: true,
       advancedAnalytics: true,
       pushNotificationsEnabled: true,

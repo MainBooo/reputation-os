@@ -31,7 +31,6 @@
 2. **Сбор.** Задача берёт `CompanySourceTarget` (привязка компании к источнику: ID места на Яндекс Картах, URL и т.д.) и вызывает адаптер платформы. Адаптеры лежат в `apps/worker/src/adapters` и реализуют общий интерфейс `source-adapter.interface.ts`; выбор — через `source-adapter.factory.ts`:
    - `yandex.adapter.ts` — отзывы и рейтинги Яндекс Карт (основной источник);
    - `twogis.adapter.ts` — отзывы 2ГИС;
-   - `google.adapter.ts` — Google Maps (реализован, отключён);
    - `webmention.adapter.ts` — упоминания бренда в вебе через Yandex Search API, с фильтрацией мусорных доменов;
    - `empty.adapter.ts` — заглушка для CUSTOM-источников.
 3. **Нормализация и дедупликация.** Контент нормализуется, считается хэш; по паре `(companyId, hash)` и `(companyId, platform, externalMentionId)` стоят уникальные индексы. Дубликаты связываются через `duplicateOfId`.

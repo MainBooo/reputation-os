@@ -1,4 +1,4 @@
-export type Platform = 'YANDEX' | 'GOOGLE' | 'TWOGIS' | 'WEB' | 'CUSTOM'
+export type Platform = 'YANDEX' | 'TWOGIS' | 'WEB' | 'CUSTOM'
 export type Sentiment = 'POSITIVE' | 'NEGATIVE' | 'NEUTRAL' | 'UNKNOWN'
 export type MentionStatus = 'NEW' | 'REVIEWED' | 'HIDDEN' | 'ARCHIVED'
 export type MentionType = 'REVIEW' | 'ARTICLE' | 'WEB_MENTION' | 'SOCIAL_MENTION' | 'COMMENT'

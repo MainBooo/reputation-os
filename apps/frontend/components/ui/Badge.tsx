@@ -10,7 +10,6 @@ const colorMap: Record<string, string> = {
   HIDDEN: 'border-white/10 bg-white/7 text-slate-300',
   ARCHIVED: 'border-white/10 bg-white/7 text-slate-400',
   YANDEX: 'border-amber-300/25 bg-amber-400/10 text-amber-200',
-  GOOGLE: 'border-emerald-300/25 bg-emerald-400/10 text-emerald-200',
   TWOGIS: 'border-sky-300/25 bg-sky-400/10 text-sky-200',
   WEB: 'border-fuchsia-300/25 bg-fuchsia-500/10 text-fuchsia-200',
   CUSTOM: 'border-violet-300/25 bg-violet-500/10 text-violet-200',

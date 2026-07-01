@@ -1,5 +1,4 @@
 import { Platform } from '@prisma/client'
-import { GoogleAdapter } from './google.adapter'
 import { EmptyAdapter } from './empty.adapter'
 import { SourceAdapter } from './source-adapter.interface'
 import { WebMentionAdapter } from './webmention.adapter'
@@ -11,8 +10,6 @@ export class SourceAdapterFactory {
     switch (platform) {
       case 'YANDEX':
         return new YandexAdapter()
-      case 'GOOGLE':
-        return new GoogleAdapter()
       case 'TWOGIS':
         return new TwoGisAdapter()
       case 'WEB':

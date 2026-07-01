@@ -84,6 +84,5 @@ pm2 restart reputation-api reputation-frontend reputation-landing reputation-wor
 ## Known issues
 
 1. **Лендинг, `apps/landing/app/globals.css`** — вместо `@tailwind`-директив в файл вставлен скомпилированный CSS-дамп. Сборка работает, но новые utility-классы Tailwind не генерируются; в новых компонентах использовать только классы, уже присутствующие в дампе. Восстановление директив — известная задача (рядом лежит бэкап-кандидат `globals.css.bak.*`).
-2. **Google-адаптер** (`apps/worker/src/adapters/google.adapter.ts`) реализован, но источник отключён в UI/планах. Активация — быстрая фича.
-3. **Веб-упоминания**: периодический 403 от Yandex Search API в worker — требует проверки ключа/квот (`YANDEX_SEARCH_*`).
-4. Уведомления в Telegram заложены в схему (`NotificationChannel.TELEGRAM`), но отправка не реализована — быстрая фича для развития продукта.
+2. **Веб-упоминания**: периодический 403 от Yandex Search API в worker — требует проверки ключа/квот (`YANDEX_SEARCH_*`).
+3. Уведомления в Telegram заложены в схему (`NotificationChannel.TELEGRAM`), но отправка не реализована — быстрая фича для развития продукта.

@@ -1,6 +1,5 @@
 export enum Platform {
   YANDEX = 'YANDEX',
-  GOOGLE = 'GOOGLE',
   TWOGIS = 'TWOGIS',
   WEB = 'WEB',
   CUSTOM = 'CUSTOM',

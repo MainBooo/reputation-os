@@ -66,7 +66,7 @@ export default function RegisterPage() {
             7 дней бесплатно — тариф «Бизнес»
           </div>
           <ul className="mt-2 space-y-1 text-xs text-zinc-400">
-            <li>◆ До 10 компаний и все платформы: Яндекс, 2ГИС, Google, Веб</li>
+            <li>◆ До 10 компаний и все платформы: Яндекс, 2ГИС, Веб</li>
             <li>◆ AI-ответы без лимита</li>
             <li>◆ Telegram-уведомления и расширенная аналитика</li>
           </ul>

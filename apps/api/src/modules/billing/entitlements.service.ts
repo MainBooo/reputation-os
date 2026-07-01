@@ -33,7 +33,7 @@ const CODE_DEFAULTS: Partial<Record<PlanCode, PlanLimits>> = {
   [PlanCode.PRO]: {
     maxCompanies: 10,
     maxAiRepliesPerMonth: -1,
-    platforms: [Platform.YANDEX, Platform.TWOGIS, Platform.GOOGLE, Platform.WEB],
+    platforms: [Platform.YANDEX, Platform.TWOGIS, Platform.WEB],
     telegramNotifications: true,
     advancedAnalytics: true,
     pushNotificationsEnabled: true,
@@ -45,7 +45,7 @@ const CODE_DEFAULTS: Partial<Record<PlanCode, PlanLimits>> = {
   [PlanCode.AGENCY]: {
     maxCompanies: 100,
     maxAiRepliesPerMonth: -1,
-    platforms: [Platform.YANDEX, Platform.TWOGIS, Platform.GOOGLE, Platform.WEB],
+    platforms: [Platform.YANDEX, Platform.TWOGIS, Platform.WEB],
     telegramNotifications: true,
     advancedAnalytics: true,
     pushNotificationsEnabled: true,
