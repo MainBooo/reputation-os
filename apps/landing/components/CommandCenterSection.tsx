@@ -52,8 +52,9 @@ export default function CommandCenterSection() {
             <Image
               src="/images/hero/fon.png"
               alt="Command Center Reputation OS"
-              width={980}
-              height={620}
+              width={1672}
+              height={941}
+              sizes="(min-width: 1024px) 50vw, 100vw"
               className="h-auto w-full rounded-2xl"
             />
           </div>

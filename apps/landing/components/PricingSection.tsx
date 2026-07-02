@@ -1,3 +1,5 @@
+import Image from 'next/image'
+
 const plans = [
   ['Старт', 'Малый бизнес, 1–2 точки', '890 ₽', ['До 3 компаний', 'Яндекс Карты + 2ГИС', 'Единый Inbox отзывов', '50 AI-ответов в месяц']],
   ['Бизнес', 'Растущий бизнес и сети', '1 890 ₽', ['До 10 компаний', 'Все платформы + Web', 'Безлимит AI-ответов', 'Аналитика и Telegram-алерты']],
@@ -7,7 +9,16 @@ const plans = [
 export default function PricingSection() {
   return (
     <section id="pricing" className="pricing">
-      <img className="pricing-cosmonaut" src="/images/backgrounds/fon2.png" alt="" aria-hidden="true" />
+      <Image
+        className="pricing-cosmonaut"
+        src="/images/backgrounds/fon2.png"
+        alt=""
+        aria-hidden="true"
+        width={1536}
+        height={1024}
+        sizes="1180px"
+        loading="lazy"
+      />
       <div className="pricing-head">
         <h2>Простые тарифы. Никаких скрытых платежей.</h2>
       </div>

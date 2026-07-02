@@ -1,12 +1,15 @@
+import Image from 'next/image'
+
 export default function CTASection() {
   return (
     <section className="final-cta">
       <span className="logo-slot logo-slot--cta">
-        <img
+        <Image
           src="/images/logo/logo.png"
           alt="Reputation OS"
-          width={112}
-          height={112}
+          width={76}
+          height={76}
+          loading="lazy"
           className="logo-img"
         />
       </span>

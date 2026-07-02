@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Image from 'next/image'
 import Link from 'next/link'
 
 const nav = [
@@ -17,7 +18,7 @@ export default function LandingHeader() {
       <div className="site-header__bar">
         <Link href="/" className="site-header__brand" aria-label="Reputation OS">
           <span className="site-header__logo">
-            <img src="/images/logo/logo.png" alt="Reputation OS" />
+            <Image src="/images/logo/logo.png" alt="Reputation OS" width={44} height={44} />
           </span>
           <span className="site-header__title">REPUTATION OS</span>
         </Link>

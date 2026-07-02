@@ -19,6 +19,8 @@ export default function HeroSection() {
           width={353}
           height={745}
           priority
+          fetchPriority="high"
+          sizes="(min-width: 1440px) 34vw, (min-width: 1024px) 42vw, (min-width: 768px) 70vw, (min-width: 480px) 118vw, 188vw"
           className="hero-art-img"
         />
       </div>
