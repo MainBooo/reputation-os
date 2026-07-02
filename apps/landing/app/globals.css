@@ -1196,6 +1196,8 @@
 .hero-art-fade {
   display: none;
   position: absolute;
+  left: 0;
+  right: 0;
   z-index: 1;
   background: linear-gradient(to right,
     rgba(2, 3, 11, 0.98) 0%,
@@ -1207,8 +1209,6 @@
     rgba(2, 3, 11, 0.2) 85%,
     rgba(2, 3, 11, 0.08) 93%,
     transparent 100%);
-  -webkit-mask-image: linear-gradient(to bottom, black 0%, black 88%, transparent 100%);
-  mask-image: linear-gradient(to bottom, black 0%, black 88%, transparent 100%);
 }
 
 /* Mobile/narrow-tablet only (<768px): mask-image on the illustration
@@ -1235,10 +1235,37 @@
     -webkit-mask-image: linear-gradient(to bottom, black 0px, black 840px, transparent 1010px);
     mask-image: linear-gradient(to bottom, black 0px, black 840px, transparent 1010px);
   }
+
+  /* .hero-art-fade's own vertical extent and mask now mirror .hero-art's
+     exactly (same top offset, same 0/840/1010px stops) — a real-device
+     screenshot (feedback after the horizontal-fade widening above) still
+     showed a seam covering the top ~80% of the illustration's height but
+     reappearing over the bottom ~20%. Cause: this overlay used to be a
+     plain inset:0 box with a *percentage* bottom mask (fading out by
+     100% of the ~820px section height, i.e. by y≈820), while the image
+     itself doesn't even start fading until section-relative y≈780 and
+     isn't fully gone until y≈950 — so from ~820 to ~950 the smoothing
+     overlay had already vanished while the image was still fully
+     visible, exposing its unblended edge. Giving the overlay the same
+     top offset and the same absolute-px mask as .hero-art makes both
+     fade out in lockstep. */
+  .hero-art-fade {
+    top: -60px;
+    height: 1010px;
+    -webkit-mask-image: linear-gradient(to bottom, black 0px, black 840px, transparent 1010px);
+    mask-image: linear-gradient(to bottom, black 0px, black 840px, transparent 1010px);
+  }
 }
 
 @media (min-width: 480px) and (max-width: 767px) {
   .hero-art {
+    -webkit-mask-image: linear-gradient(to bottom, black 0px, black 760px, transparent 930px);
+    mask-image: linear-gradient(to bottom, black 0px, black 760px, transparent 930px);
+  }
+
+  .hero-art-fade {
+    top: -40px;
+    height: 930px;
     -webkit-mask-image: linear-gradient(to bottom, black 0px, black 760px, transparent 930px);
     mask-image: linear-gradient(to bottom, black 0px, black 760px, transparent 930px);
   }
