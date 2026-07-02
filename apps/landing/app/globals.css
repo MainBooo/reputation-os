@@ -1156,6 +1156,24 @@
   mask-composite: intersect;
 }
 
+/* Mobile/narrow-tablet only (<768px): real WebKit (Safari — the browser
+   this seam bug was reported from) applies `mask-composite: intersect`
+   to the FIRST mask layer literally per spec: intersecting it against the
+   still-empty mask canvas yields alpha 0 everywhere, so the whole
+   illustration rendered as a hard-edged, mostly invisible sliver instead
+   of the intended soft blend (Chromium is lenient about the first layer,
+   which is why this never showed up there). Fix: first layer uses `add`
+   (paints normally — same result as having no composite operator at all),
+   second layer keeps `intersect` so the bottom-fade still clips it
+   correctly. Intentionally NOT applied at 768px+/1024px+ — desktop/tablet
+   were not reported broken and are out of scope for this fix. */
+@media (max-width: 767px) {
+  .hero-art-img {
+    -webkit-mask-composite: source-over, source-in;
+    mask-composite: add, intersect;
+  }
+}
+
 /* Very narrow phones (e.g. iPhone SE): the vw-driven bleed above is
    tuned for ~390px+ and starts crowding the copy column below that,
    so pull the illustration in a bit further right here specifically. */
