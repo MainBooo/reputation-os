@@ -1156,21 +1156,50 @@
   mask-composite: intersect;
 }
 
-/* Mobile/narrow-tablet only (<768px): real WebKit (Safari — the browser
-   this seam bug was reported from) applies `mask-composite: intersect`
-   to the FIRST mask layer literally per spec: intersecting it against the
-   still-empty mask canvas yields alpha 0 everywhere, so the whole
-   illustration rendered as a hard-edged, mostly invisible sliver instead
-   of the intended soft blend (Chromium is lenient about the first layer,
-   which is why this never showed up there). Fix: first layer uses `add`
-   (paints normally — same result as having no composite operator at all),
-   second layer keeps `intersect` so the bottom-fade still clips it
-   correctly. Intentionally NOT applied at 768px+/1024px+ — desktop/tablet
-   were not reported broken and are out of scope for this fix. */
+/* Mobile/narrow-tablet only (<768px): the previous fix here (two-layer
+   mask-composite: add, intersect) turned out to still be unreliable on
+   a real device — a follow-up screenshot (IMG_8339, 2026-07-02) showed a
+   razor-sharp vertical seam exactly at .hero-art's own left edge (which
+   sits at 50vw, dead center, from the right:-138vw/width:188vw box math
+   above), as if the mask were being ignored entirely rather than fading.
+   Suspected cause: `mask-composite`/`-webkit-mask-composite` with a
+   comma-separated PER-LAYER keyword list is the fragile part — this
+   environment's Linux WebKit build parses it and renders correctly, but
+   real Safari may not, and there is no way to verify real Safari's
+   behavior from here. Rather than keep guessing at composite keywords,
+   mobile now avoids `mask-composite` (and any multi-layer mask-image)
+   entirely: the diagonal left-fade stays a single-layer mask on the
+   image itself (a single layer never needs a composite operator), and
+   the vertical bottom-fade moves to a single-layer mask on the
+   `.hero-art` WRAPPER instead of being a second layer on the image.
+   `.hero-art` has exactly one child (the image) and an auto-height box
+   that exactly matches the image's rendered box (verified via
+   getBoundingClientRect — identical rects), so masking the wrapper
+   produces the same combined result: the image's own mask limits it on
+   the left, the wrapper's mask on top of that limits it on the bottom.
+   Two independent single-layer masks, zero reliance on composite-list
+   support. 768px+ is untouched — it still uses the original two-layer
+   mask-composite:intersect approach and was never reported broken. */
 @media (max-width: 767px) {
   .hero-art-img {
-    -webkit-mask-composite: source-over, source-in;
-    mask-composite: add, intersect;
+    -webkit-mask-image: linear-gradient(100deg, transparent 0%, transparent 4%, black 48%);
+    mask-image: linear-gradient(100deg, transparent 0%, transparent 4%, black 48%);
+    -webkit-mask-composite: source-over;
+    mask-composite: add;
+  }
+}
+
+@media (max-width: 479px) {
+  .hero-art {
+    -webkit-mask-image: linear-gradient(to bottom, black 0px, black 840px, transparent 1010px);
+    mask-image: linear-gradient(to bottom, black 0px, black 840px, transparent 1010px);
+  }
+}
+
+@media (min-width: 480px) and (max-width: 767px) {
+  .hero-art {
+    -webkit-mask-image: linear-gradient(to bottom, black 0px, black 760px, transparent 930px);
+    mask-image: linear-gradient(to bottom, black 0px, black 760px, transparent 930px);
   }
 }
 
