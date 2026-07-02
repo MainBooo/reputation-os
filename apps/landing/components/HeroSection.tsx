@@ -25,6 +25,13 @@ export default function HeroSection() {
         />
       </div>
 
+      {/* Mobile-only paint-on-top fade (see .hero-art-fade in globals.css) —
+          replaces a mask-image left-fade that kept failing silently on
+          real mobile Safari. A sibling of .hero-art (not nested inside it)
+          so its own box is an ordinary full-section rect, not anchored to
+          .hero-art's oversized off-screen bounds. */}
+      <div className="hero-art-fade pointer-events-none absolute inset-0" aria-hidden="true" />
+
       {/* Scrim: darkens the illustration under/around the text so
           contrast holds wherever the two overlap, without ever moving
           or shrinking the illustration itself. */}

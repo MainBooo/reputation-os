@@ -1156,36 +1156,77 @@
   mask-composite: intersect;
 }
 
-/* Mobile/narrow-tablet only (<768px): the previous fix here (two-layer
-   mask-composite: add, intersect) turned out to still be unreliable on
-   a real device — a follow-up screenshot (IMG_8339, 2026-07-02) showed a
-   razor-sharp vertical seam exactly at .hero-art's own left edge (which
-   sits at 50vw, dead center, from the right:-138vw/width:188vw box math
-   above), as if the mask were being ignored entirely rather than fading.
-   Suspected cause: `mask-composite`/`-webkit-mask-composite` with a
-   comma-separated PER-LAYER keyword list is the fragile part — this
-   environment's Linux WebKit build parses it and renders correctly, but
-   real Safari may not, and there is no way to verify real Safari's
-   behavior from here. Rather than keep guessing at composite keywords,
-   mobile now avoids `mask-composite` (and any multi-layer mask-image)
-   entirely: the diagonal left-fade stays a single-layer mask on the
-   image itself (a single layer never needs a composite operator), and
-   the vertical bottom-fade moves to a single-layer mask on the
-   `.hero-art` WRAPPER instead of being a second layer on the image.
-   `.hero-art` has exactly one child (the image) and an auto-height box
-   that exactly matches the image's rendered box (verified via
-   getBoundingClientRect — identical rects), so masking the wrapper
-   produces the same combined result: the image's own mask limits it on
-   the left, the wrapper's mask on top of that limits it on the bottom.
-   Two independent single-layer masks, zero reliance on composite-list
-   support. 768px+ is untouched — it still uses the original two-layer
-   mask-composite:intersect approach and was never reported broken. */
+/* Paint-on-top replacement for the mobile left-fade mask below — hidden
+   by default (desktop keeps the mask-based fade on .hero-art-img, which
+   was never reported broken there).
+
+   History: two earlier attempts here (a mask-image on the illustration
+   itself, then a `left:-80vw` overlay box anchored to `.hero-art`'s own
+   oversized off-screen bounds with an angled `100deg` gradient and vw
+   stops) both still showed a razor-sharp vertical line on a real device
+   at exactly `.hero-art`'s own left edge (50vw) — confirmed by pixel-
+   scanning a real-device screenshot (Bug10.PNG): a hard brightness jump
+   at x=0.499 of the screen width, on every row top to bottom. The common
+   thread in both broken attempts is the fading element's own box being
+   huge and mostly off-screen — exactly the kind of oversized/off-screen
+   box + angled-gradient-with-absolute-length-stops combination WebKit
+   has been unreliable about rendering past its edges. `.hero-art`'s own
+   size/offset was never the problem — the fade overlay's own box was.
+
+   Fix: stop anchoring the fade to `.hero-art` at all. This overlay is
+   now `inset:0` on `.hero-section` itself — an ordinary, fully
+   on-screen box, same pattern already proven reliable by `.hero-glow`
+   and `.hero-scrim` below — with a plain `to right` gradient in
+   percentages instead of an angled gradient with absolute vw stops on
+   an oversized box. `.hero-art`'s own left edge is 50vw at every mobile
+   sub-breakpoint except <360px (see override further down). The hard
+   seam is gone (confirmed on a real device, Bag11.PNG — no brightness
+   jump anywhere), but the flat-zone-ends-at-50% version still read as
+   a soft-but-visible step to the eye: only 50% of the viewport was
+   left for the taper (50%-100%), and 4 stops in near-black tones is
+   little enough that linear interpolation between them can still look
+   faintly banded even with zero hard edge. Widened: flat zone now ends
+   at 35% (well before the image starts at 50%, which is fine — nothing
+   but plain background sits under the overlay there anyway) and the
+   taper runs the full remaining 65% of the width, with twice as many
+   intermediate stops for a visibly smoother curve. z-index matches
+   `.hero-art` (1) — it's a sibling placed after `.hero-art` in the
+   markup, so equal z-index resolves by DOM order and it still paints
+   on top of the image, same as before. */
+.hero-art-fade {
+  display: none;
+  position: absolute;
+  z-index: 1;
+  background: linear-gradient(to right,
+    rgba(2, 3, 11, 0.98) 0%,
+    rgba(2, 3, 11, 0.98) 35%,
+    rgba(2, 3, 11, 0.92) 45%,
+    rgba(2, 3, 11, 0.78) 55%,
+    rgba(2, 3, 11, 0.58) 65%,
+    rgba(2, 3, 11, 0.38) 75%,
+    rgba(2, 3, 11, 0.2) 85%,
+    rgba(2, 3, 11, 0.08) 93%,
+    transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, black 0%, black 88%, transparent 100%);
+  mask-image: linear-gradient(to bottom, black 0%, black 88%, transparent 100%);
+}
+
+/* Mobile/narrow-tablet only (<768px): mask-image on the illustration
+   itself has repeatedly failed silently on real mobile Safari (see
+   history above), so the left fade never clips the image's alpha here
+   — it's a solid-color gradient overlay instead, which can't silently
+   no-op the way a mask can. `.hero-art-img` keeps its own bottom-fade
+   mask on the `.hero-art` wrapper (unaffected — only the left/vertical
+   seam was ever reported broken). 768px+ is untouched — desktop
+   mask-composite:intersect was never reported broken. */
 @media (max-width: 767px) {
   .hero-art-img {
-    -webkit-mask-image: linear-gradient(100deg, transparent 0%, transparent 4%, black 48%);
-    mask-image: linear-gradient(100deg, transparent 0%, transparent 4%, black 48%);
-    -webkit-mask-composite: source-over;
-    mask-composite: add;
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+
+  .hero-art-fade {
+    display: block;
   }
 }
 
@@ -1205,29 +1246,39 @@
 
 /* Very narrow phones (e.g. iPhone SE): the vw-driven bleed above is
    tuned for ~390px+ and starts crowding the copy column below that,
-   so pull the illustration in a bit further right here specifically. */
+   so pull the illustration in a bit further right here specifically —
+   which also moves its left edge from 50vw to 67vw, so the fade
+   overlay's flat-zone stop needs to move to match. */
 @media (max-width: 359px) {
   .hero-art {
     right: -155vw;
     width: 188vw;
   }
+
+  .hero-art-fade {
+    background: linear-gradient(to right,
+      rgba(2, 3, 11, 0.98) 0%,
+      rgba(2, 3, 11, 0.98) 52%,
+      rgba(2, 3, 11, 0.92) 60%,
+      rgba(2, 3, 11, 0.78) 68%,
+      rgba(2, 3, 11, 0.58) 76%,
+      rgba(2, 3, 11, 0.38) 83%,
+      rgba(2, 3, 11, 0.2) 90%,
+      rgba(2, 3, 11, 0.08) 96%,
+      transparent 100%);
+  }
 }
 
 @media (min-width: 480px) {
+  /* No .hero-art-img mask-image override here on purpose — it used to
+     re-enable a two-layer mask for the 480-767px sub-range, undoing the
+     max-width:767px fix above for exactly that range. The 767px block's
+     mask:none and .hero-art-fade already cover 0-767px in full. */
   .hero-art {
     top: -40px;
     right: -68vw;
     width: 118vw;
     max-width: 920px;
-  }
-
-  .hero-art-img {
-    -webkit-mask-image:
-      linear-gradient(100deg, transparent 0%, transparent 4%, black 48%),
-      linear-gradient(to bottom, black 0px, black 760px, transparent 930px);
-    mask-image:
-      linear-gradient(100deg, transparent 0%, transparent 4%, black 48%),
-      linear-gradient(to bottom, black 0px, black 760px, transparent 930px);
   }
 }
 
