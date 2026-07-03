@@ -1,7 +1,7 @@
 import clsx from 'clsx'
 import type { ButtonHTMLAttributes } from 'react'
 
-const variants = {
+export const variants = {
   primary:
     'border border-cyan-400/15 bg-gradient-to-r from-cyan-500/20 via-blue-500/10 to-violet-500/20 text-white shadow-[0_0_24px_rgba(59,130,246,0.14)] hover:border-cyan-300/35 hover:shadow-[0_0_34px_rgba(168,85,247,0.18)]',
 
