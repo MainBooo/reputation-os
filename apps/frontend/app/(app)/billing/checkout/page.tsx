@@ -554,6 +554,14 @@ function CheckoutInner() {
             <a href="/legal" className="underline transition-colors hover:text-zinc-500">
               Реквизиты
             </a>
+            {' · '}
+            <a href="/legal/oferta" className="underline transition-colors hover:text-zinc-500">
+              Оферта
+            </a>
+            {' · '}
+            <a href="/legal/privacy" className="underline transition-colors hover:text-zinc-500">
+              Политика конфиденциальности
+            </a>
           </div>
         </div>
       </Card>

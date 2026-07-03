@@ -6,35 +6,44 @@ export const metadata: Metadata = {
 
 export default function LegalPage() {
   return (
-    <div className="min-h-screen bg-[#050b12] text-white">
-      <div className="mx-auto max-w-xl px-6 py-20">
-        <div className="mb-10">
-          <div className="text-xs font-medium uppercase tracking-wider text-zinc-500">Reputation OS</div>
-          <h1 className="mt-2 text-2xl font-bold text-white">Реквизиты</h1>
-        </div>
-
-        <div className="rounded-2xl border border-white/[0.08] bg-white/[0.02] p-6 space-y-5">
-          <Row label="ФИО" value="Полякова Кристина Алексеевна" />
-          <Divider />
-          <Row label="ИНН" value="645325780844" />
-          <Divider />
-          <Row label="Статус" value="Самозанятый" />
-          <Divider />
-          <Row label="Вид деятельности" value="Разработка программного обеспечения / SaaS-сервис" />
-          <Divider />
-          <Row
-            label="Email"
-            value={
-              <a
-                href="mailto:max92pole@yandex.ru"
-                className="text-cyan-400 hover:text-cyan-300 transition-colors"
-              >
-                max92pole@yandex.ru
-              </a>
-            }
-          />
-        </div>
+    <div className="max-w-xl">
+      <div className="mb-10">
+        <h1 className="text-2xl font-bold text-white">Реквизиты исполнителя</h1>
       </div>
+
+      <div className="rounded-2xl border border-white/[0.08] bg-white/[0.02] p-6 space-y-5">
+        <Row label="ФИО" value="Полякова Кристина Алексеевна" />
+        <Divider />
+        <Row label="ИНН" value="645325780844" />
+        <Divider />
+        <Row label="Статус" value="Самозанятый (плательщик налога на профессиональный доход)" />
+        <Divider />
+        <Row label="Вид деятельности" value="Разработка программного обеспечения / SaaS-сервис" />
+        <Divider />
+        <Row
+          label="Email"
+          value={
+            <a
+              href="mailto:max92pole@yandex.ru"
+              className="text-cyan-400 hover:text-cyan-300 transition-colors"
+            >
+              max92pole@yandex.ru
+            </a>
+          }
+        />
+      </div>
+
+      <p className="mt-6 text-xs text-zinc-600">
+        Условия использования сервиса — в{' '}
+        <a href="/legal/oferta" className="text-cyan-400 hover:text-cyan-300">
+          публичной оферте
+        </a>
+        , обработка персональных данных — в{' '}
+        <a href="/legal/privacy" className="text-cyan-400 hover:text-cyan-300">
+          политике конфиденциальности
+        </a>
+        .
+      </p>
     </div>
   )
 }

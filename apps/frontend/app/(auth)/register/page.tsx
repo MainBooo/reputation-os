@@ -13,6 +13,7 @@ export default function RegisterPage() {
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [agreed, setAgreed] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -28,6 +29,10 @@ export default function RegisterPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    if (!agreed) {
+      setError('Нужно принять условия оферты и политики конфиденциальности.')
+      return
+    }
     setLoading(true)
     setError('')
 
@@ -76,8 +81,28 @@ export default function RegisterPage() {
           <Input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Имя" />
           <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" />
           <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Пароль" />
+
+          <label className="flex items-start gap-2 text-xs text-zinc-400">
+            <input
+              type="checkbox"
+              checked={agreed}
+              onChange={(e) => setAgreed(e.target.checked)}
+              className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-white/20 bg-white/5 accent-cyan-400"
+            />
+            <span>
+              Я принимаю условия{' '}
+              <a href="/legal/oferta" target="_blank" className="text-cyan-400 hover:text-cyan-300">
+                публичной оферты
+              </a>{' '}
+              и{' '}
+              <a href="/legal/privacy" target="_blank" className="text-cyan-400 hover:text-cyan-300">
+                политики конфиденциальности
+              </a>
+            </span>
+          </label>
+
           {error ? <div className="text-sm text-red-300">{error}</div> : null}
-          <Button type="submit" className="w-full" disabled={loading}>
+          <Button type="submit" className="w-full" disabled={loading || !agreed}>
             {loading ? 'Создание аккаунта...' : 'Зарегистрироваться'}
           </Button>
         </form>
