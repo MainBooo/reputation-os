@@ -557,6 +557,16 @@ export default function DiscoveryCenter({
           <div className="rounded-3xl border border-dashed border-white/10 bg-black/10 p-8 text-center">
             <div className="text-base font-semibold text-white">Пока нет активных WEB-источников</div>
             <div className="mt-2 text-sm text-zinc-300">{canWrite ? 'Запустите сканирование и добавьте найденные площадки в мониторинг.' : 'Источники появятся после настройки администратором workspace.'}</div>
+            {canWrite ? (
+              <button
+                type="button"
+                onClick={handleStartSync}
+                disabled={syncing}
+                className="mt-4 inline-flex h-11 items-center justify-center rounded-2xl border border-cyan-300/35 bg-cyan-300/90 px-5 text-sm font-bold text-slate-950 transition hover:bg-cyan-200 hover:shadow-[0_0_22px_rgba(103,232,249,0.24)] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {syncing ? <Spinner /> : 'Запустить сканирование'}
+              </button>
+            ) : null}
           </div>
         )}
       </Card>

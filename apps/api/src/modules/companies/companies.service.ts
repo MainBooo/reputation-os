@@ -489,6 +489,51 @@ export class CompaniesService {
 
   }
 
+  private async enqueueInitialWebScan(params: { companyId: string; userId: string; requestedAt: string }) {
+    const { companyId, userId, requestedAt } = params
+
+    try {
+      this.logger.log(`[WebInit] enqueue mentions.sync start companyId=${companyId}`)
+
+      const mentionsJob = await this.mentionsSyncQueue.add(
+        JOBS.MENTIONS_SYNC,
+        {
+          companyId,
+          triggeredByUserId: userId,
+          requestedAt,
+          scope: 'WEB',
+          autoStart: true
+        },
+        SYNC_JOB_OPTIONS
+      )
+
+      await this.prisma.jobLog.create({
+        data: {
+          companyId,
+          triggeredByUserId: userId,
+          queueName: QUEUES.MENTIONS_SYNC,
+          jobName: JOBS.MENTIONS_SYNC,
+          jobStatus: 'PENDING',
+          result: {
+            bullJobId: String(mentionsJob.id),
+            requestedAt,
+            scope: 'WEB',
+            autoStart: true
+          } as Prisma.InputJsonValue
+        }
+      })
+
+      this.logger.log(`[WebInit] enqueue mentions.sync success companyId=${companyId} bullJobId=${String(mentionsJob.id)}`)
+    } catch (error) {
+      this.logger.error(
+        `[WebInit] enqueue mentions.sync failed companyId=${companyId}`,
+        error instanceof Error ? error.stack : String(error)
+      )
+    }
+
+    await this.refreshWebMentionsRepeat(companyId)
+  }
+
   async findAll(userId: string) {
     const currentUser = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -643,6 +688,12 @@ export class CompaniesService {
         })
         this.logger.log(`[WebInit] root target created companyId=${company.id}`)
       }
+
+      await this.enqueueInitialWebScan({
+        companyId: company.id,
+        userId,
+        requestedAt: new Date().toISOString()
+      })
     }
 
     return company
