@@ -2,6 +2,60 @@
 
 ## ReputationOS billing/admin state
 
+## Development Workflow (Mandatory)
+
+Before making ANY code changes:
+
+1. Read the existing code first.
+2. Analyze the implementation before proposing changes.
+3. Present a short implementation plan.
+4. List:
+   - files that will be modified;
+   - why they need to be modified;
+   - possible risks;
+   - alternative approaches (if applicable).
+5. Wait for explicit user approval before editing any file.
+
+While implementing:
+
+- Prefer minimal patches instead of rewriting entire files.
+- Preserve the current architecture unless explicitly approved.
+- Explain major decisions.
+- Complete work in small logical steps.
+- Report progress after each step.
+
+Before finishing:
+
+- Build the affected application if required.
+- Run all relevant checks/tests.
+- Verify responsive layouts if frontend changes were made.
+- Summarize exactly what changed.
+- Never commit unless the user explicitly requests it.
+
+Forbidden without explicit approval:
+
+- git commit
+- git push
+- deleting files
+- database migrations
+- architecture changes
+- dependency upgrades
+- large-scale refactoring
+
+## Thinking First
+
+Prefer spending additional time analyzing the existing implementation before editing code.
+
+When the task is non-trivial:
+
+- inspect the current implementation;
+- understand why it works;
+- identify root causes instead of symptoms;
+- propose the best solution rather than the fastest one.
+
+Accuracy is more important than speed.
+
+
 Current billing model:
 - Real plans: FREE, START, PRO, AGENCY.
 - Do not use old fake plan codes: STARTER, BUSINESS, ENTERPRISE, CUSTOM.
