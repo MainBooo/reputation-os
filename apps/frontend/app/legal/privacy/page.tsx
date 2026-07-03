@@ -2,6 +2,10 @@ import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
   title: 'Политика конфиденциальности — Reputation OS',
+  description: 'Политика конфиденциальности Reputation OS: какие данные собираются, как хранятся, кому передаются и как их удалить.',
+  openGraph: {
+    url: 'https://reputation.generationweb.ru/legal/privacy',
+  },
 }
 
 function S({ n, title, children }: { n: string; title: string; children: React.ReactNode }) {

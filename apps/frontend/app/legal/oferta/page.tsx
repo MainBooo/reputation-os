@@ -2,6 +2,10 @@ import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
   title: 'Публичная оферта — Reputation OS',
+  description: 'Публичная оферта Reputation OS: условия доступа, пробный период, порядок оплаты через ЮKassa и возврата средств.',
+  openGraph: {
+    url: 'https://reputation.generationweb.ru/legal/oferta',
+  },
 }
 
 function S({ n, title, children }: { n: string; title: string; children: React.ReactNode }) {
