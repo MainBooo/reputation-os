@@ -6,6 +6,7 @@ export default function robots(): MetadataRoute.Robots {
       userAgent: '*',
       disallow: '/',
       allow: ['/legal', '/register']
-    }
+    },
+    sitemap: 'https://reputation.generationweb.ru/sitemap.xml'
   }
 }
