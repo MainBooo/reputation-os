@@ -1,14 +1,19 @@
 import { Controller, Get, Param, Post, UseGuards } from '@nestjs/common'
+import { Throttle } from '@nestjs/throttler'
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard'
 import { CurrentUser } from '../../common/decorators/current-user.decorator'
 import { AuthUser } from '../../common/auth/auth-user.type'
 import { SyncService } from './sync.service'
+import { AppThrottlerGuard } from '../../common/rate-limit/app-throttler.guard'
+import { RATE_LIMITS } from '../../common/rate-limit/rate-limit.config'
+import { userAndCompanyTracker } from '../../common/rate-limit/rate-limit-trackers'
 
 @Controller()
 export class SyncController {
   constructor(private readonly syncService: SyncService) {}
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, AppThrottlerGuard)
+  @Throttle({ default: { ...RATE_LIMITS.discoverSources, getTracker: userAndCompanyTracker } })
   @Post('companies/:id/discover-sources')
   discoverSources(@CurrentUser() user: AuthUser, @Param('id') companyId: string) {
     return this.syncService.discoverSources(user.id, companyId)

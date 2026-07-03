@@ -1,4 +1,5 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common'
+import { Throttle } from '@nestjs/throttler'
 import { CompaniesService } from './companies.service'
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard'
 import { DemoProtectionGuard } from '../../common/guards/demo-protection.guard'
@@ -9,6 +10,9 @@ import { UpdateCompanyDto } from './dto/update-company.dto'
 import { CreateCompanyAliasDto } from './dto/create-company-alias.dto'
 import { CreateCompanySourceTargetDto } from './dto/create-company-source-target.dto'
 import { UpdateCompanySourceTargetDto } from './dto/update-company-source-target.dto'
+import { AppThrottlerGuard } from '../../common/rate-limit/app-throttler.guard'
+import { RATE_LIMITS } from '../../common/rate-limit/rate-limit.config'
+import { userAndWorkspaceTracker } from '../../common/rate-limit/rate-limit-trackers'
 
 @UseGuards(JwtAuthGuard)
 @Controller('companies')
@@ -20,6 +24,8 @@ export class CompaniesController {
     return this.companiesService.findAll(user.id)
   }
 
+  @UseGuards(AppThrottlerGuard)
+  @Throttle({ default: { ...RATE_LIMITS.createCompany, getTracker: userAndWorkspaceTracker } })
   @Post()
   create(@CurrentUser() user: AuthUser, @Body() dto: CreateCompanyDto) {
     return this.companiesService.create(user.id, dto)

@@ -17,12 +17,14 @@ import { PushModule } from './modules/push/push.module'
 import { TelegramApiModule } from "./telegram/telegram.module"
 import { BillingModule } from './modules/billing/billing.module'
 import { ChatModule } from './modules/chat/chat.module'
+import { RateLimitModule } from './common/rate-limit/rate-limit.module'
 
 @Module({
   imports: [
     ConfigModule,
     PrismaModule,
     BullmqModule,
+    RateLimitModule,
     HealthModule,
     AuthModule,
     WorkspacesModule,

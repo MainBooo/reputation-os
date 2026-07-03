@@ -1,4 +1,5 @@
 import { Body, Controller, ForbiddenException, Get, Headers, HttpCode, Post, UseGuards } from '@nestjs/common'
+import { Throttle } from '@nestjs/throttler'
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard'
 import { CurrentUser } from '../../common/decorators/current-user.decorator'
 import { AuthUser } from '../../common/auth/auth-user.type'
@@ -6,6 +7,9 @@ import { PrismaService } from '../../common/prisma/prisma.service'
 import { EntitlementsService } from './entitlements.service'
 import { BillingService, YookassaWebhookPayload } from './billing.service'
 import { CreateCheckoutDto } from './dto/create-checkout.dto'
+import { AppThrottlerGuard } from '../../common/rate-limit/app-throttler.guard'
+import { RATE_LIMITS } from '../../common/rate-limit/rate-limit.config'
+import { userTracker } from '../../common/rate-limit/rate-limit-trackers'
 
 @Controller('billing')
 export class BillingController {
@@ -31,14 +35,16 @@ export class BillingController {
   }
 
   // ── Legacy checkout (mock-provider, keeps backward compat) ─────────────────
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, AppThrottlerGuard)
+  @Throttle({ default: { ...RATE_LIMITS.billingCheckout, getTracker: userTracker } })
   @Post('checkout')
   createCheckout(@CurrentUser() user: AuthUser, @Body() dto: CreateCheckoutDto) {
     return this.billing.createCheckout(user.id, dto.planCode)
   }
 
-  // ── YooKassa: create payment ───────────────────────────────────────────────
-  @UseGuards(JwtAuthGuard)
+  // ── YooKassa: create payment (реальный чекаут, вызывается фронтендом) ──────
+  @UseGuards(JwtAuthGuard, AppThrottlerGuard)
+  @Throttle({ default: { ...RATE_LIMITS.billingCheckout, getTracker: userTracker } })
   @Post('yookassa/create-payment')
   createYookassaPayment(@CurrentUser() user: AuthUser, @Body() dto: CreateCheckoutDto) {
     return this.billing.createCheckout(user.id, dto.planCode, dto.period ?? 'monthly')
@@ -53,6 +59,8 @@ export class BillingController {
 
   // ── YooKassa: webhook (no secret header — YooKassa uses IP allowlisting) ──
   // Idempotent: repeated events are safely ignored.
+  // Намеренно без AppThrottlerGuard — это server-to-server callback от ЮKassa
+  // (может ретраить события), а не публичный пользовательский эндпоинт.
   @Post('yookassa/webhook')
   @HttpCode(200)
   handleYookassaWebhook(@Body() payload: YookassaWebhookPayload) {

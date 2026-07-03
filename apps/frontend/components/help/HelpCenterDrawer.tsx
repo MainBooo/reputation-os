@@ -598,7 +598,7 @@ export default function HelpCenterDrawer({ open, onClose }: HelpCenterDrawerProp
                       Не нашли ответ? Напишите нам — ответим быстро.
                     </p>
                     <a
-                      href="https://t.me/reputationos_support"
+                      href={process.env.NEXT_PUBLIC_SUPPORT_TELEGRAM_URL || 'https://t.me/reputationos_support'}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-2 rounded-[14px] border border-cyan-400/25 bg-cyan-500/10 px-4 py-2.5 text-sm font-semibold text-cyan-200 transition hover:bg-cyan-500/20 active:scale-[0.97]"
