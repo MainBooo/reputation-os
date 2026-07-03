@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useMetrica } from 'next-yandex-metrica'
 import { Sparkles } from 'lucide-react'
 import Card from '@/components/ui/Card'
 import Input from '@/components/ui/Input'
@@ -10,6 +11,7 @@ import { register } from '@/lib/api/auth'
 
 export default function RegisterPage() {
   const router = useRouter()
+  const { reachGoal } = useMetrica()
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -44,6 +46,7 @@ export default function RegisterPage() {
         document.cookie = `accessToken=${encodeURIComponent(result.accessToken)}; path=/; max-age=${60 * 60 * 24 * 7}; samesite=lax`
       }
 
+      reachGoal('registration_success')
       router.replace('/companies?onboarding=1')
       router.refresh()
     } catch (err: any) {

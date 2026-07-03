@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { useMetrica } from 'next-yandex-metrica'
 import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import { apiFetch } from '@/lib/api/client'
@@ -17,6 +18,7 @@ interface LinkTokenResponse {
 const TG_PATH = '/telegram'
 
 export function TelegramConnectSection() {
+  const { reachGoal } = useMetrica()
   const [status, setStatus] = useState<TelegramStatus | null>(null)
   const [loading, setLoading] = useState(false)
   const [connecting, setConnecting] = useState(false)
@@ -51,9 +53,10 @@ export function TelegramConnectSection() {
       if (data?.linked) {
         stopPolling()
         setConnecting(false)
+        reachGoal('telegram_connected')
       }
     }, 3000)
-  }, [fetchStatus, stopPolling])
+  }, [fetchStatus, stopPolling, reachGoal])
 
   useEffect(() => () => stopPolling(), [stopPolling])
 

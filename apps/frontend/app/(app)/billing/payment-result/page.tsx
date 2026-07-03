@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useMetrica } from 'next-yandex-metrica'
 import { CheckCircle2, Loader2, AlertCircle, RotateCcw } from 'lucide-react'
 import { getMyEntitlements, syncPendingPayments } from '@/lib/api/billing'
 import { useSubscription } from '@/lib/subscription/SubscriptionContext'
@@ -12,6 +13,7 @@ const POLL_INTERVAL_MS = 3000
 export default function PaymentResultPage() {
   const router = useRouter()
   const { refresh } = useSubscription()
+  const { reachGoal } = useMetrica()
   const [status, setStatus] = useState<'checking' | 'success' | 'pending' | 'error'>('checking')
   const pollCount = useRef(0)
 
@@ -28,6 +30,8 @@ export default function PaymentResultPage() {
 
         if (isActive) {
           await refresh()
+          reachGoal('payment_success')
+          reachGoal('subscription_activated')
           setStatus('success')
           return
         }

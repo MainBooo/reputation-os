@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { useMetrica } from 'next-yandex-metrica'
 import { Sparkles, Check, Star } from 'lucide-react'
 import Card from '@/components/ui/Card'
 import {
@@ -331,6 +332,7 @@ function CheckoutInner() {
   const searchParams = useSearchParams()
   const initialPlan = searchParams.get('plan') ?? ''
   const { entitlements } = useSubscription()
+  const { reachGoal } = useMetrica()
 
   const [plans, setPlans] = useState<BillingPlan[]>([])
   const [selectedCode, setSelectedCode] = useState(initialPlan)
@@ -359,10 +361,12 @@ function CheckoutInner() {
     setErrorMsg('')
     try {
       const result = await createCheckout(selectedCode, period)
+      reachGoal('checkout_started')
       if (result?.confirmationUrl?.startsWith('http')) {
         window.location.href = result.confirmationUrl
         return
       }
+      reachGoal('subscription_activated')
       setStep('success')
     } catch (e) {
       setErrorMsg(e instanceof Error ? e.message : 'Не удалось создать платёж.')

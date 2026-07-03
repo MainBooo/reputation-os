@@ -200,6 +200,9 @@ importers:
       next:
         specifier: 14.2.5
         version: 14.2.5(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      next-yandex-metrica:
+        specifier: ^1.2.3
+        version: 1.2.3(next@14.2.5(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)
       react:
         specifier: 18.3.1
         version: 18.3.1
@@ -249,6 +252,9 @@ importers:
       next:
         specifier: 14.2.5
         version: 14.2.5(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      next-yandex-metrica:
+        specifier: ^1.2.3
+        version: 1.2.3(next@14.2.5(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)
       react:
         specifier: ^18.3.1
         version: 18.3.1
@@ -3385,6 +3391,12 @@ packages:
       reflect-metadata: ^0.2.2
       telegraf: ^4.0.0
       typescript: ^4.1.2 || ^5.0.0
+
+  next-yandex-metrica@1.2.3:
+    resolution: {integrity: sha512-/hsWYh4MrXDytYU78e4zYgFhmALCYStFu9gQ/dFouYc6yRfn+B+Z+q5ZNnsamoNDOlfZybJ/eERN+UCmU7BasA==}
+    peerDependencies:
+      next: '>=11.0.0'
+      react: '>=17.0.0'
 
   next@14.2.5:
     resolution: {integrity: sha512-0f8aRfBVL+mpzfBjYfQuLWh2WyAwtJXCRfkPF4UJ5qd2YwrHczsrSzXU4tRMV0OAxR8ZJZWPFn6uhSC56UTsLA==}
@@ -7951,6 +7963,11 @@ snapshots:
       reflect-metadata: 0.1.14
       telegraf: 4.16.3
       typescript: 5.9.3
+
+  next-yandex-metrica@1.2.3(next@14.2.5(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1):
+    dependencies:
+      next: 14.2.5(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      react: 18.3.1
 
   next@14.2.5(react-dom@18.3.1(react@18.3.1))(react@18.3.1):
     dependencies:

@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useMetrica } from 'next-yandex-metrica'
 import { updateCompanySourceTarget } from '@/lib/api/companies'
 
 type RootTarget = { id: string; syncMentionsEnabled?: boolean }
@@ -14,6 +15,7 @@ export default function WebMonitoringToggle({
   rootTargets: RootTarget[]
 }) {
   const router = useRouter()
+  const { reachGoal } = useMetrica()
   const initialEnabled = rootTargets.some((t) => t.syncMentionsEnabled !== false)
   const [enabled, setEnabled] = useState(initialEnabled)
   const [loading, setLoading] = useState(false)
@@ -32,6 +34,7 @@ export default function WebMonitoringToggle({
           })
         )
       )
+      if (next) reachGoal('monitoring_enabled')
       router.refresh()
     } catch {
       setEnabled(!next)

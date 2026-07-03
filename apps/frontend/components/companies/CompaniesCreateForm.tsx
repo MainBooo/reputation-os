@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useMetrica } from 'next-yandex-metrica'
 import clsx from 'clsx'
 import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -56,6 +57,7 @@ function getReadinessScore(params: {
 
 export default function CompaniesCreateForm() {
   const router = useRouter()
+  const { reachGoal } = useMetrica()
 
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
   const [workspaceId, setWorkspaceId] = useState('')
@@ -172,6 +174,7 @@ export default function CompaniesCreateForm() {
         keywords
       })) as CreatedCompany
 
+      reachGoal('company_created')
       router.push(`/companies/${company.id}`)
       router.refresh()
     } catch (e) {
