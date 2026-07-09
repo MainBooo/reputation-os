@@ -16,6 +16,7 @@ export class MentionService {
     title?: string | null
     content: string
     author?: string | null
+    authorExternalId?: string | null
     publishedAt: Date
     ratingValue?: number | null
     rawPayload?: unknown

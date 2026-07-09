@@ -28,6 +28,7 @@ export class DedupService {
     content?: string | null
     normalizedContent?: string | null
     author?: string | null
+    authorExternalId?: string | null
     url?: string | null
     publishedAt?: Date | null
     ratingValue?: any
@@ -39,6 +40,7 @@ export class DedupService {
     content: string
     normalizedContent: string
     author?: string | null
+    authorExternalId?: string | null
     url?: string | null
     publishedAt: Date
     ratingValue?: number | null
@@ -55,6 +57,7 @@ export class DedupService {
       content: params.content || existing.content || '',
       normalizedContent: params.normalizedContent || existing.normalizedContent || '',
       author: params.author || existing.author || null,
+      authorExternalId: params.authorExternalId || existing.authorExternalId || null,
       url: params.url || existing.url || null,
       publishedAt: nextPublishedAt,
       ratingValue: nextRating,
@@ -74,6 +77,7 @@ export class DedupService {
     title?: string | null
     content: string
     author?: string | null
+    authorExternalId?: string | null
     publishedAt: Date
     ratingValue?: number | null
     companySourceTargetId?: string | null
@@ -161,6 +165,7 @@ export class DedupService {
         content: params.content,
         normalizedContent,
         author: params.author || null,
+        authorExternalId: params.authorExternalId || null,
         publishedAt: params.publishedAt,
         ratingValue: params.ratingValue ?? null,
         sentiment: this.classifyMentionSentiment(normalizedContent, params.ratingValue),

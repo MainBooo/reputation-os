@@ -8,6 +8,7 @@ type ExternalMention = {
   title: string | null
   content: string
   author: string | null
+  authorExternalId: string | null
   publishedAt: Date
   ratingValue: number | null
 }
@@ -534,6 +535,8 @@ export class YandexAdapter {
 
                           author: item.author?.name || item.authorName || item.user?.name || null,
 
+                          authorExternalId: item.author?.publicId || item.authorPublicId || item.user?.publicId || null,
+
 
                           content,
 
@@ -609,6 +612,22 @@ export class YandexAdapter {
             return null
           }
 
+          function getAuthorExternalId(review: HTMLElement) {
+            const selectors = [
+              '.business-review-view__link',
+              '.business-review-view__user-icon',
+              'a[href*="/maps/user/"]'
+            ]
+
+            for (const selector of selectors) {
+              const href = review.querySelector<HTMLAnchorElement>(selector)?.getAttribute('href')
+              const match = href?.match(/\/maps\/user\/([^/?#]+)/)
+              if (match?.[1]) return match[1]
+            }
+
+            return null
+          }
+
           function getPublishedAt(review: HTMLElement) {
             const meta = review.querySelector<HTMLMetaElement>('meta[itemprop="datePublished"]')
             const content = meta?.getAttribute('content')?.trim()
@@ -650,6 +669,7 @@ export class YandexAdapter {
               const publishedAt = getPublishedAt(review)
               const ratingValue = getRating(review)
               const author = getAuthor(review)
+              const authorExternalId = getAuthorExternalId(review)
               const reviewId =
                 review.getAttribute('data-review-id') ||
                 review.getAttribute('data-review') ||
@@ -662,6 +682,7 @@ export class YandexAdapter {
                 title: null,
                 content,
                 author,
+                authorExternalId,
                 publishedAt,
                 ratingValue
               }
@@ -851,6 +872,7 @@ export class YandexAdapter {
         title?: string | null
         content: string
         author: string | null
+        authorExternalId?: string | null
         publishedAt: string | null
         ratingValue: number | null
       }) => {
@@ -863,6 +885,7 @@ export class YandexAdapter {
             title: item.title || null,
             content: item.content,
             author: item.author,
+            authorExternalId: item.authorExternalId ?? null,
             publishedAt,
             ratingValue: item.ratingValue ?? null,
             sourceMetadata: organizationLogoUrl ? { logoUrl: organizationLogoUrl } : undefined

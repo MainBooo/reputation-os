@@ -105,6 +105,7 @@ export class ReviewsSyncProcessor implements OnModuleInit, OnModuleDestroy {
             title: item.title,
             content: item.content,
             author: item.author,
+            authorExternalId: item.authorExternalId,
             publishedAt: item.publishedAt,
             ratingValue: item.ratingValue,
             rawPayload: item,

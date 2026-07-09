@@ -2,9 +2,19 @@
 
 import { ReactNode, useState } from 'react'
 import clsx from 'clsx'
+import { MapPin } from 'lucide-react'
 import Badge from '../ui/Badge'
 import MentionChatPanel from '@/components/chat/MentionChatPanel'
 import { generateReply } from '@/lib/api/mentions'
+
+function getYandexReviewDeepLink(mention: any): string | null {
+  if (mention?.platform !== 'YANDEX' || !mention?.authorExternalId) return null
+
+  const orgId = String(mention.url || '').match(/\/maps\/org\/[^/]+\/(\d+)/)?.[1]
+  if (!orgId) return null
+
+  return `https://yandex.ru/maps/org/${orgId}/reviews?reviews%5BpublicId%5D=${encodeURIComponent(mention.authorExternalId)}&utm_source=review`
+}
 
 function platformLabel(value?: string | null) {
   if (value === 'YANDEX') return 'Яндекс'
@@ -128,6 +138,7 @@ export default function MentionRow({
       : mention.sentiment
 
   const sourceUrl = mention.url || mention.sourceUrl || null
+  const yandexDeepLink = getYandexReviewDeepLink(mention)
   const faviconUrl = getFaviconUrl(sourceUrl)
   const sourceHostname = getSourceHostname(sourceUrl)
   const readableSourceType = sourceTypeLabel(mention, sourceHostname)
@@ -157,6 +168,18 @@ export default function MentionRow({
     } catch {
       setReplyError('Не удалось скопировать ответ')
     }
+  }
+
+  async function handleCopyAndOpenYandex() {
+    if (!replyText || !yandexDeepLink) return
+    try {
+      await navigator.clipboard.writeText(replyText)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1800)
+    } catch {
+      setReplyError('Не удалось скопировать ответ')
+    }
+    window.open(yandexDeepLink, '_blank', 'noopener,noreferrer')
   }
 
   const ratingBadgeClass =
@@ -235,9 +258,22 @@ export default function MentionRow({
         <div className="mt-4 w-full rounded-2xl border border-cyan-400/20 bg-cyan-400/[0.06] p-4">
           <div className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-cyan-200">Ответ от AI</div>
           <div className="whitespace-pre-wrap break-words text-sm leading-6 text-slate-100">{replyText}</div>
-          <button type="button" onClick={handleCopyReply} className="mt-3 rounded-lg border border-cyan-400/30 bg-cyan-400/10 px-3 py-1.5 text-xs text-cyan-100">
-            {copied ? 'Скопировано' : 'Скопировать'}
-          </button>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <button type="button" onClick={handleCopyReply} className="rounded-lg border border-cyan-400/30 bg-cyan-400/10 px-3 py-1.5 text-xs text-cyan-100">
+              {copied ? 'Скопировано' : 'Скопировать'}
+            </button>
+
+            {yandexDeepLink ? (
+              <button
+                type="button"
+                onClick={handleCopyAndOpenYandex}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-cyan-400/30 bg-cyan-400/10 px-3 py-1.5 text-xs text-cyan-100"
+              >
+                <MapPin size={14} />
+                {copied ? 'Скопировано, открываю…' : 'Скопировать и открыть в Яндекс.Картах'}
+              </button>
+            ) : null}
+          </div>
         </div>
       ) : null}
 
