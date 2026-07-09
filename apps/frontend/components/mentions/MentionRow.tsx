@@ -2,7 +2,6 @@
 
 import { ReactNode, useState } from 'react'
 import clsx from 'clsx'
-import { MapPin } from 'lucide-react'
 import Badge from '../ui/Badge'
 import MentionChatPanel from '@/components/chat/MentionChatPanel'
 import { generateReply } from '@/lib/api/mentions'
@@ -170,18 +169,6 @@ export default function MentionRow({
     }
   }
 
-  async function handleCopyAndOpenYandex() {
-    if (!replyText || !yandexDeepLink) return
-    try {
-      await navigator.clipboard.writeText(replyText)
-      setCopied(true)
-      window.setTimeout(() => setCopied(false), 1800)
-    } catch {
-      setReplyError('Не удалось скопировать ответ')
-    }
-    window.open(yandexDeepLink, '_blank', 'noopener,noreferrer')
-  }
-
   const ratingBadgeClass =
     numericRating !== null && Number.isFinite(numericRating)
       ? numericRating >= 4
@@ -230,7 +217,11 @@ export default function MentionRow({
         </div>
 
         <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
-          {sourceUrl ? (
+          {yandexDeepLink ? (
+            <a href={yandexDeepLink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded-md border border-violet-400/40 bg-cyan-400/10 px-2.5 py-1 text-xs text-blue-300 transition-all hover:bg-cyan-400/20 hover:text-white">
+              Открыть отзыв →
+            </a>
+          ) : sourceUrl ? (
             <a href={sourceUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded-md border border-violet-400/40 bg-cyan-400/10 px-2.5 py-1 text-xs text-blue-300 transition-all hover:bg-cyan-400/20 hover:text-white">
               Открыть источник →
             </a>
@@ -262,17 +253,6 @@ export default function MentionRow({
             <button type="button" onClick={handleCopyReply} className="rounded-lg border border-cyan-400/30 bg-cyan-400/10 px-3 py-1.5 text-xs text-cyan-100">
               {copied ? 'Скопировано' : 'Скопировать'}
             </button>
-
-            {yandexDeepLink ? (
-              <button
-                type="button"
-                onClick={handleCopyAndOpenYandex}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-cyan-400/30 bg-cyan-400/10 px-3 py-1.5 text-xs text-cyan-100"
-              >
-                <MapPin size={14} />
-                {copied ? 'Скопировано, открываю…' : 'Скопировать и открыть в Яндекс.Картах'}
-              </button>
-            ) : null}
           </div>
         </div>
       ) : null}
