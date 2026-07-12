@@ -160,9 +160,11 @@ export class PageWatchExtractor {
     if (items.length > 0) return items.slice(0, 50)
 
     // Паттерн 2: микроразметка itemprop="reviewBody"
-    const reviewBodies = html.match(/itemprop="reviewBody"[^>]*>([\s\S]*?)<\//gi) || []
-    for (const block of reviewBodies) {
-      const content = this.stripTags(block)
+    // matchAll + capture group, а не match(/…/g) — иначе block содержит весь
+    // матч включая "itemprop="reviewBody">" и хвостовой "</" (не полноценные
+    // теги, stripTags их не срезает).
+    for (const m of html.matchAll(/itemprop="reviewBody"[^>]*>([\s\S]*?)<\//gi)) {
+      const content = this.stripTags(m[1])
       if (content.length < 15) continue
       items.push(this.makeItem('review', content, undefined, undefined, new Date(), pageUrl))
     }
