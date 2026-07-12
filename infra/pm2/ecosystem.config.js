@@ -16,7 +16,7 @@ module.exports = {
       script: 'dist/main.js',
       env: {
         NODE_ENV: 'production',
-        REDIS_URL: 'redis://127.0.0.1:6380'
+        REDIS_URL: 'redis://127.0.0.1:6379'
       }
     },
     {
