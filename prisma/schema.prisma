@@ -680,6 +680,7 @@ model WatchedPage {
   url               String
   domain            String
   pageType          String    @default("UNKNOWN")
+  pageTypeCheckedAt DateTime?
   enabled           Boolean   @default(true)
   lastCheckedAt     DateTime?
   lastChangedAt     DateTime?

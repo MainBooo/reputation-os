@@ -12,6 +12,7 @@ import { classifySentiment } from '../common/utils/sentiment.util'
 const DOMAIN_LOCK_PREFIX = 'pw:domain:'
 const DOMAIN_LOCK_TTL_SEC = 10
 const MAX_CONSECUTIVE_ERRORS = 5
+const PAGE_TYPE_TTL_MS = 30 * 24 * 60 * 60 * 1000
 
 // Selectors tried in priority order for semantic content extraction
 const SEMANTIC_SELECTORS = ['main', 'article', '[role="main"]', '#content', '#main', '.content', '.main']
@@ -225,10 +226,14 @@ export class PageWatchProcessor implements OnModuleInit, OnModuleDestroy {
       const newHash = this.hashText(text)
       const changed = newHash !== page.contentHash
 
-      // ── Detect page type if unknown ───────────────────────────────────────
+      // ── Detect page type if unknown or stale (site structure may have changed) ─
       let pageType = page.pageType
-      if (pageType === 'UNKNOWN' || !pageType) {
+      const pageTypeStale =
+        !page.pageTypeCheckedAt || Date.now() - page.pageTypeCheckedAt.getTime() > PAGE_TYPE_TTL_MS
+      let pageTypeCheckedAt = page.pageTypeCheckedAt
+      if (pageType === 'UNKNOWN' || !pageType || pageTypeStale) {
         pageType = await this.extractor.detectPageTypeWithLlm(html, page.url)
+        pageTypeCheckedAt = new Date()
         console.log(`[PageWatch] detected pageType=${pageType} for ${page.url}`)
       }
 
@@ -238,6 +243,7 @@ export class PageWatchProcessor implements OnModuleInit, OnModuleDestroy {
         nextCheckAt: this.nextCheckAt(page.checkIntervalMin),
         contentHash: newHash,
         pageType,
+        pageTypeCheckedAt,
         etag: newEtag,
         lastModifiedHeader: newLastModified,
         ...(changed ? { lastChangedAt: new Date() } : {})
