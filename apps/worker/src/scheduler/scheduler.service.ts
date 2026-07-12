@@ -5,6 +5,7 @@ import { QUEUES } from '../queues/queue.names'
 import { JOBS } from '../queues/job.names'
 import { CRON_JOB_OPTIONS } from '../queues/job-options'
 import { PageWatchDispatcherProcessor } from '../processors/page-watch-dispatcher.processor'
+import { DeepScanProcessor } from '../processors/deep-scan.processor'
 
 const HEARTBEAT_KEY = 'worker:heartbeat'
 const HEARTBEAT_TTL_SECONDS = 120
@@ -26,7 +27,9 @@ export class SchedulerService implements OnModuleInit {
     @Inject(`QUEUE_${QUEUES.PAGE_WATCH}`) private readonly pageWatchQueue: Queue,
     @Inject(`QUEUE_${QUEUES.PAGE_WATCH_DISPATCHER}`) private readonly pageWatchDispatcherQueue: Queue,
     @Inject(`QUEUE_${QUEUES.SUBSCRIPTION_REMINDER}`) private readonly subscriptionReminderQueue: Queue,
-    private readonly pageWatchDispatcher: PageWatchDispatcherProcessor
+    @Inject(`QUEUE_${QUEUES.DEEP_SCAN}`) private readonly deepScanQueue: Queue,
+    private readonly pageWatchDispatcher: PageWatchDispatcherProcessor,
+    private readonly deepScan: DeepScanProcessor
   ) {}
 
   private async writeHeartbeat() {
@@ -222,8 +225,14 @@ export class SchedulerService implements OnModuleInit {
       this.logger.warn(`Failed to ensure subscription reminder cron: ${error?.message || error}`)
     })
 
+    // DeepScan: weekly promotion of already-discovered (mentions-sync/WebMentionAdapter)
+    // WEB targets into continuous WatchedPage monitoring — no new search, no new filtering.
+    await this.deepScan.ensureCron(this.deepScanQueue).catch((error) => {
+      this.logger.warn(`Failed to ensure deep-scan cron: ${error?.message || error}`)
+    })
+
     this.logger.log(
-      `Scheduler initialized reviewCronTargets=${reviewTargets.length} webCronCompanies=${webTargetsByCompany.size} alertCheckEveryMinutes=5 pageWatchDispatcherEveryMinutes=5 subscriptionReminderEveryHours=24`
+      `Scheduler initialized reviewCronTargets=${reviewTargets.length} webCronCompanies=${webTargetsByCompany.size} alertCheckEveryMinutes=5 pageWatchDispatcherEveryMinutes=5 subscriptionReminderEveryHours=24 deepScanEveryDays=7`
     )
   }
 }

@@ -8,5 +8,6 @@ export const QUEUES = {
   ALERT_CHECK: 'alert_check',
   PAGE_WATCH: 'page_watch',
   PAGE_WATCH_DISPATCHER: 'page_watch_dispatcher',
-  SUBSCRIPTION_REMINDER: 'subscription_reminder'
+  SUBSCRIPTION_REMINDER: 'subscription_reminder',
+  DEEP_SCAN: 'deep_scan'
 } as const
