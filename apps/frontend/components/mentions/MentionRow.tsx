@@ -111,11 +111,13 @@ function getFaviconUrl(sourceUrl?: string | null) {
 export default function MentionRow({
   mention,
   actions,
+  checkbox,
   hideMetaBadges = false,
   workspaceId
 }: {
   mention: any
   actions?: ReactNode
+  checkbox?: ReactNode
   hideMetaBadges?: boolean
   workspaceId?: string
 }) {
@@ -189,6 +191,9 @@ export default function MentionRow({
 
   return (
     <div className="rounded-2xl border border-line bg-[#050816] p-4 sm:p-5">
+    <div className="flex gap-3">
+    {checkbox ? <div className="shrink-0 pt-0.5">{checkbox}</div> : null}
+    <div className="min-w-0 flex-1">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
@@ -262,6 +267,8 @@ export default function MentionRow({
           <MentionChatPanel mentionId={mention.id} workspaceId={workspaceId} />
         </div>
       ) : null}
+    </div>
+    </div>
     </div>
   )
 }
