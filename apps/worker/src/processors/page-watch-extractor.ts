@@ -66,13 +66,72 @@ export class PageWatchExtractor {
 
   // ─── Извлечение элементов ────────────────────────────────────────────────
 
-  extractItems(html: string, pageType: PageType, pageUrl: string): ExtractedItem[] {
+  async extractItems(html: string, pageType: PageType, pageUrl: string, cheerioText: string): Promise<ExtractedItem[]> {
+    let items: ExtractedItem[]
     switch (pageType) {
-      case 'REVIEWS':   return this.extractReviews(html, pageUrl)
-      case 'ARTICLES':  return this.extractArticles(html, pageUrl)
-      case 'FORUM':     return this.extractComments(html, pageUrl)
+      case 'REVIEWS':   items = this.extractReviews(html, pageUrl); break
+      case 'ARTICLES':  items = this.extractArticles(html, pageUrl); break
+      case 'FORUM':     items = this.extractComments(html, pageUrl); break
       case 'DIRECTORY': return []  // каталоги не парсим — только список организаций
       default:          return []  // UNKNOWN = JS-сайт или нераспознанный, не создаём мусор
+    }
+
+    if (items.length === 0) {
+      items = await this.extractItemsWithLlm(cheerioText, pageType, pageUrl)
+    }
+    return items
+  }
+
+  // ─── YandexGPT fallback для извлечения items, когда структурные методы дали пусто ─
+  // Возвращает ТОЛЬКО { text, author, date } — sentiment сюда не входит, его считает
+  // batchLlmSentiment дальше по пайплайну (page-watch.processor.ts).
+  private async extractItemsWithLlm(cheerioText: string, pageType: PageType, pageUrl: string): Promise<ExtractedItem[]> {
+    const apiKey = process.env.YANDEX_GPT_API_KEY
+    const folderId = process.env.YANDEX_GPT_FOLDER_ID
+    if (!apiKey || !folderId || cheerioText.length < 50) return []
+
+    const kind = pageType === 'REVIEWS' ? 'отзывы' : pageType === 'ARTICLES' ? 'статьи' : 'сообщения форума'
+    const itemType: ExtractedItem['itemType'] = pageType === 'REVIEWS' ? 'review' : pageType === 'ARTICLES' ? 'article' : 'comment'
+    const snippet = cheerioText.slice(0, 4000)
+
+    try {
+      const { data } = await axios.post(
+        'https://llm.api.cloud.yandex.net/foundationModels/v1/completion',
+        {
+          modelUri: `gpt://${folderId}/yandexgpt-lite`,
+          completionOptions: { stream: false, temperature: 0, maxTokens: 800 },
+          messages: [
+            {
+              role: 'system',
+              text: `Извлеки из текста отдельные ${kind}. Ответь ТОЛЬКО JSON-массивом объектов {"text": "...", "author": "...", "date": "YYYY-MM-DD"}. author и date — null, если не указаны в тексте. Если ничего похожего на ${kind} нет — верни []. Никакого текста вне JSON.`
+            },
+            { role: 'user', text: snippet }
+          ]
+        },
+        { headers: { Authorization: `Api-Key ${apiKey}`, 'Content-Type': 'application/json' }, timeout: 10000 }
+      )
+      const answer: string = data?.result?.alternatives?.[0]?.message?.text?.trim() || '[]'
+      // YandexGPT нередко оборачивает JSON в markdown code fence несмотря на просьбу этого не делать
+      const cleaned = answer.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim()
+      const parsed = JSON.parse(cleaned)
+      if (!Array.isArray(parsed)) return []
+
+      return parsed
+        .filter((r: any) => typeof r?.text === 'string' && r.text.length > 15)
+        .slice(0, 30)
+        .map((r: any) => {
+          const publishedAt = r.date ? new Date(r.date) : undefined
+          return this.makeItem(
+            itemType,
+            r.text,
+            typeof r.author === 'string' ? r.author : undefined,
+            undefined,
+            publishedAt && !isNaN(publishedAt.getTime()) ? publishedAt : undefined,
+            pageUrl
+          )
+        })
+    } catch {
+      return []
     }
   }
 

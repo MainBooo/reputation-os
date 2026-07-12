@@ -252,7 +252,7 @@ export class PageWatchProcessor implements OnModuleInit, OnModuleDestroy {
       // ── Extract items and create Mentions ─────────────────────────────────
       if (page.sourceTarget?.source) {
         const source = page.sourceTarget.source
-        const items = this.extractor.extractItems(html, pageType as any, page.url)
+        const items = await this.extractor.extractItems(html, pageType as any, page.url, text)
         console.log(`[PageWatch] extracted ${items.length} items from ${page.url}`)
 
         // Step 1: keyword-based sentiment pass
