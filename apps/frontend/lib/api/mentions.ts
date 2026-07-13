@@ -23,10 +23,10 @@ export function getCompanyMentions(id: string, query = ''): Promise<CompanyMenti
   })
 }
 
-export function generateReply(id: string) {
+export function generateReply(id: string, preset?: 'FORMAL' | 'FRIENDLY' | 'CONCISE') {
   return apiFetch(`/mentions/${id}/generate-reply`, {
     method: 'POST',
-    body: JSON.stringify({})
+    body: JSON.stringify(preset ? { preset } : {})
   }, {
     draftText: 'Спасибо за отзыв!'
   })

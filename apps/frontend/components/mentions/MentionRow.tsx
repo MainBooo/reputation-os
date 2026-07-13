@@ -1,10 +1,18 @@
 'use client'
 
-import { ReactNode, useState } from 'react'
+import { ReactNode, useEffect, useRef, useState } from 'react'
 import clsx from 'clsx'
 import Badge from '../ui/Badge'
 import MentionChatPanel from '@/components/chat/MentionChatPanel'
 import { generateReply } from '@/lib/api/mentions'
+
+type ReplyPreset = 'FORMAL' | 'FRIENDLY' | 'CONCISE'
+
+const REPLY_PRESETS: Array<{ value: ReplyPreset; label: string; hint: string }> = [
+  { value: 'FORMAL', label: 'Официальный', hint: 'Сдержанно, официально-деловой тон' },
+  { value: 'FRIENDLY', label: 'Дружелюбный', hint: 'Тепло и по-человечески' },
+  { value: 'CONCISE', label: 'Кратко', hint: '1-2 предложения, только суть' }
+]
 
 function getYandexReviewDeepLink(mention: any): string | null {
   if (mention?.platform !== 'YANDEX' || !mention?.authorExternalId) return null
@@ -125,6 +133,21 @@ export default function MentionRow({
   const [replyLoading, setReplyLoading] = useState(false)
   const [replyError, setReplyError] = useState('')
   const [copied, setCopied] = useState(false)
+  const [presetMenuOpen, setPresetMenuOpen] = useState(false)
+  const presetMenuRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (!presetMenuOpen) return
+
+    function onMouseDown(event: MouseEvent) {
+      if (presetMenuRef.current && !presetMenuRef.current.contains(event.target as Node)) {
+        setPresetMenuOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', onMouseDown)
+    return () => document.removeEventListener('mousedown', onMouseDown)
+  }, [presetMenuOpen])
 
   const publishedAt = mention.publishedAt ? new Date(mention.publishedAt) : null
   const publishedAtLabel =
@@ -144,14 +167,15 @@ export default function MentionRow({
   const sourceHostname = getSourceHostname(sourceUrl)
   const readableSourceType = sourceTypeLabel(mention, sourceHostname)
 
-  async function handleGenerateReply() {
+  async function handleGenerateReply(preset?: ReplyPreset) {
     if (!mention?.id || replyLoading) return
+    setPresetMenuOpen(false)
     setReplyLoading(true)
     setReplyError('')
     setCopied(false)
 
     try {
-      const draft = await generateReply(mention.id)
+      const draft = await generateReply(mention.id, preset)
       setReplyText(draft?.draftText || '')
     } catch {
       setReplyError('Не удалось сгенерировать ответ')
@@ -232,9 +256,43 @@ export default function MentionRow({
             </a>
           ) : null}
 
-          <button type="button" onClick={handleGenerateReply} disabled={replyLoading} className="inline-flex items-center gap-1 rounded-md border border-cyan-400/40 bg-cyan-400/10 px-2.5 py-1 text-xs text-cyan-200 transition-all hover:bg-cyan-400/20 hover:text-white disabled:opacity-60">
-            {replyLoading ? 'Генерация…' : replyText ? 'Сгенерировать заново' : 'AI ответ'}
-          </button>
+          <div ref={presetMenuRef} className="relative inline-flex">
+            <button type="button" onClick={() => handleGenerateReply()} disabled={replyLoading} className="inline-flex items-center gap-1 rounded-l-md border border-r-0 border-cyan-400/40 bg-cyan-400/10 px-2.5 py-1 text-xs text-cyan-200 transition-all hover:bg-cyan-400/20 hover:text-white disabled:opacity-60">
+              {replyLoading ? 'Генерация…' : replyText ? 'Сгенерировать заново' : 'AI ответ'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setPresetMenuOpen((prev) => !prev)}
+              disabled={replyLoading}
+              aria-label="Выбрать тон ответа"
+              aria-expanded={presetMenuOpen}
+              className="inline-flex items-center rounded-r-md border border-cyan-400/40 bg-cyan-400/10 px-1.5 py-1 text-xs text-cyan-200 transition-all hover:bg-cyan-400/20 hover:text-white disabled:opacity-60"
+            >
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                <path d="M2.5 4.5L6 8L9.5 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+
+            {presetMenuOpen ? (
+              <>
+                <div className="fixed inset-0 z-[70] bg-black/50 sm:hidden" onClick={() => setPresetMenuOpen(false)} />
+                <div className="fixed inset-x-0 bottom-0 z-[80] rounded-t-2xl border border-white/10 bg-[#07111f] p-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] shadow-[0_-20px_60px_rgba(0,0,0,0.7)] sm:absolute sm:inset-x-auto sm:bottom-auto sm:right-0 sm:top-full sm:mt-1 sm:w-64 sm:rounded-xl sm:pb-2">
+                  <div className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-500 sm:pt-1">Тон ответа</div>
+                  {REPLY_PRESETS.map((item) => (
+                    <button
+                      key={item.value}
+                      type="button"
+                      onClick={() => handleGenerateReply(item.value)}
+                      className="flex w-full flex-col items-start gap-0.5 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-cyan-400/10 sm:py-2"
+                    >
+                      <span className="text-sm text-cyan-100 sm:text-xs">{item.label}</span>
+                      <span className="text-xs text-zinc-500 sm:text-[11px]">{item.hint}</span>
+                    </button>
+                  ))}
+                </div>
+              </>
+            ) : null}
+          </div>
 
           {actions ? actions : null}
         </div>
