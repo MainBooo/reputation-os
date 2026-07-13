@@ -803,8 +803,11 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
     current7dRating !== null && previous7dRating !== null
       ? current7dRating - previous7dRating
       : null
+  // Округляем до отображаемой точности заранее, иначе toFixed(1) печатает "-0.0"
+  // для малых отрицательных значений (например -0.03), которые визуально должны быть "0.0".
+  const ratingDeltaRounded = ratingDelta === null ? null : Math.round(ratingDelta * 10) / 10
   const ratingDeltaLabel =
-    ratingDelta === null ? '—' : `${ratingDelta >= 0 ? '+' : ''}${ratingDelta.toFixed(1)}`
+    ratingDeltaRounded === null ? '—' : `${ratingDeltaRounded >= 0 ? '+' : ''}${ratingDeltaRounded.toFixed(1)}`
 
   return (
     <div className="relative">
@@ -851,7 +854,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
               <Star className="h-4 w-4 text-amber-200" />
               Рейтинг
             </div>
-            <div className={ratingDelta !== null && ratingDelta < 0 ? 'mt-2 text-3xl font-semibold text-red-200' : 'mt-2 text-3xl font-semibold text-emerald-200'}>
+            <div className={ratingDeltaRounded !== null && ratingDeltaRounded < 0 ? 'mt-2 text-3xl font-semibold text-red-200' : 'mt-2 text-3xl font-semibold text-emerald-200'}>
               {ratingDeltaLabel}
             </div>
           </div>
