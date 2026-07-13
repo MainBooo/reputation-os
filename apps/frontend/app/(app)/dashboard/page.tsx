@@ -807,7 +807,11 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
   // для малых отрицательных значений (например -0.03), которые визуально должны быть "0.0".
   const ratingDeltaRounded = ratingDelta === null ? null : Math.round(ratingDelta * 10) / 10
   const ratingDeltaLabel =
-    ratingDeltaRounded === null ? '—' : `${ratingDeltaRounded >= 0 ? '+' : ''}${ratingDeltaRounded.toFixed(1)}`
+    ratingDeltaRounded === null
+      ? '—'
+      : ratingDeltaRounded === 0
+        ? '0.0'
+        : `${ratingDeltaRounded > 0 ? '+' : ''}${ratingDeltaRounded.toFixed(1)}`
 
   return (
     <div className="relative">
