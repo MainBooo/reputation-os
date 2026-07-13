@@ -739,7 +739,8 @@ export class CompaniesService {
         ...(dto.city !== undefined
           ? { city: dto.city, normalizedCity: this.normalize(dto.city) }
           : {}),
-        ...(dto.industry !== undefined ? { industry: dto.industry } : {})
+        ...(dto.industry !== undefined ? { industry: dto.industry } : {}),
+        ...(dto.responsePreset !== undefined ? { responsePreset: dto.responsePreset } : {})
       }
     })
 

@@ -18,7 +18,33 @@ export class AiReplyDraftsService {
     private readonly entitlements: EntitlementsService
   ) {}
 
-  private buildPrompt(mention: any, dto: GenerateReplyDto) {
+  private presetInstructions(preset: 'FORMAL' | 'FRIENDLY' | 'CONCISE'): string[] {
+    if (preset === 'FRIENDLY') {
+      return [
+        'Тон ответа: дружелюбный и тёплый.',
+        '- пиши живо и по-человечески, можно слегка неформально;',
+        '- допустимы лёгкие эмоции, но без фамильярности и смайлов;',
+        '- обращайся на «вы», но без официоза.'
+      ]
+    }
+
+    if (preset === 'CONCISE') {
+      return [
+        'Тон ответа: кратко и по делу.',
+        '- без вводных фраз и лишних слов;',
+        '- только суть: реакция на отзыв и, если нужно, следующий шаг.'
+      ]
+    }
+
+    return [
+      'Тон ответа: официально-деловой.',
+      '- вежливо и сдержанно, обращение на «вы»;',
+      '- без сленга, разговорных словечек и эмодзи;',
+      '- корректные формулировки, но не канцелярит.'
+    ]
+  }
+
+  private buildPrompt(mention: any, dto: GenerateReplyDto, preset: 'FORMAL' | 'FRIENDLY' | 'CONCISE') {
     const tone = dto.tone || 'professional'
     const languageCode = dto.languageCode || 'ru'
     const rating = mention.ratingValue ? `${mention.ratingValue}/5` : 'нет оценки'
@@ -61,11 +87,12 @@ export class AiReplyDraftsService {
       'Запрещено:',
       '- шаблонные фразы;',
       '- одинаковые начала;',
-      '- слишком официальный стиль;',
       '- повторять текст клиента;',
       '- писать "нам очень жаль" в каждом ответе.',
       '',
-      'Размер ответа: 2-5 предложений.',
+      ...this.presetInstructions(preset),
+      '',
+      preset === 'CONCISE' ? 'Размер ответа: 1-2 предложения.' : 'Размер ответа: 2-5 предложений.',
       'Верни только готовый текст ответа.',
       '',
       'Отзыв клиента:',
@@ -77,7 +104,7 @@ export class AiReplyDraftsService {
     return data?.output?.[0]?.content?.[0]?.text?.trim() || ''
   }
 
-  private async generateWithYandexGpt(mention: any, dto: GenerateReplyDto) {
+  private async generateWithYandexGpt(mention: any, dto: GenerateReplyDto, preset: 'FORMAL' | 'FRIENDLY' | 'CONCISE') {
     const apiKey = process.env.YANDEX_GPT_API_KEY
     const folderId = process.env.YANDEX_GPT_FOLDER_ID
     const model = process.env.YANDEX_GPT_MODEL || 'yandexgpt-lite'
@@ -94,7 +121,7 @@ export class AiReplyDraftsService {
       },
       body: JSON.stringify({
         model: `gpt://${folderId}/${model}`,
-        input: this.buildPrompt(mention, dto),
+        input: this.buildPrompt(mention, dto, preset),
         temperature: 0.75,
         max_output_tokens: 700
       })
@@ -147,7 +174,8 @@ export class AiReplyDraftsService {
       }
     }
 
-    const draftText = await this.generateWithYandexGpt(mention, dto)
+    const preset = dto.preset ?? mention.company.responsePreset ?? 'FORMAL'
+    const draftText = await this.generateWithYandexGpt(mention, dto, preset)
 
     return this.prisma.aIReplyDraft.create({
       data: {
@@ -156,11 +184,11 @@ export class AiReplyDraftsService {
         createdByUserId: userId,
         languageCode: dto.languageCode || 'ru',
         tone: dto.tone || 'professional',
-        promptVersion: 'yandexgpt-v2-specific',
+        promptVersion: 'yandexgpt-v3-preset',
         draftText,
         status: 'READY',
         modelName: process.env.YANDEX_GPT_MODEL || 'yandexgpt-lite',
-        metadata: { provider: 'yandexgpt' }
+        metadata: { provider: 'yandexgpt', preset }
       }
     })
   }

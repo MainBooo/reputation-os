@@ -1,4 +1,4 @@
-import { IsArray, IsOptional, IsString } from 'class-validator'
+import { IsArray, IsIn, IsOptional, IsString } from 'class-validator'
 
 export class UpdateCompanyDto {
   @IsOptional()
@@ -33,4 +33,8 @@ export class UpdateCompanyDto {
   @IsArray()
   @IsString({ each: true })
   keywords?: string[]
+
+  @IsOptional()
+  @IsIn(['FORMAL', 'FRIENDLY', 'CONCISE'])
+  responsePreset?: 'FORMAL' | 'FRIENDLY' | 'CONCISE'
 }
