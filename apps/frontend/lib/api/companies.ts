@@ -101,6 +101,7 @@ export function updateCompany(id: string, payload: {
   yandexUrl?: string
   twoGisUrl?: string
   keywords?: string[]
+  responsePreset?: 'FORMAL' | 'FRIENDLY' | 'CONCISE'
 }) {
   return apiFetch(`/companies/${id}`, {
     method: 'PATCH',

@@ -5,6 +5,14 @@ import { useRouter } from 'next/navigation'
 import Button from '@/components/ui/Button'
 import { updateCompany } from '@/lib/api/companies'
 
+type ResponsePreset = 'FORMAL' | 'FRIENDLY' | 'CONCISE'
+
+const RESPONSE_PRESETS: Array<{ value: ResponsePreset; label: string; hint: string }> = [
+  { value: 'FORMAL', label: 'Официальный', hint: 'Сдержанно, официально-деловой тон' },
+  { value: 'FRIENDLY', label: 'Дружелюбный', hint: 'Тепло и по-человечески' },
+  { value: 'CONCISE', label: 'Кратко', hint: '1-2 предложения, только суть' }
+]
+
 function normalizeKeyword(value: string) {
   return value.trim().replace(/\s+/g, ' ')
 }
@@ -49,6 +57,9 @@ export default function CompanyEditPanel({
     yandexUrl: yandexUrl || '',
     twoGisUrl: twoGisUrl || ''
   })
+  const [responsePreset, setResponsePreset] = useState<ResponsePreset>(
+    RESPONSE_PRESETS.some((item) => item.value === company?.responsePreset) ? company.responsePreset : 'FORMAL'
+  )
 
   function setField(field: keyof typeof form, value: string) {
     setForm((current) => ({ ...current, [field]: value }))
@@ -92,7 +103,8 @@ export default function CompanyEditPanel({
         industry: form.industry.trim() || undefined,
         yandexUrl: form.yandexUrl.trim() || undefined,
         twoGisUrl: form.twoGisUrl.trim() || undefined,
-        keywords
+        keywords,
+        responsePreset
       })
 
       setIsOpen(false)
@@ -228,6 +240,39 @@ export default function CompanyEditPanel({
               <Button type="button" variant="secondary" onClick={() => addKeyword(keywordInput)}>
                 Добавить
               </Button>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-white/10 bg-white/[0.025] p-4">
+            <div className="text-sm font-semibold text-brand">Тон AI-ответов</div>
+            <div className="mt-1 text-xs leading-5 text-zinc-300">
+              Используется по умолчанию при генерации ответов на отзывы этой компании.
+            </div>
+
+            <div className="mt-3 grid gap-2 sm:grid-cols-3" role="radiogroup" aria-label="Тон AI-ответов">
+              {RESPONSE_PRESETS.map((item) => (
+                <label
+                  key={item.value}
+                  className={
+                    responsePreset === item.value
+                      ? 'cursor-pointer rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-3 py-2.5 transition'
+                      : 'cursor-pointer rounded-xl border border-line bg-[#050816] px-3 py-2.5 transition hover:border-cyan-400/30'
+                  }
+                >
+                  <input
+                    type="radio"
+                    name="responsePreset"
+                    value={item.value}
+                    checked={responsePreset === item.value}
+                    onChange={() => setResponsePreset(item.value)}
+                    className="sr-only"
+                  />
+                  <div className={responsePreset === item.value ? 'text-sm font-medium text-cyan-100' : 'text-sm font-medium text-brand'}>
+                    {item.label}
+                  </div>
+                  <div className="mt-0.5 text-xs text-zinc-400">{item.hint}</div>
+                </label>
+              ))}
             </div>
           </div>
 
