@@ -195,6 +195,12 @@ model Notification {
   @@index([type])
 }
 
+enum ResponsePreset {
+  FORMAL
+  FRIENDLY
+  CONCISE
+}
+
 model Company {
   id                     String    @id @default(cuid())
   workspaceId            String
@@ -208,6 +214,7 @@ model Company {
   description            String?
   logoUrl                String?
   isActive               Boolean   @default(true)
+  responsePreset         ResponsePreset @default(FORMAL)
   initialSyncCompletedAt DateTime?
   lastSyncedAt           DateTime?
   createdAt              DateTime  @default(now())
