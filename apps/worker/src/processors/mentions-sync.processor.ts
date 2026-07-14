@@ -94,12 +94,18 @@ export class MentionsSyncProcessor implements OnModuleInit, OnModuleDestroy {
       let itemsUpdated = 0
       let itemsDeduped = 0
 
+      // Поисковые запросы строятся из имени компании (buildQueries), поэтому
+      // таргеты одной компании дают одинаковые пары запросов — общий Set гасит
+      // повторные вызовы Yandex Search API в рамках одного прогона.
+      const executedSearchQueries = new Set<string>()
+
       for (const target of targets) {
         if (!['WEB', 'CUSTOM'].includes(target.source.platform)) continue
 
         const adapter = SourceAdapterFactory.getAdapter(target.source.platform)
         const mentions = await adapter.fetchMentions({
           ...target,
+          runState: { executedSearchQueries },
           searchContext: {
             companyName: company?.name || null,
             website: company?.website || target.externalUrl || null,

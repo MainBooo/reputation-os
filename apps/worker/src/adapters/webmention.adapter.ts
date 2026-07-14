@@ -42,7 +42,21 @@ export class WebMentionAdapter implements SourceAdapter {
     const seenFingerprints = new Set<string>()
     const hostCounts = new Map<string, number>()
 
+    // Общий на прогон mentions-sync Set (см. процессор): один и тот же запрос
+    // не уходит в Yandex Search API повторно от другого таргета компании.
+    const executedQueries: Set<string> | null =
+      target?.runState?.executedSearchQueries instanceof Set ? target.runState.executedSearchQueries : null
+
     for (const query of queries.slice(0, 2)) {
+      if (executedQueries) {
+        const dedupeKey = `yandex-search:${query}`
+        if (executedQueries.has(dedupeKey)) {
+          console.log('[WEB] skip duplicate query in run', { query })
+          continue
+        }
+        executedQueries.add(dedupeKey)
+      }
+
       const items = await this.fetchFromYandex(query)
 
       for (const item of items) {
