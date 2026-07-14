@@ -120,11 +120,13 @@ export class SchedulerService implements OnModuleInit {
       }
     }).catch(() => [])
 
+    // Без фильтра по externalUrl: канонические поисковые сиды (web-bootstrap:<companyId>,
+    // sync.service) не имеют URL, если у компании не заполнен website — иначе для такой
+    // компании mentions-крон никогда не создастся.
     const webTargets = await prismaAny.companySourceTarget.findMany({
       where: {
         isActive: true,
         syncMentionsEnabled: true,
-        externalUrl: { not: null },
         company: { isActive: true },
         source: {
           platform: 'WEB',
