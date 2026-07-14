@@ -33,7 +33,27 @@ export default function LoginPage() {
 
   useEffect(() => {
     try {
-      if (document.cookie.includes('accessToken=')) router.replace('/dashboard')
+      if (document.cookie.includes('accessToken=')) {
+        router.replace('/dashboard')
+        return
+      }
+    } catch {}
+
+    try {
+      const params = new URLSearchParams(window.location.search)
+      const yandexToken = params.get('accessToken')
+      const oauthError = params.get('error')
+
+      if (yandexToken) {
+        document.cookie = `accessToken=${encodeURIComponent(yandexToken)}; path=/; max-age=${60 * 60 * 24 * 7}; samesite=lax`
+        router.replace('/dashboard')
+        router.refresh()
+        return
+      }
+
+      if (oauthError === 'yandex_denied') {
+        setError('Не удалось войти через Яндекс ID. Попробуйте снова или используйте email и пароль.')
+      }
     } catch {}
   }, [router])
 
@@ -196,6 +216,20 @@ export default function LoginPage() {
                   <ArrowRight className="h-5 w-5 transition group-hover:translate-x-1" />
                 </button>
               </form>
+
+              <div className="mt-5 flex items-center gap-3 text-xs uppercase tracking-[0.2em] text-slate-500">
+                <div className="h-px flex-1 bg-white/10" />
+                или
+                <div className="h-px flex-1 bg-white/10" />
+              </div>
+
+              <a
+                href="/api/auth/yandex"
+                className="mt-4 flex h-14 w-full items-center justify-center gap-3 rounded-2xl border border-blue-300/25 bg-[#050817]/72 text-base font-semibold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_0_22px_rgba(59,130,246,0.08)] transition hover:border-fuchsia-300/55 hover:bg-fuchsia-500/[0.06]"
+              >
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#fc3f1d] text-sm font-black text-white">Я</span>
+                Войти через Яндекс ID
+              </a>
 
               <div className="mt-5 text-center text-sm text-slate-400">
                 Нет аккаунта? <a href="/register" className="font-medium text-blue-300 transition hover:text-fuchsia-100">Зарегистрироваться</a>
