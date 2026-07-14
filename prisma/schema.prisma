@@ -94,6 +94,7 @@ model User {
   createdAt    DateTime   @default(now())
   telegramChatId    BigInt?   @unique
   telegramLinkedAt  DateTime?
+  yandexId     String?    @unique
   updatedAt    DateTime   @updatedAt
   deletedAt    DateTime?
   deletedById  String?
