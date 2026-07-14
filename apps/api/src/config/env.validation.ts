@@ -10,7 +10,10 @@ export function envValidation(config: Record<string, unknown>) {
     BILLING_PROVIDER: Joi.string().valid('mock', 'yookassa').default('mock'),
     YOOKASSA_SHOP_ID: Joi.string().allow('').optional(),
     YOOKASSA_SECRET_KEY: Joi.string().allow('').optional(),
-    YOOKASSA_RETURN_URL: Joi.string().allow('').optional()
+    YOOKASSA_RETURN_URL: Joi.string().allow('').optional(),
+    YANDEX_CLIENT_ID: Joi.string().allow('').optional(),
+    YANDEX_CLIENT_SECRET: Joi.string().allow('').optional(),
+    YANDEX_REDIRECT_URI: Joi.string().allow('').optional()
   })
 
   const { error, value } = schema.validate(config, { allowUnknown: true })

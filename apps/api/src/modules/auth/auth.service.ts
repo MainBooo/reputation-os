@@ -3,8 +3,22 @@ import { PlanCode, SubscriptionStatus, SystemRole, TelegramDeliveryStatus } from
 import { PrismaService } from '../../common/prisma/prisma.service'
 import { JwtService } from '@nestjs/jwt'
 import * as bcrypt from 'bcrypt'
+import { randomBytes } from 'crypto'
 import { RegisterDto } from './dto/register.dto'
 import { LoginDto } from './dto/login.dto'
+
+const YANDEX_OAUTH_SCOPE = 'login:email login:info login:avatar'
+
+interface YandexUserInfo {
+  id: string
+  default_email?: string
+  emails?: string[]
+  login?: string
+  display_name?: string
+  real_name?: string
+  first_name?: string
+  last_name?: string
+}
 
 @Injectable()
 export class AuthService {
@@ -238,5 +252,91 @@ export class AuthService {
   private buildAuthResponse(userId: string, email: string) {
     const accessToken = this.jwtService.sign({ sub: userId, email })
     return { accessToken, user: { id: userId, email } }
+  }
+
+  generateYandexState(): string {
+    return randomBytes(16).toString('hex')
+  }
+
+  getYandexAuthUrl(state: string): string {
+    const params = new URLSearchParams({
+      response_type: 'code',
+      client_id: process.env.YANDEX_CLIENT_ID || '',
+      redirect_uri: process.env.YANDEX_REDIRECT_URI || '',
+      scope: YANDEX_OAUTH_SCOPE,
+      state
+    })
+    return `https://oauth.yandex.ru/authorize?${params.toString()}`
+  }
+
+  async exchangeYandexCode(code: string): Promise<string> {
+    const response = await fetch('https://oauth.yandex.ru/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        code,
+        client_id: process.env.YANDEX_CLIENT_ID || '',
+        client_secret: process.env.YANDEX_CLIENT_SECRET || '',
+        redirect_uri: process.env.YANDEX_REDIRECT_URI || ''
+      })
+    })
+
+    const data = await response.json().catch(() => null)
+    if (!response.ok || !data?.access_token) {
+      this.logger.error(`Yandex token exchange failed: ${response.status} ${JSON.stringify(data)}`)
+      throw new BadRequestException('Не удалось получить токен Яндекс ID')
+    }
+
+    return data.access_token as string
+  }
+
+  async getYandexUserInfo(accessToken: string): Promise<YandexUserInfo> {
+    const response = await fetch('https://login.yandex.ru/info?format=json', {
+      headers: { Authorization: `OAuth ${accessToken}` }
+    })
+
+    const data = await response.json().catch(() => null)
+    if (!response.ok || !data?.id) {
+      this.logger.error(`Yandex userinfo failed: ${response.status} ${JSON.stringify(data)}`)
+      throw new BadRequestException('Не удалось получить данные пользователя Яндекс ID')
+    }
+
+    return data as YandexUserInfo
+  }
+
+  async findOrCreateFromYandex(yandexUser: YandexUserInfo) {
+    const byYandexId = await this.prisma.user.findUnique({ where: { yandexId: yandexUser.id } })
+    if (byYandexId) {
+      if (!byYandexId.isActive || byYandexId.deletedAt) {
+        throw new UnauthorizedException('Аккаунт деактивирован')
+      }
+      await this.prisma.user.update({ where: { id: byYandexId.id }, data: { lastLoginAt: new Date() } })
+      return this.buildAuthResponse(byYandexId.id, byYandexId.email)
+    }
+
+    const email = yandexUser.default_email || yandexUser.emails?.[0]
+    if (!email) {
+      throw new BadRequestException('Яндекс ID не предоставил email — проверьте разрешения приложения')
+    }
+
+    const byEmail = await this.prisma.user.findUnique({ where: { email } })
+    if (byEmail) {
+      if (!byEmail.isActive || byEmail.deletedAt) {
+        throw new UnauthorizedException('Аккаунт деактивирован')
+      }
+      await this.prisma.user.update({
+        where: { id: byEmail.id },
+        data: { yandexId: yandexUser.id, lastLoginAt: new Date() }
+      })
+      return this.buildAuthResponse(byEmail.id, byEmail.email)
+    }
+
+    const fullName = yandexUser.real_name || yandexUser.display_name || undefined
+    const generatedPassword = randomBytes(24).toString('hex')
+    const result = await this.register({ email, password: generatedPassword, fullName } as RegisterDto)
+    await this.prisma.user.update({ where: { email }, data: { yandexId: yandexUser.id } })
+
+    return result
   }
 }
