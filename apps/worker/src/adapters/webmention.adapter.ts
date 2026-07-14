@@ -25,10 +25,11 @@ type RelevanceContext = {
 
 export class WebMentionAdapter implements SourceAdapter {
   private yandexSearchDisabledByPermission = false
-  async discoverTargets(input: any) {
-    return [
-      { externalUrl: input?.website || null, displayName: input?.name || 'Web monitor' }
-    ]
+  // Поисковый WEB-сид создаёт sync.service (web-bootstrap:<companyId>) — если
+  // возвращать отсюда голый таргет, source_discovery ежедневно плодит его дубль
+  // с syncMentionsEnabled=true по дефолту колонки → лишние вызовы Search API.
+  async discoverTargets(_input: any) {
+    return []
   }
 
   async fetchMentions(target: any) {
