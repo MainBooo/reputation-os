@@ -144,9 +144,13 @@ export class DeepScanProcessor implements OnModuleInit, OnModuleDestroy {
           continue
         }
 
+        // isActive=true выводит таргет из кандидатов DeepScan; syncMentionsEnabled
+        // НЕ включаем — иначе mentions-sync начинает гонять Yandex Search API
+        // по каждому промоутнутому URL (поисковые запросы строятся из имени
+        // компании, так что это чистые дубли).
         await (this.prisma as any).companySourceTarget.update({
           where: { id: target.id },
-          data: { isActive: true, syncMentionsEnabled: true }
+          data: { isActive: true }
         })
 
         await (this.prisma as any).watchedPage.upsert({
