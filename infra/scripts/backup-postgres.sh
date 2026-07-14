@@ -28,7 +28,11 @@ tmp_file="${file}.tmp"
   test -s "$tmp_file"
   mv "$tmp_file" "$file"
 
-  find "$BACKUP_DIR" -type f -name "${POSTGRES_DB}_*.sql.gz" -mtime +"$KEEP_DAYS" -delete
+  find "$BACKUP_DIR" -maxdepth 1 -type f -name "${POSTGRES_DB}_*.sql.gz" -printf '%T@ %p\n' \
+    | sort -rn \
+    | tail -n +"$((KEEP_DAYS + 1))" \
+    | cut -d' ' -f2- \
+    | xargs -r rm -f --
 
   echo "[backup] done $(date -Is) size=$(du -h "$file" | awk '{print $1}')"
 } >> "$LOG_FILE" 2>&1
