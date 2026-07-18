@@ -13,6 +13,7 @@ enum Platform {
   TWOGIS
   WEB
   CUSTOM
+  TELEGRAM
 }
 
 enum SourceType {
@@ -20,6 +21,17 @@ enum SourceType {
   RATING_FEED
   WEB_MENTION_FEED
   CUSTOM_FEED
+  SOCIAL_MENTION_FEED
+}
+
+enum TelegramDiscoveryMethod {
+  GLOBAL_CHANNEL_SEARCH
+  GLOBAL_GROUP_SEARCH
+  PUBLIC_POST_SEARCH
+  ENTITY_SEARCH
+  WEB_DISCOVERY
+  MANUAL
+  AI_DISCOVERY
 }
 
 enum MentionType {
@@ -228,6 +240,7 @@ model Company {
   ratingSnapshots   RatingSnapshot[]
   watchedPages      WatchedPage[]
   watchedPageItems  WatchedPageItem[]
+  telegramChannels  CompanyTelegramChannel[]
   aiReplyDrafts     AIReplyDraft[]
   notificationRules NotificationRule[]
   chatThreads       ChatThread[]          @relation("CompanyChatThreads")
@@ -251,6 +264,7 @@ model CompanyAlias {
   normalizedValue String
   priority        Int      @default(100)
   isPrimary       Boolean  @default(false)
+  isExcluded      Boolean  @default(false)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -339,6 +353,7 @@ model Mention {
   relevanceScore Decimal? @db.Decimal(5, 2)
   hash           String
   duplicateOfId  String?
+  matchedQuery   String?
 
   rawPayload Json?
   metadata   Json?
@@ -733,6 +748,55 @@ model WatchedPageItem {
 
   @@unique([watchedPageId, itemHash])
   @@index([companyId])
+}
+
+// ============================================
+// TELEGRAM SCOUT
+// ============================================
+
+model TelegramChannel {
+  id                   String    @id @default(cuid())
+  chatId               String    @unique
+  username             String?   @unique
+  title                String?
+  entityType           String
+  verifiedAt           DateTime?
+  lastFetchedMessageId Int?
+  lastFetchedAt        DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  companyLinks CompanyTelegramChannel[]
+
+  @@index([entityType])
+}
+
+model CompanyTelegramChannel {
+  id                 String                  @id @default(cuid())
+  companyId          String
+  telegramChannelId  String
+  enabled            Boolean                 @default(false)
+  discoveryMethod    TelegramDiscoveryMethod
+  matchedQuery       String?
+  lastMessageId      Int?
+  checkIntervalMin   Int                     @default(360)
+  nextCheckAt        DateTime?
+  lastCheckedAt      DateTime?
+  consecutiveErrors  Int                     @default(0)
+  lastError          String?
+  lastDecisionReason String?
+  relevanceScore     Decimal?                @db.Decimal(5, 2)
+  mentionsFoundCount Int                     @default(0)
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+
+  company         Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  telegramChannel TelegramChannel @relation(fields: [telegramChannelId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, telegramChannelId])
+  @@index([enabled, nextCheckAt])
+  @@index([companyId])
+  @@index([telegramChannelId])
 }
 
 // ============================================

@@ -5,6 +5,7 @@ import clsx from 'clsx'
 import Badge from '../ui/Badge'
 import MentionChatPanel from '@/components/chat/MentionChatPanel'
 import { generateReply } from '@/lib/api/mentions'
+import { platformLabel } from '@/lib/ui/mentions'
 
 type ReplyPreset = 'FORMAL' | 'FRIENDLY' | 'CONCISE'
 
@@ -21,13 +22,6 @@ function getYandexReviewDeepLink(mention: any): string | null {
   if (!orgId) return null
 
   return `https://yandex.ru/maps/org/${orgId}/reviews?reviews%5BpublicId%5D=${encodeURIComponent(mention.authorExternalId)}&utm_source=review`
-}
-
-function platformLabel(value?: string | null) {
-  if (value === 'YANDEX') return 'Яндекс'
-  if (value === 'TWOGIS') return '2GIS'
-  if (value === 'WEB') return 'Сеть'
-  return value || null
 }
 
 function sentimentLabel(value?: string | null) {
@@ -167,6 +161,13 @@ export default function MentionRow({
   const sourceHostname = getSourceHostname(sourceUrl)
   const readableSourceType = sourceTypeLabel(mention, sourceHostname)
 
+  const isTelegram = mention.platform === 'TELEGRAM'
+  // Only present when the source has a public username (see backend result-mapper) —
+  // never fabricated for a private/unresolvable source.
+  const telegramDeepLink = isTelegram && mention.url ? mention.url : null
+  const telegramStats = isTelegram ? (mention.rawPayload as Record<string, unknown> | null) : null
+  const telegramUsername = isTelegram ? (telegramStats?.username as string | null) : null
+
   async function handleGenerateReply(preset?: ReplyPreset) {
     if (!mention?.id || replyLoading) return
     setPresetMenuOpen(false)
@@ -250,6 +251,10 @@ export default function MentionRow({
             <a href={yandexDeepLink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded-md border border-violet-400/40 bg-cyan-400/10 px-2.5 py-1 text-xs text-blue-300 transition-all hover:bg-cyan-400/20 hover:text-white">
               Открыть отзыв →
             </a>
+          ) : telegramDeepLink ? (
+            <a href={telegramDeepLink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded-md border border-sky-400/40 bg-sky-400/10 px-2.5 py-1 text-xs text-sky-300 transition-all hover:bg-sky-400/20 hover:text-white">
+              Открыть в Telegram →
+            </a>
           ) : sourceUrl ? (
             <a href={sourceUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded-md border border-violet-400/40 bg-cyan-400/10 px-2.5 py-1 text-xs text-blue-300 transition-all hover:bg-cyan-400/20 hover:text-white">
               Открыть источник →
@@ -302,7 +307,18 @@ export default function MentionRow({
 
       <div className="mt-3 w-full whitespace-pre-wrap break-words text-sm leading-6 text-brand">{mention.content}</div>
 
-      <div className="mt-3 text-xs text-zinc-300">{mention.author || 'Источник'} · {publishedAtLabel}</div>
+      <div className="mt-3 text-xs text-zinc-300">
+        {telegramUsername ? `@${telegramUsername}` : mention.author || 'Источник'} · {publishedAtLabel}
+      </div>
+
+      {telegramStats ? (
+        <div className="mt-2 flex flex-wrap items-center gap-3 text-[11px] text-zinc-500">
+          {typeof telegramStats.views === 'number' ? <span>👁 {telegramStats.views}</span> : null}
+          {typeof telegramStats.forwards === 'number' ? <span>↪ {telegramStats.forwards}</span> : null}
+          {typeof telegramStats.replyCount === 'number' ? <span>💬 {telegramStats.replyCount}</span> : null}
+          {typeof telegramStats.reactionsCount === 'number' ? <span>❤ {telegramStats.reactionsCount}</span> : null}
+        </div>
+      ) : null}
 
       {replyError ? (
         <div className="mt-3 rounded-xl border border-red-400/20 bg-red-500/10 px-3 py-2 text-xs text-red-200">{replyError}</div>

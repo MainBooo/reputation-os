@@ -1,0 +1,123 @@
+import { Api } from 'teleproto'
+import type { TelegramEntityType, TelegramRawMessage } from './telegram-scout.types'
+
+/** Only public channels/supergroups/groups are in scope for Scout — forbidden
+ *  placeholders and plain users (contacts.Search can return users too) are skipped. */
+export function classifyEntityType(chat: Api.TypeChat): TelegramEntityType | null {
+  if (chat instanceof Api.Channel) {
+    if (chat.broadcast) return 'channel'
+    if (chat.megagroup) return 'supergroup'
+    return null
+  }
+
+  if (chat instanceof Api.Chat) return 'group'
+
+  return null
+}
+
+export function buildChatIndex(chats: Api.TypeChat[]): Map<string, Api.TypeChat> {
+  const index = new Map<string, Api.TypeChat>()
+
+  for (const chat of chats) {
+    if (chat instanceof Api.Channel || chat instanceof Api.Chat) {
+      index.set(chat.id.toString(), chat)
+    }
+  }
+
+  return index
+}
+
+function peerChatId(peer: Api.TypePeer): string | null {
+  if (peer instanceof Api.PeerChannel) return peer.channelId.toString()
+  if (peer instanceof Api.PeerChat) return peer.chatId.toString()
+  return null
+}
+
+/** Raw teleproto Api.Message + its resolved chat → the normalized shape the rest
+ *  of Scout works with. Returns null for message types/chats out of scope
+ *  (service messages, empty messages, non-channel/group chats, forbidden chats). */
+export function mapApiMessage(
+  message: Api.TypeMessage,
+  chatIndex: Map<string, Api.TypeChat>
+): TelegramRawMessage | null {
+  if (!(message instanceof Api.Message)) return null
+  if (!message.message) return null
+
+  const chatId = peerChatId(message.peerId)
+  if (!chatId) return null
+
+  const chat = chatIndex.get(chatId)
+  if (!chat) return null
+
+  const entityType = classifyEntityType(chat)
+  if (!entityType) return null
+
+  const username = chat instanceof Api.Channel ? chat.username ?? null : null
+  const title = 'title' in chat ? chat.title ?? null : null
+
+  return {
+    id: message.id,
+    chatId,
+    username,
+    title,
+    entityType,
+    text: message.message,
+    date: new Date(message.date * 1000),
+    views: message.views ?? null,
+    forwards: message.forwards ?? null,
+    replyCount: message.replies?.replies ?? null,
+    reactionsCount: message.reactions?.results?.reduce((sum, r) => sum + (r.count ?? 0), 0) ?? null,
+    authorName: message.postAuthor ?? null
+  }
+}
+
+/** messages.Messages/MessagesSlice/ChannelMessages all carry `.messages`/`.chats`;
+ *  MessagesNotModified carries neither (server-side "nothing changed" reply) — the
+ *  three pagination loops treat that identically to an empty page by normalizing here. */
+export function normalizeMessagesResponse(response: Api.messages.TypeMessages): {
+  messages: Api.TypeMessage[]
+  chats: Api.TypeChat[]
+  nextRate: number | null
+} {
+  if (response instanceof Api.messages.MessagesNotModified) {
+    return { messages: [], chats: [], nextRate: null }
+  }
+
+  return {
+    messages: response.messages,
+    chats: response.chats,
+    nextRate: response instanceof Api.messages.MessagesSlice ? response.nextRate ?? null : null
+  }
+}
+
+export function mapApiMessages(messages: Api.TypeMessage[], chats: Api.TypeChat[]): TelegramRawMessage[] {
+  const chatIndex = buildChatIndex(chats)
+  const result: TelegramRawMessage[] = []
+
+  for (const message of messages) {
+    const mapped = mapApiMessage(message, chatIndex)
+    if (mapped) result.push(mapped)
+  }
+
+  return result
+}
+
+/** Candidate channel/group entity from contacts.Search — no messages involved. */
+export interface TelegramEntityCandidate {
+  chatId: string
+  username: string | null
+  title: string | null
+  entityType: TelegramEntityType
+}
+
+export function mapChatToCandidate(chat: Api.TypeChat): TelegramEntityCandidate | null {
+  const entityType = classifyEntityType(chat)
+  if (!entityType) return null
+
+  return {
+    chatId: chat.id.toString(),
+    username: chat instanceof Api.Channel ? chat.username ?? null : null,
+    title: 'title' in chat ? chat.title ?? null : null,
+    entityType
+  }
+}

@@ -18,6 +18,7 @@ import { TelegramApiModule } from "./telegram/telegram.module"
 import { BillingModule } from './modules/billing/billing.module'
 import { ChatModule } from './modules/chat/chat.module'
 import { RateLimitModule } from './common/rate-limit/rate-limit.module'
+import { TelegramChannelsModule } from './modules/telegram-channels/telegram-channels.module'
 
 @Module({
   imports: [
@@ -39,7 +40,8 @@ import { RateLimitModule } from './common/rate-limit/rate-limit.module'
     PushModule,
     BillingModule,
     TelegramApiModule,
-    ChatModule
+    ChatModule,
+    TelegramChannelsModule
   ]
 })
 export class AppModule {}

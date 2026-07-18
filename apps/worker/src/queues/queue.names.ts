@@ -9,5 +9,7 @@ export const QUEUES = {
   PAGE_WATCH: 'page_watch',
   PAGE_WATCH_DISPATCHER: 'page_watch_dispatcher',
   SUBSCRIPTION_REMINDER: 'subscription_reminder',
-  DEEP_SCAN: 'deep_scan'
+  DEEP_SCAN: 'deep_scan',
+  TELEGRAM_SEARCH: 'telegram_search',
+  TELEGRAM_WATCHLIST_DISPATCHER: 'telegram_watchlist_dispatcher'
 } as const

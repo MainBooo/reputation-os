@@ -16,7 +16,9 @@ export class SyncService {
     @Inject('SYNC_QUEUE_RATING_REFRESH')
     private readonly ratingRefreshQueue: Queue,
     @Inject('SYNC_QUEUE_RECONCILE')
-    private readonly reconcileQueue: Queue
+    private readonly reconcileQueue: Queue,
+    @Inject('SYNC_QUEUE_TELEGRAM_SEARCH')
+    private readonly telegramSearchQueue: Queue
   ) {}
 
   private async assertCompanyAccess(userId: string, companyId: string, mode: 'read' | 'write' = 'read') {
@@ -231,6 +233,15 @@ export class SyncService {
       { queueName: 'rating_refresh', queue: this.ratingRefreshQueue }
     ]
 
+    // telegram_search is tracked for UI visibility but deliberately kept out of
+    // `relevantQueues`/`queueEntries` above — per plan, a Telegram Scout problem
+    // must never make the *overall* sync status FAILED, only degrade it to PARTIAL.
+    const telegramLog = await this.prisma.jobLog.findFirst({
+      where: { companyId, queueName: 'telegram_search' },
+      orderBy: { createdAt: 'desc' }
+    })
+    const telegramBullJob = await this.getQueueJobState(this.telegramSearchQueue, this.getBullJobIdFromLog(telegramLog))
+
     const resolveEffectiveStatus = (log: (typeof logs)[number] | null, bullJob: Awaited<ReturnType<typeof this.getQueueJobState>>) => {
       const state = bullJob?.state || null
 
@@ -264,9 +275,20 @@ export class SyncService {
     const hasSuccessLatest = queues.some((item) => item.effectiveStatus === 'SUCCESS')
     const hasAnyLatest = queues.some((item) => item.latestLog)
 
+    const telegramEffectiveStatus = resolveEffectiveStatus(telegramLog, telegramBullJob)
+    const telegramDegraded = telegramEffectiveStatus === 'FAILED' || telegramEffectiveStatus === 'PARTIAL'
+
+    // Core queues (mentions/reviews/rating) remain the only source of an overall
+    // FAILED/RUNNING/SUCCESS status — telegram_search can only ever pull a
+    // would-be SUCCESS/PENDING down to PARTIAL, never up, never to FAILED.
+    const coreStatus = hasActiveJob ? 'RUNNING' : hasFailedLatest ? 'FAILED' : hasSuccessLatest ? 'SUCCESS' : hasAnyLatest ? 'PENDING' : 'PENDING'
+    const status =
+      telegramDegraded && (coreStatus === 'SUCCESS' || coreStatus === 'PENDING') ? 'PARTIAL' : coreStatus
+
     return {
       companyId,
-      status: hasActiveJob ? 'RUNNING' : hasFailedLatest ? 'FAILED' : hasSuccessLatest ? 'SUCCESS' : hasAnyLatest ? 'PENDING' : 'PENDING',
+      status,
+      telegramSearch: { queueName: 'telegram_search', latestLog: telegramLog, bullJob: telegramBullJob, effectiveStatus: telegramEffectiveStatus },
       hasActiveJob,
       lastFailedLog,
       lastSuccessLog,

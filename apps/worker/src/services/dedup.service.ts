@@ -35,6 +35,8 @@ export class DedupService {
     sentiment?: Sentiment | null
     rawPayload?: any
     metadata?: any
+    matchedQuery?: string | null
+    relevanceScore?: any
   }, params: {
     title?: string | null
     content: string
@@ -46,6 +48,8 @@ export class DedupService {
     ratingValue?: number | null
     rawPayload?: unknown
     metadata?: unknown
+    matchedQuery?: string | null
+    relevanceScore?: number | null
   }) {
     const nextRating = params.ratingValue ?? existing.ratingValue ?? null
     const nextPublishedAt = existing.publishedAt && params.ratingValue == null
@@ -64,6 +68,8 @@ export class DedupService {
       sentiment: this.classifyMentionSentiment(params.normalizedContent || existing.normalizedContent || '', nextRating),
       rawPayload: params.rawPayload as any,
       metadata: params.metadata as any,
+      matchedQuery: params.matchedQuery ?? existing.matchedQuery ?? null,
+      relevanceScore: params.relevanceScore ?? existing.relevanceScore ?? null
     }
   }
 
@@ -83,6 +89,8 @@ export class DedupService {
     companySourceTargetId?: string | null
     rawPayload?: unknown
     metadata?: unknown
+    matchedQuery?: string | null
+    relevanceScore?: number | null
   }) {
     const normalizedContent = normalizeText(params.content)
 
@@ -173,6 +181,8 @@ export class DedupService {
         hash,
         rawPayload: params.rawPayload as any,
         metadata: params.metadata as any,
+        matchedQuery: params.matchedQuery ?? null,
+        relevanceScore: params.relevanceScore ?? null,
           companySourceTargetId: params.companySourceTargetId || null
       }
     })

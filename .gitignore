@@ -108,3 +108,6 @@ cookies.txt
 # Sale/audit local files
 sale-audit.txt
 scripts/sale-audit.sh
+
+# Telegram Scout — MTProto session (live credential, never commit)
+apps/worker/.session/

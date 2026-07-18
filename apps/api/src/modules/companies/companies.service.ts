@@ -1424,6 +1424,14 @@ export class CompaniesService {
       throw new ForbiddenException({ code: 'PLAN_LIMIT', feature: 'webMonitoringEnabled' })
     }
 
+    if (
+      dto.isActive === true &&
+      target.source?.platform === 'TELEGRAM' &&
+      !(updateEnt.limits as any).telegramMonitoringEnabled
+    ) {
+      throw new ForbiddenException({ code: 'PLAN_LIMIT', feature: 'telegramMonitoringEnabled' })
+    }
+
     const updatedTarget = await this.prisma.companySourceTarget.update({
       where: { id: targetId },
       data: {

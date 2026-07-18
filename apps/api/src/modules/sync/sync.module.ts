@@ -50,8 +50,14 @@ import { DEFAULT_JOB_OPTIONS } from '../../common/queues/job-options'
         new Queue('reconcile', { connection, defaultJobOptions: DEFAULT_JOB_OPTIONS }),
       inject: ['SYNC_BULLMQ_CONNECTION']
     },
+    {
+      provide: 'SYNC_QUEUE_TELEGRAM_SEARCH',
+      useFactory: (connection: IORedis) =>
+        new Queue('telegram_search', { connection, defaultJobOptions: DEFAULT_JOB_OPTIONS }),
+      inject: ['SYNC_BULLMQ_CONNECTION']
+    },
     SyncService
   ],
-  exports: [SyncService]
+  exports: [SyncService, 'SYNC_QUEUE_TELEGRAM_SEARCH']
 })
 export class SyncModule {}

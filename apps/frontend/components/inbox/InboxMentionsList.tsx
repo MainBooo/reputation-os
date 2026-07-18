@@ -9,17 +9,12 @@ import Card from '@/components/ui/Card'
 import EmptyState from '@/components/ui/EmptyState'
 import InboxPendingRefresh from '@/components/inbox/InboxPendingRefresh'
 import { deleteMention, getCompanyMentions, updateMentionStatus } from '@/lib/api/mentions'
+import { platformLabel } from '@/lib/ui/mentions'
 
 const PAGE_LIMIT = 20
-const PLATFORM_FILTERS = ['YANDEX', 'TWOGIS', 'WEB']
+const PLATFORM_FILTERS = ['YANDEX', 'TWOGIS', 'WEB', 'TELEGRAM']
 const SENTIMENT_FILTERS = ['NEGATIVE', 'POSITIVE', 'NEUTRAL']
 const RATING_FILTERS = [1, 2, 3, 4, 5]
-
-function platformLabel(value: string) {
-  if (value === 'TWOGIS') return '2GIS'
-  if (value === 'WEB') return 'Сеть'
-  return value
-}
 
 function sentimentLabel(value: string) {
   if (value === 'NEGATIVE') return 'Негатив'

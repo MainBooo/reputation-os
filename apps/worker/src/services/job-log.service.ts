@@ -6,7 +6,7 @@ type FinishJobLogParams = {
   queueName: string
   jobName: string
   bullJobId?: string | number | null
-  status: 'SUCCESS' | 'FAILED'
+  status: 'SUCCESS' | 'FAILED' | 'PARTIAL'
   startedAt?: Date | null
   finishedAt?: Date | null
   itemsDiscovered?: number | null

@@ -20,6 +20,15 @@ import { PageWatchProcessor } from './processors/page-watch.processor'
 import { PageWatchDispatcherProcessor } from './processors/page-watch-dispatcher.processor'
 import { SubscriptionReminderProcessor } from './processors/subscription-reminder.processor'
 import { DeepScanProcessor } from './processors/deep-scan.processor'
+import { TelegramSearchProcessor } from './telegram-search/telegram-search.processor'
+import { TelegramWatchlistDispatcherProcessor } from './telegram-search/telegram-watchlist-dispatcher.processor'
+import { TelegramQueryBuilderService } from './telegram-search/telegram-scout/telegram-query-builder.service'
+import { TelegramGlobalSearchService } from './telegram-search/telegram-scout/telegram-global-search.service'
+import { TelegramChannelSearchService } from './telegram-search/telegram-scout/telegram-channel-search.service'
+import { TelegramRelevanceService } from './telegram-search/telegram-scout/telegram-relevance.service'
+import { TelegramScoutSourceService } from './telegram-search/telegram-scout/telegram-scout-source.service'
+import { TelegramWatchlistService } from './telegram-search/telegram-scout/telegram-watchlist.service'
+import { TelegramScoutService } from './telegram-search/telegram-scout/telegram-scout.service'
 
 @Module({
   imports: [ConfigModule.forRoot({ isGlobal: true, envFilePath: ['apps/worker/.env', '.env'] }), PrismaModule, BullmqModule, TelegramNotificationsModule],
@@ -40,7 +49,16 @@ import { DeepScanProcessor } from './processors/deep-scan.processor'
     PageWatchProcessor,
     PageWatchDispatcherProcessor,
     SubscriptionReminderProcessor,
-    DeepScanProcessor
+    DeepScanProcessor,
+    TelegramQueryBuilderService,
+    TelegramGlobalSearchService,
+    TelegramChannelSearchService,
+    TelegramRelevanceService,
+    TelegramScoutSourceService,
+    TelegramWatchlistService,
+    TelegramScoutService,
+    TelegramSearchProcessor,
+    TelegramWatchlistDispatcherProcessor
   ]
 })
 export class AppModule {}

@@ -77,5 +77,16 @@ export const WORKER_OPTIONS = {
   pageWatch: {
     concurrency: 2,
     lockDuration: 2 * 60_000
+  },
+  telegramSearch: {
+    // The MTProto socket is a single shared resource (see mtproto-lock.ts) — never
+    // run more than one job at a time even locally, regardless of process count.
+    concurrency: 1,
+    lockDuration: 4 * 60_000,
+    limiter: { max: 5, duration: 60_000 }
+  },
+  telegramWatchlistDispatcher: {
+    concurrency: 1,
+    lockDuration: 60_000
   }
 } satisfies Record<string, Partial<WorkerOptions>>

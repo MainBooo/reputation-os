@@ -9,5 +9,10 @@ export const JOBS = {
   PAGE_WATCH: 'page.watch',
   PAGE_WATCH_DISPATCHER: 'page.watch.dispatcher',
   SUBSCRIPTION_REMINDER: 'subscription.reminder.check',
-  DEEP_SCAN_PROMOTE: 'deep.scan.promote'
+  DEEP_SCAN_PROMOTE: 'deep.scan.promote',
+  TELEGRAM_DISCOVERY: 'telegram.discovery',
+  TELEGRAM_WATCHLIST: 'telegram.watchlist',
+  TELEGRAM_ENTITY_SEARCH: 'telegram.entity_search',
+  TELEGRAM_SOURCE_CHECK: 'telegram.source_check',
+  TELEGRAM_WATCHLIST_DISPATCHER: 'telegram.watchlist.dispatcher'
 } as const

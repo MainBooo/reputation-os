@@ -1,3 +1,33 @@
+export function platformLabel(value?: string | null) {
+  switch (value) {
+    case 'YANDEX':
+      return 'Яндекс'
+    case 'TWOGIS':
+      return '2GIS'
+    case 'WEB':
+      return 'Сеть'
+    case 'TELEGRAM':
+      return 'Telegram'
+    default:
+      return value || null
+  }
+}
+
+export function platformClass(value?: string | null) {
+  switch (value) {
+    case 'YANDEX':
+      return 'border-red-400/20 bg-red-400/10 text-red-100'
+    case 'TWOGIS':
+      return 'border-emerald-400/20 bg-emerald-400/10 text-emerald-100'
+    case 'WEB':
+      return 'border-slate-400/20 bg-slate-400/10 text-slate-200'
+    case 'TELEGRAM':
+      return 'border-sky-400/20 bg-sky-400/10 text-sky-100'
+    default:
+      return 'border-white/10 bg-white/[0.04] text-slate-200'
+  }
+}
+
 export function mentionStatusLabel(value?: string | null) {
   switch (value) {
     case 'NEW':

@@ -12,6 +12,7 @@ const colorMap: Record<string, string> = {
   YANDEX: 'border-amber-300/25 bg-amber-400/10 text-amber-200',
   TWOGIS: 'border-sky-300/25 bg-sky-400/10 text-sky-200',
   WEB: 'border-fuchsia-300/25 bg-fuchsia-500/10 text-fuchsia-200',
+  TELEGRAM: 'border-sky-300/25 bg-sky-400/10 text-sky-200',
   CUSTOM: 'border-violet-300/25 bg-violet-500/10 text-violet-200',
   OWNER: 'border-cyan-300/25 bg-cyan-400/10 text-blue-100'
 }

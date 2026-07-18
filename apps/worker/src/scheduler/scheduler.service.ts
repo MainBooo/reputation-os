@@ -6,6 +6,7 @@ import { JOBS } from '../queues/job.names'
 import { CRON_JOB_OPTIONS } from '../queues/job-options'
 import { PageWatchDispatcherProcessor } from '../processors/page-watch-dispatcher.processor'
 import { DeepScanProcessor } from '../processors/deep-scan.processor'
+import { TelegramWatchlistDispatcherProcessor } from '../telegram-search/telegram-watchlist-dispatcher.processor'
 
 const HEARTBEAT_KEY = 'worker:heartbeat'
 const HEARTBEAT_TTL_SECONDS = 120
@@ -28,8 +29,11 @@ export class SchedulerService implements OnModuleInit {
     @Inject(`QUEUE_${QUEUES.PAGE_WATCH_DISPATCHER}`) private readonly pageWatchDispatcherQueue: Queue,
     @Inject(`QUEUE_${QUEUES.SUBSCRIPTION_REMINDER}`) private readonly subscriptionReminderQueue: Queue,
     @Inject(`QUEUE_${QUEUES.DEEP_SCAN}`) private readonly deepScanQueue: Queue,
+    @Inject(`QUEUE_${QUEUES.TELEGRAM_SEARCH}`) private readonly telegramSearchQueue: Queue,
+    @Inject(`QUEUE_${QUEUES.TELEGRAM_WATCHLIST_DISPATCHER}`) private readonly telegramWatchlistDispatcherQueue: Queue,
     private readonly pageWatchDispatcher: PageWatchDispatcherProcessor,
-    private readonly deepScan: DeepScanProcessor
+    private readonly deepScan: DeepScanProcessor,
+    private readonly telegramWatchlistDispatcher: TelegramWatchlistDispatcherProcessor
   ) {}
 
   private async writeHeartbeat() {
@@ -139,6 +143,19 @@ export class SchedulerService implements OnModuleInit {
       }
     }).catch(() => [])
 
+    // Only companies that explicitly opted in (POST .../start-telegram-sync creates
+    // this bootstrap target, mirroring the WEB pattern above) get a recurring
+    // DISCOVERY cron — Telegram Scout never runs for a company that hasn't asked for it.
+    const telegramTargets = await prismaAny.companySourceTarget.findMany({
+      where: {
+        isActive: true,
+        syncMentionsEnabled: true,
+        company: { isActive: true },
+        source: { platform: 'TELEGRAM', isEnabled: true }
+      },
+      select: { companyId: true }
+    }).catch(() => [])
+
     for (const company of companies) {
       if (!company?.id) {
         this.logger.log('Skipping scheduler company without id')
@@ -214,6 +231,25 @@ export class SchedulerService implements OnModuleInit {
       this.logger.warn(`Failed to ensure page-watch dispatcher cron: ${error?.message || error}`)
     })
 
+    const discoveryIntervalMs = Math.max(1, Number(process.env.TELEGRAM_SCOUT_DISCOVERY_INTERVAL_HOURS) || 24) * 60 * 60 * 1000
+    const telegramCompanyIds = new Set<string>(telegramTargets.map((t: any) => t.companyId).filter(Boolean))
+
+    for (const companyId of telegramCompanyIds) {
+      await this.telegramSearchQueue.add(
+        JOBS.TELEGRAM_DISCOVERY,
+        { mode: 'discovery', companyId },
+        { ...CRON_JOB_OPTIONS, repeat: { every: discoveryIntervalMs }, jobId: `telegram-discovery:${companyId}` }
+      ).catch((error) => {
+        this.logger.warn(`Failed to ensure telegram discovery cron companyId=${companyId}: ${error?.message || error}`)
+      })
+    }
+
+    // Telegram watchlist: dispatcher tick every TELEGRAM_WATCHLIST_DISPATCHER_INTERVAL_MIN
+    // finds due CompanyTelegramChannel rows and dispatches one job per physical channel.
+    await this.telegramWatchlistDispatcher.ensureCron(this.telegramWatchlistDispatcherQueue).catch((error) => {
+      this.logger.warn(`Failed to ensure telegram watchlist dispatcher cron: ${error?.message || error}`)
+    })
+
     // Subscription reminder: daily check for trial/subscription expiry (3d, 1d, 0d before end)
     await this.subscriptionReminderQueue.add(
       JOBS.SUBSCRIPTION_REMINDER,
@@ -234,7 +270,7 @@ export class SchedulerService implements OnModuleInit {
     })
 
     this.logger.log(
-      `Scheduler initialized reviewCronTargets=${reviewTargets.length} webCronCompanies=${webTargetsByCompany.size} alertCheckEveryMinutes=5 pageWatchDispatcherEveryMinutes=5 subscriptionReminderEveryHours=24 deepScanEveryDays=7`
+      `Scheduler initialized reviewCronTargets=${reviewTargets.length} webCronCompanies=${webTargetsByCompany.size} alertCheckEveryMinutes=5 pageWatchDispatcherEveryMinutes=5 subscriptionReminderEveryHours=24 deepScanEveryDays=7 telegramDiscoveryCompanies=${telegramCompanyIds.size}`
     )
   }
 }

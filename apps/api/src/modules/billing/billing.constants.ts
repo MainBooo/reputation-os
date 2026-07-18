@@ -12,6 +12,7 @@ export interface PlanLimits {
   maxWebPages: number           // -1 = безлимит
   webMonitoringEnabled: boolean
   pushNotificationsEnabled: boolean
+  telegramMonitoringEnabled: boolean
 }
 
 export type FeatureKey = keyof PlanLimits
@@ -26,7 +27,8 @@ export const FREE_LIMITS: PlanLimits = {
   maxMembers: 1,
   maxWebPages: 0,
   webMonitoringEnabled: false,
-  pushNotificationsEnabled: true
+  pushNotificationsEnabled: true,
+  telegramMonitoringEnabled: false
 }
 
 export const FEATURE_KEYS: FeatureKey[] = [
@@ -39,5 +41,6 @@ export const FEATURE_KEYS: FeatureKey[] = [
   'maxMembers',
   'maxWebPages',
   'webMonitoringEnabled',
-  'pushNotificationsEnabled'
+  'pushNotificationsEnabled',
+  'telegramMonitoringEnabled'
 ]

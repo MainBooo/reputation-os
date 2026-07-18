@@ -13,6 +13,7 @@ export interface PlanLimits {
   maxSources?: number
   maxMembers?: number
   maxWebPages?: number
+  telegramMonitoringEnabled?: boolean
 }
 
 export interface BillingPlan {
