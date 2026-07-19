@@ -335,6 +335,21 @@ describe('parseClassifierResponse — strict contract validation', () => {
     expect(result.ok).toBe(true)
   })
 
+  it('extracts JSON preceded by explanatory text with nothing after', () => {
+    const result = parseClassifierResponse(`Вот результат классификации:\n${JSON.stringify(validPayload())}`)
+    expect(result.ok).toBe(true)
+  })
+
+  it('extracts JSON followed by explanatory text with nothing before', () => {
+    const result = parseClassifierResponse(`${JSON.stringify(validPayload())}\nНадеюсь, это поможет!`)
+    expect(result.ok).toBe(true)
+  })
+
+  it('strips a leading BOM before parsing', () => {
+    const result = parseClassifierResponse('﻿' + JSON.stringify(validPayload()))
+    expect(result.ok).toBe(true)
+  })
+
   it('rejects decision=NO paired with a non-IRRELEVANT/SPAM type as a technical failure', () => {
     const result = parseClassifierResponse(JSON.stringify(validPayload({ decision: 'NO', type: 'OWNED_PROMO' })))
     expect(result.ok).toBe(false)
