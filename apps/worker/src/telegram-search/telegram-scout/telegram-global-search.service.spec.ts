@@ -2,16 +2,24 @@ import { Api, errors } from 'teleproto'
 import bigInt from 'big-integer'
 import { TelegramGlobalSearchService } from './telegram-global-search.service'
 
-function makeChannel(id: number, opts: Partial<{ broadcast: boolean; megagroup: boolean; username: string; title: string }> = {}) {
+function makeChannel(
+  id: number,
+  opts: Partial<{ broadcast: boolean; megagroup: boolean; username: string; title: string; accessHash: number }> = {}
+) {
   return new Api.Channel({
     id: bigInt(id),
     title: opts.title ?? `Channel ${id}`,
     broadcast: opts.broadcast ?? false,
     megagroup: opts.megagroup ?? false,
     username: opts.username,
+    accessHash: opts.accessHash !== undefined ? bigInt(opts.accessHash) : undefined,
     photo: new Api.ChatPhotoEmpty(),
     date: 1_700_000_000
   })
+}
+
+function chatsResponse(chats: Api.TypeChat[]) {
+  return new Api.messages.Chats({ chats })
 }
 
 function makeMessage(id: number, chatId: number, text: string, date = 1_700_000_000) {
@@ -33,9 +41,12 @@ function fakeClient(invokeImpl: jest.Mock) {
 }
 
 describe('TelegramGlobalSearchService', () => {
-  const service = new TelegramGlobalSearchService()
+  let service: TelegramGlobalSearchService
 
   beforeEach(() => {
+    // Fresh instance per test — resolvedUsernameCache is instance-scoped and must
+    // not leak resolved/cached usernames between unrelated test cases.
+    service = new TelegramGlobalSearchService()
     process.env.TELEGRAM_SEARCH_DELAY_MS = '0'
     process.env.TELEGRAM_SEARCH_RETRY_ATTEMPTS = '2'
     delete process.env.TELEGRAM_SCOUT_ENABLE_HASHTAG_POST_SEARCH
@@ -210,6 +221,139 @@ describe('TelegramGlobalSearchService', () => {
       const invoke = jest.fn().mockRejectedValue(new Error('network down'))
       const result = await service.searchEntities(fakeClient(invoke), 'Ромашка', 5)
       expect(result).toEqual([])
+    })
+  })
+
+  describe('resolving "min" channels without a username', () => {
+    it('does not call GetChannels when the search result already has a full channel with username', async () => {
+      const chat = makeChannel(111, { broadcast: true, username: 'mychannel' })
+      const message = makeMessage(1, 111, 'text')
+      const invoke = jest.fn()
+        .mockResolvedValueOnce(messagesPage([message], [chat]))
+        .mockResolvedValueOnce(messagesPage([], []))
+
+      await service.searchChannels(fakeClient(invoke), { query: 'q', maxPages: 3, remainingMessageBudget: 100 })
+
+      const getChannelsCalls = invoke.mock.calls.filter(([req]) => req instanceof Api.channels.GetChannels)
+      expect(getChannelsCalls).toHaveLength(0)
+    })
+
+    it('resolves username via channels.GetChannels when the chat came back as a "min" constructor', async () => {
+      const minChat = makeChannel(222, { broadcast: true, accessHash: 555 }) // no username
+      const resolvedChat = makeChannel(222, { broadcast: true, username: 'realusername', accessHash: 555 })
+      const message = makeMessage(2, 222, 'text')
+
+      const invoke = jest.fn()
+        .mockResolvedValueOnce(messagesPage([message], [minChat]))
+        .mockResolvedValueOnce(chatsResponse([resolvedChat]))
+        .mockResolvedValueOnce(messagesPage([], []))
+
+      const result = await service.searchChannels(fakeClient(invoke), { query: 'q', maxPages: 3, remainingMessageBudget: 100 })
+
+      expect(result.messages[0].username).toBe('realusername')
+      const getChannelsCall = invoke.mock.calls.find(([req]) => req instanceof Api.channels.GetChannels)
+      expect(getChannelsCall).toBeDefined()
+      const inputChannels = getChannelsCall![0].id as Api.InputChannel[]
+      expect(inputChannels).toHaveLength(1)
+      expect(inputChannels[0].channelId.toString()).toBe('222')
+    })
+
+    it('resolves a single unresolved channel only once even with multiple messages from it', async () => {
+      const minChat = makeChannel(333, { broadcast: true, accessHash: 777 })
+      const resolvedChat = makeChannel(333, { broadcast: true, username: 'multi', accessHash: 777 })
+      const messages = [makeMessage(1, 333, 'first'), makeMessage(2, 333, 'second')]
+
+      const invoke = jest.fn()
+        .mockResolvedValueOnce(messagesPage(messages, [minChat]))
+        .mockResolvedValueOnce(chatsResponse([resolvedChat]))
+        .mockResolvedValueOnce(messagesPage([], []))
+
+      const result = await service.searchChannels(fakeClient(invoke), { query: 'q', maxPages: 3, remainingMessageBudget: 100 })
+
+      expect(result.messages).toHaveLength(2)
+      expect(result.messages.every((m) => m.username === 'multi')).toBe(true)
+      const getChannelsCalls = invoke.mock.calls.filter(([req]) => req instanceof Api.channels.GetChannels)
+      expect(getChannelsCalls).toHaveLength(1)
+    })
+
+    it('resolves multiple distinct unresolved channels in a single batch call', async () => {
+      const minA = makeChannel(1, { broadcast: true, accessHash: 10 })
+      const minB = makeChannel(2, { broadcast: true, accessHash: 20 })
+      const resolvedA = makeChannel(1, { broadcast: true, username: 'chan_a', accessHash: 10 })
+      const resolvedB = makeChannel(2, { broadcast: true, username: 'chan_b', accessHash: 20 })
+      const messages = [makeMessage(1, 1, 'from a'), makeMessage(2, 2, 'from b')]
+
+      const invoke = jest.fn()
+        .mockResolvedValueOnce(messagesPage(messages, [minA, minB]))
+        .mockResolvedValueOnce(chatsResponse([resolvedA, resolvedB]))
+        .mockResolvedValueOnce(messagesPage([], []))
+
+      const result = await service.searchChannels(fakeClient(invoke), { query: 'q', maxPages: 3, remainingMessageBudget: 100 })
+
+      const getChannelsCalls = invoke.mock.calls.filter(([req]) => req instanceof Api.channels.GetChannels)
+      expect(getChannelsCalls).toHaveLength(1)
+      const inputChannels = getChannelsCalls[0][0].id as Api.InputChannel[]
+      expect(inputChannels.map((c) => c.channelId.toString()).sort()).toEqual(['1', '2'])
+      expect(result.messages.find((m) => m.chatId === '1')?.username).toBe('chan_a')
+      expect(result.messages.find((m) => m.chatId === '2')?.username).toBe('chan_b')
+    })
+
+    it('leaves username null (never fabricated) when the resolved channel genuinely has no username', async () => {
+      const minChat = makeChannel(444, { broadcast: true, accessHash: 888 })
+      const stillNoUsername = makeChannel(444, { broadcast: true, accessHash: 888 }) // resolved, still no username
+      const message = makeMessage(1, 444, 'text')
+
+      const invoke = jest.fn()
+        .mockResolvedValueOnce(messagesPage([message], [minChat]))
+        .mockResolvedValueOnce(chatsResponse([stillNoUsername]))
+        .mockResolvedValueOnce(messagesPage([], []))
+
+      const result = await service.searchChannels(fakeClient(invoke), { query: 'q', maxPages: 3, remainingMessageBudget: 100 })
+
+      expect(result.messages[0].username).toBeNull()
+    })
+
+    it('does not re-resolve a chatId already cached from an earlier call within the same run', async () => {
+      const minChat = makeChannel(555, { broadcast: true, accessHash: 111 })
+      const resolvedChat = makeChannel(555, { broadcast: true, username: 'cached_one', accessHash: 111 })
+
+      const firstInvoke = jest.fn()
+        .mockResolvedValueOnce(messagesPage([makeMessage(1, 555, 'first query')], [minChat]))
+        .mockResolvedValueOnce(chatsResponse([resolvedChat]))
+        .mockResolvedValueOnce(messagesPage([], []))
+
+      const firstResult = await service.searchChannels(fakeClient(firstInvoke), { query: 'first query', maxPages: 3, remainingMessageBudget: 100 })
+      expect(firstResult.messages[0].username).toBe('cached_one')
+
+      // A second, independent search (as if a different query in the same discovery
+      // run) encounters the SAME chat, still returned as "min" by Telegram — the
+      // cache from the first call must serve the username without a new GetChannels call.
+      const secondInvoke = jest.fn()
+        .mockResolvedValueOnce(messagesPage([makeMessage(2, 555, 'second query')], [minChat]))
+        .mockResolvedValueOnce(messagesPage([], []))
+
+      const secondResult = await service.searchChannels(fakeClient(secondInvoke), { query: 'second query', maxPages: 3, remainingMessageBudget: 100 })
+
+      expect(secondResult.messages[0].username).toBe('cached_one')
+      const getChannelsCallsSecondRun = secondInvoke.mock.calls.filter(([req]) => req instanceof Api.channels.GetChannels)
+      expect(getChannelsCallsSecondRun).toHaveLength(0)
+    })
+
+    it('does not throw and still returns the page when the GetChannels resolve call fails', async () => {
+      process.env.TELEGRAM_SEARCH_RETRY_ATTEMPTS = '1' // no retry backoff delay for this test
+      const minChat = makeChannel(666, { broadcast: true, accessHash: 222 })
+      const message = makeMessage(1, 666, 'still processed')
+
+      const invoke = jest.fn()
+        .mockResolvedValueOnce(messagesPage([message], [minChat])) // page 1, chat unresolved
+        .mockRejectedValueOnce(new Error('RPC error resolving channel')) // GetChannels attempt fails
+        .mockResolvedValueOnce(messagesPage([], [])) // page 2, ends pagination cleanly
+
+      const result = await service.searchChannels(fakeClient(invoke), { query: 'q', maxPages: 3, remainingMessageBudget: 100 })
+
+      expect(result.messages).toHaveLength(1)
+      expect(result.messages[0].username).toBeNull()
+      expect(result.stoppedReason).toBe('empty_page')
     })
   })
 })

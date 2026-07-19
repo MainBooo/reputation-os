@@ -1,6 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { Api, errors, TelegramClient } from 'teleproto'
-import { mapApiMessages, mapChatToCandidate, normalizeMessagesResponse, type TelegramEntityCandidate } from './telegram-api-mapper'
+import {
+  findChannelsNeedingUsernameResolve,
+  mapApiMessages,
+  mapChatToCandidate,
+  mapResolvedChannelsToUsernameOverrides,
+  normalizeMessagesResponse,
+  type TelegramEntityCandidate
+} from './telegram-api-mapper'
 import type { TelegramRawMessage, TelegramScoutRunStats } from './telegram-scout.types'
 import { delay, searchDelayMs, searchResultsLimit, searchRetryAttempts, withRetry } from './telegram-retry.util'
 import { isHashtagPostSearchEnabled } from './telegram-scout.config'
@@ -27,8 +34,16 @@ export interface GlobalSearchOptions {
 export class TelegramGlobalSearchService {
   private readonly logger = new Logger(TelegramGlobalSearchService.name)
 
+  /** chatId -> resolved username (or null if a full resolve confirmed the channel
+   *  genuinely has none). Lives for the lifetime of this singleton service, so a
+   *  channel is resolved at most once across every discovery run, not just once
+   *  per run — usernames essentially never change, so a long-lived cache entry
+   *  going briefly stale after a rename is an acceptable trade-off for avoiding
+   *  repeat channels.GetChannels calls. */
+  private readonly resolvedUsernameCache = new Map<string, string | null>()
+
   async searchChannels(client: TelegramClient, options: GlobalSearchOptions): Promise<GlobalSearchResult> {
-    return this.paginate(options, (offsetRate, offsetPeer, offsetId, limit) =>
+    return this.paginate(client, options, (offsetRate, offsetPeer, offsetId, limit) =>
       client.invoke(
         new Api.messages.SearchGlobal({
           broadcastsOnly: true,
@@ -46,7 +61,7 @@ export class TelegramGlobalSearchService {
   }
 
   async searchGroups(client: TelegramClient, options: GlobalSearchOptions): Promise<GlobalSearchResult> {
-    return this.paginate(options, (offsetRate, offsetPeer, offsetId, limit) =>
+    return this.paginate(client, options, (offsetRate, offsetPeer, offsetId, limit) =>
       client.invoke(
         new Api.messages.SearchGlobal({
           groupsOnly: true,
@@ -72,7 +87,7 @@ export class TelegramGlobalSearchService {
 
     const hashtag = options.query.replace(/^#/, '')
 
-    return this.paginate(options, (offsetRate, offsetPeer, offsetId, limit) =>
+    return this.paginate(client, options, (offsetRate, offsetPeer, offsetId, limit) =>
       client.invoke(
         new Api.channels.SearchPosts({
           hashtag,
@@ -83,6 +98,56 @@ export class TelegramGlobalSearchService {
         })
       )
     )
+  }
+
+  /** Resolves the username for any channel in `chats` that search returned as a
+   *  "min" constructor (no username, but id+accessHash present), via a single
+   *  batched channels.GetChannels call for all of this page's unresolved chats.
+   *  Already-resolved chatIds (successful or confirmed-no-username) are served
+   *  from `resolvedUsernameCache` and never requested again. A failed resolve
+   *  logs the affected chatIds and the technical reason only (no session/API
+   *  secrets) and never throws — the caller proceeds with url:null for those
+   *  channels, exactly as before this fix existed. */
+  private async resolveUnresolvedUsernames(client: TelegramClient, chats: Api.TypeChat[]): Promise<Map<string, string>> {
+    const overrides = new Map<string, string>()
+    const candidates = findChannelsNeedingUsernameResolve(chats)
+    const needsResolve: Api.Channel[] = []
+
+    for (const chat of candidates) {
+      const chatId = chat.id.toString()
+      if (this.resolvedUsernameCache.has(chatId)) {
+        const cached = this.resolvedUsernameCache.get(chatId)
+        if (cached) overrides.set(chatId, cached)
+        continue
+      }
+      needsResolve.push(chat)
+    }
+
+    if (needsResolve.length === 0) return overrides
+
+    try {
+      const inputChannels = needsResolve.map(
+        (chat) => new Api.InputChannel({ channelId: chat.id, accessHash: chat.accessHash! })
+      )
+      const resolved = await withRetry(
+        () => client.invoke(new Api.channels.GetChannels({ id: inputChannels })),
+        searchRetryAttempts()
+      )
+      const resolvedOverrides = mapResolvedChannelsToUsernameOverrides(resolved.chats)
+
+      for (const chat of needsResolve) {
+        const chatId = chat.id.toString()
+        const username = resolvedOverrides.get(chatId) ?? null
+        this.resolvedUsernameCache.set(chatId, username)
+        if (username) overrides.set(chatId, username)
+      }
+    } catch (error) {
+      const chatIds = needsResolve.map((chat) => chat.id.toString()).join(',')
+      const reason = error instanceof Error ? error.message : 'unknown'
+      this.logger.warn(`Channel username resolve failed for chatIds=[${chatIds}]: ${reason}`)
+    }
+
+    return overrides
   }
 
   /** contacts.Search — entity discovery only (channels/groups/users by name),
@@ -108,6 +173,7 @@ export class TelegramGlobalSearchService {
   }
 
   private async paginate(
+    client: TelegramClient,
     options: GlobalSearchOptions,
     invokePage: (
       offsetRate: number,
@@ -155,7 +221,8 @@ export class TelegramGlobalSearchService {
         break
       }
 
-      const mapped = mapApiMessages(rawMessages, response.chats ?? [])
+      const usernameOverrides = await this.resolveUnresolvedUsernames(client, response.chats ?? [])
+      const mapped = mapApiMessages(rawMessages, response.chats ?? [], usernameOverrides)
       const remaining = options.remainingMessageBudget - messages.length
 
       if (mapped.length >= remaining) {
