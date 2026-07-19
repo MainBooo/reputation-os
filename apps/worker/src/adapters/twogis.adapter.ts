@@ -130,21 +130,53 @@ export class TwoGisAdapter {
     })
 
     try {
-      const context = await browser.newContext({
+      let context = await browser.newContext({
         viewport: { width: 1440, height: 1200 },
         userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36'
       })
       await context.addInitScript(() => { Object.defineProperty(navigator, 'webdriver', { get: () => undefined }) })
-      const page = await context.newPage()
+      let page = await context.newPage()
 
-      try {
-        await page.goto(normalizedUrl, { waitUntil: 'domcontentloaded', timeout: 45000 })
-      } catch (error) {
-        console.warn('[TWOGIS] goto timeout, continue parse attempt', {
-          url: normalizedUrl,
-          error: error instanceof Error ? error.message : String(error)
-        })
+      const maxAttempts = 2
+      let navigationSucceeded = false
+
+      for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+        try {
+          await page.goto(normalizedUrl, { waitUntil: 'domcontentloaded', timeout: 60000 })
+          navigationSucceeded = true
+          break
+        } catch (error) {
+          console.warn(`[TWOGIS] goto timeout (attempt ${attempt}/${maxAttempts})`, {
+            url: normalizedUrl,
+            error: error instanceof Error ? error.message : String(error)
+          })
+
+          if (attempt >= maxAttempts) break
+
+          await context.close().catch((closeError) => {
+            console.warn('[TWOGIS] failed to close context before retry', {
+              url: normalizedUrl,
+              error: closeError instanceof Error ? closeError.message : String(closeError)
+            })
+          })
+          context = await browser.newContext({
+            viewport: { width: 1440, height: 1200 },
+            userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36'
+          })
+          await context.addInitScript(() => { Object.defineProperty(navigator, 'webdriver', { get: () => undefined }) })
+          page = await context.newPage()
+        }
       }
+
+      // Every goto attempt failed — this is a real fetch failure, not "0 reviews
+      // found". Throwing here (instead of silently falling through to scroll/parse
+      // a blank page) lets the caller's existing catch block skip the
+      // CompanySourceTarget.lastSyncedAt update and log the target as failed,
+      // rather than recording a successful-looking sync that never actually loaded.
+      if (!navigationSucceeded) {
+        throw new Error(`TWOGIS_NAVIGATION_FAILED: exhausted ${maxAttempts} attempts for ${normalizedUrl}`)
+      }
+
       if (page.isClosed()) {
         console.warn('[TWOGIS] page closed after goto, skip target', { url: normalizedUrl, reason: 'TWOGIS_PAGE_CLOSED_AFTER_GOTO' })
         return []

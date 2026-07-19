@@ -67,6 +67,18 @@ export class ReviewsSyncProcessor implements OnModuleInit, OnModuleDestroy {
               logoUrl
             })
           }
+
+          await this.prisma.companySourceTarget.update({
+            where: { id: target.id },
+            data: { lastSyncedAt: new Date() }
+          }).catch((error) => {
+            console.warn('[REVIEWS] Failed to update lastSyncedAt', {
+              targetId: target.id,
+              platform: target.source.platform,
+              error: error instanceof Error ? error.message : String(error)
+            })
+            return null
+          })
         } catch (targetError) {
           const targetMessage = targetError instanceof Error ? targetError.message : String(targetError)
 
