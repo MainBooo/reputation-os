@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common'
-import { MentionType, Platform, Sentiment } from '@prisma/client'
+import { MentionType, MessageClassification, MessageUrgency, Platform, Sentiment } from '@prisma/client'
 import { PrismaService } from '../common/prisma/prisma.service'
 import { buildMentionHash } from '../common/utils/hash.util'
 import { normalizeText } from '../common/utils/normalize.util'
@@ -37,6 +37,14 @@ export class DedupService {
     metadata?: any
     matchedQuery?: string | null
     relevanceScore?: any
+    messageClassification?: MessageClassification | null
+    messageClassConfidence?: any
+    messageUrgency?: MessageUrgency | null
+    messageClassReason?: string | null
+    messageClassModel?: string | null
+    isInboxVisible?: boolean
+    needsManualReview?: boolean
+    classifiedAt?: Date | null
   }, params: {
     title?: string | null
     content: string
@@ -50,6 +58,14 @@ export class DedupService {
     metadata?: unknown
     matchedQuery?: string | null
     relevanceScore?: number | null
+    messageClassification?: MessageClassification | null
+    messageClassConfidence?: number | null
+    messageUrgency?: MessageUrgency | null
+    messageClassReason?: string | null
+    messageClassModel?: string | null
+    isInboxVisible?: boolean
+    needsManualReview?: boolean
+    classifiedAt?: Date | null
   }) {
     const nextRating = params.ratingValue ?? existing.ratingValue ?? null
     const nextPublishedAt = existing.publishedAt && params.ratingValue == null
@@ -69,7 +85,15 @@ export class DedupService {
       rawPayload: params.rawPayload as any,
       metadata: params.metadata as any,
       matchedQuery: params.matchedQuery ?? existing.matchedQuery ?? null,
-      relevanceScore: params.relevanceScore ?? existing.relevanceScore ?? null
+      relevanceScore: params.relevanceScore ?? existing.relevanceScore ?? null,
+      messageClassification: params.messageClassification ?? existing.messageClassification ?? null,
+      messageClassConfidence: params.messageClassConfidence ?? existing.messageClassConfidence ?? null,
+      messageUrgency: params.messageUrgency ?? existing.messageUrgency ?? null,
+      messageClassReason: params.messageClassReason ?? existing.messageClassReason ?? null,
+      messageClassModel: params.messageClassModel ?? existing.messageClassModel ?? null,
+      isInboxVisible: params.isInboxVisible ?? existing.isInboxVisible ?? true,
+      needsManualReview: params.needsManualReview ?? existing.needsManualReview ?? false,
+      classifiedAt: params.classifiedAt ?? existing.classifiedAt ?? null
     }
   }
 
@@ -91,6 +115,14 @@ export class DedupService {
     metadata?: unknown
     matchedQuery?: string | null
     relevanceScore?: number | null
+    messageClassification?: MessageClassification | null
+    messageClassConfidence?: number | null
+    messageUrgency?: MessageUrgency | null
+    messageClassReason?: string | null
+    messageClassModel?: string | null
+    isInboxVisible?: boolean
+    needsManualReview?: boolean
+    classifiedAt?: Date | null
   }) {
     const normalizedContent = normalizeText(params.content)
 
@@ -183,6 +215,14 @@ export class DedupService {
         metadata: params.metadata as any,
         matchedQuery: params.matchedQuery ?? null,
         relevanceScore: params.relevanceScore ?? null,
+        messageClassification: params.messageClassification ?? null,
+        messageClassConfidence: params.messageClassConfidence ?? null,
+        messageUrgency: params.messageUrgency ?? null,
+        messageClassReason: params.messageClassReason ?? null,
+        messageClassModel: params.messageClassModel ?? null,
+        isInboxVisible: params.isInboxVisible ?? true,
+        needsManualReview: params.needsManualReview ?? false,
+        classifiedAt: params.classifiedAt ?? null,
           companySourceTargetId: params.companySourceTargetId || null
       }
     })

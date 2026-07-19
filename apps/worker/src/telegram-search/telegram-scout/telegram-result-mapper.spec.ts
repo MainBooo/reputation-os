@@ -1,5 +1,5 @@
 import { buildExternalMentionId, buildTelegramMessageUrl, mapTelegramMessageToMentionParams } from './telegram-result-mapper'
-import type { RelevanceResult, TelegramRawMessage } from './telegram-scout.types'
+import type { HeuristicPreFilterResult, MessageClassifierResult, MessageRoutingResult, TelegramRawMessage } from './telegram-scout.types'
 
 function rawMessage(overrides: Partial<TelegramRawMessage> = {}): TelegramRawMessage {
   return {
@@ -19,16 +19,31 @@ function rawMessage(overrides: Partial<TelegramRawMessage> = {}): TelegramRawMes
   }
 }
 
-function relevance(overrides: Partial<RelevanceResult> = {}): RelevanceResult {
+function preFilter(overrides: Partial<HeuristicPreFilterResult> = {}): HeuristicPreFilterResult {
   return {
-    verdict: 'YES',
-    score: 0.9,
-    reason: 'exact_name',
-    matchedEntity: 'Кофейня Ромашка',
-    topic: 'отзыв',
-    viaLlm: false,
+    passesPreFilter: true,
+    exactHit: true,
+    heuristicScore: 8,
+    heuristicReasons: ['exact_name'],
     ...overrides
   }
+}
+
+function okClassification(overrides: Partial<Extract<MessageClassifierResult, { ok: true }>> = {}): MessageClassifierResult {
+  return {
+    ok: true,
+    decision: 'YES',
+    type: 'CUSTOMER_REVIEW',
+    sentiment: 'POSITIVE',
+    urgency: 'LOW',
+    confidence: 0.95,
+    shortReason: 'Положительный отзыв',
+    ...overrides
+  }
+}
+
+function visibleRouting(overrides: Partial<MessageRoutingResult> = {}): MessageRoutingResult {
+  return { isInboxVisible: true, needsManualReview: false, ...overrides }
 }
 
 describe('buildExternalMentionId', () => {
@@ -48,11 +63,13 @@ describe('buildTelegramMessageUrl', () => {
 })
 
 describe('mapTelegramMessageToMentionParams', () => {
-  it('maps a public-channel message into DedupService.persistMention params', () => {
+  it('maps a public-channel message plus a successful classification into DedupService.persistMention params', () => {
     const params = mapTelegramMessageToMentionParams({
       message: rawMessage(),
       matchedQuery: 'Кофейня Ромашка',
-      relevance: relevance(),
+      preFilter: preFilter(),
+      classification: okClassification(),
+      routing: visibleRouting(),
       companyId: 'c1',
       sourceId: 's1',
       companySourceTargetId: 'cst1'
@@ -63,20 +80,64 @@ describe('mapTelegramMessageToMentionParams', () => {
     expect(params.platform).toBe('TELEGRAM')
     expect(params.type).toBe('SOCIAL_MENTION')
     expect(params.matchedQuery).toBe('Кофейня Ромашка')
-    expect(params.relevanceScore).toBe(0.9)
+    expect(params.relevanceScore).toBe(8)
     expect(params.rawPayload.entityType).toBe('channel')
-    expect((params.metadata.relevance as any).verdict).toBe('YES')
+    expect(params.messageClassification).toBe('CUSTOMER_REVIEW')
+    expect(params.messageClassConfidence).toBe(0.95)
+    expect(params.messageUrgency).toBe('LOW')
+    expect(params.messageClassReason).toBe('Положительный отзыв')
+    expect(params.isInboxVisible).toBe(true)
+    expect(params.needsManualReview).toBe(false)
+    expect(params.classifiedAt).toBeInstanceOf(Date)
   })
 
   it('never fabricates a URL for a source without a public username', () => {
     const params = mapTelegramMessageToMentionParams({
       message: rawMessage({ username: null }),
       matchedQuery: 'Кофейня Ромашка',
-      relevance: relevance(),
+      preFilter: preFilter(),
+      classification: okClassification(),
+      routing: visibleRouting(),
       companyId: 'c1',
       sourceId: 's1'
     })
 
     expect(params.url).toBeNull()
+  })
+
+  it('stores the technical failure reason and nulls out classification fields on ok:false, without losing the Mention', () => {
+    const params = mapTelegramMessageToMentionParams({
+      message: rawMessage(),
+      matchedQuery: 'Кофейня Ромашка',
+      preFilter: preFilter(),
+      classification: { ok: false, errorReason: 'network_error:timeout' },
+      routing: { isInboxVisible: true, needsManualReview: true },
+      companyId: 'c1',
+      sourceId: 's1'
+    })
+
+    expect(params.messageClassification).toBeNull()
+    expect(params.messageClassConfidence).toBeNull()
+    expect(params.messageUrgency).toBeNull()
+    expect(params.messageClassReason).toBe('network_error:timeout')
+    expect(params.isInboxVisible).toBe(true)
+    expect(params.needsManualReview).toBe(true)
+    // Content itself is preserved — a technical failure never drops the Mention.
+    expect(params.content).toBe(rawMessage().text)
+  })
+
+  it('marks a confidently-hidden OWNED_PROMO as isInboxVisible=false via the routing param', () => {
+    const params = mapTelegramMessageToMentionParams({
+      message: rawMessage(),
+      matchedQuery: 'Кофейня Ромашка',
+      preFilter: preFilter(),
+      classification: okClassification({ type: 'OWNED_PROMO', confidence: 0.95 }),
+      routing: { isInboxVisible: false, needsManualReview: false },
+      companyId: 'c1',
+      sourceId: 's1'
+    })
+
+    expect(params.messageClassification).toBe('OWNED_PROMO')
+    expect(params.isInboxVisible).toBe(false)
   })
 })

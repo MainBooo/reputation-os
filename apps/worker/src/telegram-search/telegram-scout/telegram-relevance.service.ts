@@ -1,12 +1,10 @@
-import { Injectable, Logger } from '@nestjs/common'
-import axios from 'axios'
-import type { RelevanceContext, RelevanceInput, RelevanceLlmResponse, RelevanceResult } from './telegram-scout.types'
+import { Injectable } from '@nestjs/common'
+import type { HeuristicPreFilterResult, RelevanceContext } from './telegram-scout.types'
 
 const MIN_EXACT_MATCH_LEN = 4
-const HARD_ACCEPT_SCORE = 10
-// Only a literal zero-signal message (no token/city overlap at all) skips the LLM as
-// an automatic NO — anything above that is genuinely ambiguous and goes to the LLM,
-// since Russian inflection already makes exact-substring signals unreliable on their own.
+// Only a literal zero-signal message (no token/city overlap at all) is rejected here
+// as noise — anything above that, including a plain exact-name hit, must go through
+// TelegramMessageClassifierService (plan §"Архитектурное решение").
 const HARD_REJECT_SCORE = 0
 
 /** Local, punctuation-stripping normalizer — deliberately stricter than the
@@ -35,68 +33,42 @@ interface HeuristicScore {
   excludedHit: boolean
 }
 
+/** Pure, LLM-free structural pre-filter for Telegram messages. This is not a
+ *  content decision — it only screens out messages with an excluded-term hit or
+ *  literally zero token/city overlap. Everything that passes still goes through
+ *  the meaning classifier (TelegramMessageClassifierService). */
 @Injectable()
 export class TelegramRelevanceService {
-  private readonly logger = new Logger(TelegramRelevanceService.name)
+  preFilter(messageText: string, context: RelevanceContext, isWeakQuery: boolean): HeuristicPreFilterResult {
+    const normalizedText = normalize(messageText)
+    const heuristic = this.score(normalizedText, context)
 
-  async evaluate(input: RelevanceInput): Promise<RelevanceResult> {
-    const normalizedText = normalize(input.messageText)
-    const heuristic = this.score(normalizedText, input.context)
-
-    // Excluded terms are a hard suppressor — never confirmed, never sent to LLM.
     if (heuristic.excludedHit) {
       return {
-        verdict: 'NO',
-        score: 0,
-        reason: 'excluded_term_match',
-        viaLlm: false
+        passesPreFilter: false,
+        hardRejectReason: 'excluded_term_match',
+        exactHit: heuristic.exactHit,
+        heuristicScore: heuristic.score,
+        heuristicReasons: heuristic.reasons
       }
     }
 
-    // Weak-class matches always require LLM confirmation regardless of heuristic strength.
-    if (!input.isWeakQuery) {
-      // An exact hit (full name / domain / primary alias substring) is decisive on its
-      // own — Russian inflection means the surrounding token score is often low even
-      // when the exact hit is a genuine, unambiguous match.
-      if (heuristic.exactHit) {
-        return {
-          verdict: 'YES',
-          score: Math.max(heuristic.score, HARD_ACCEPT_SCORE),
-          reason: heuristic.reasons.join(','),
-          matchedEntity: input.context.companyName,
-          viaLlm: false
-        }
-      }
-
-      if (heuristic.score <= HARD_REJECT_SCORE) {
-        return {
-          verdict: 'NO',
-          score: heuristic.score,
-          reason: heuristic.reasons.join(',') || 'no_signal',
-          viaLlm: false
-        }
-      }
-    }
-
-    // Grey zone (or forced by weak-class query) — ask the LLM, treat any failure as UNSURE.
-    const llmResult = await this.llmRelevanceCheck(input)
-
-    if (!llmResult) {
+    // Weak-class matches always require classifier confirmation regardless of heuristic strength.
+    if (!isWeakQuery && heuristic.score <= HARD_REJECT_SCORE) {
       return {
-        verdict: 'UNSURE',
-        score: heuristic.score,
-        reason: 'llm_unavailable_or_invalid',
-        viaLlm: true
+        passesPreFilter: false,
+        hardRejectReason: heuristic.reasons.join(',') || 'no_signal',
+        exactHit: heuristic.exactHit,
+        heuristicScore: heuristic.score,
+        heuristicReasons: heuristic.reasons
       }
     }
 
     return {
-      verdict: llmResult.decision,
-      score: llmResult.score,
-      reason: llmResult.reason,
-      matchedEntity: llmResult.matchedEntity,
-      topic: llmResult.topic,
-      viaLlm: true
+      passesPreFilter: true,
+      exactHit: heuristic.exactHit,
+      heuristicScore: heuristic.score,
+      heuristicReasons: heuristic.reasons
     }
   }
 
@@ -157,90 +129,6 @@ export class TelegramRelevanceService {
       reasons,
       exactHit: exactNameHit || exactDomainHit || exactPrimaryAliasHit,
       excludedHit
-    }
-  }
-
-  private async llmRelevanceCheck(input: RelevanceInput): Promise<RelevanceLlmResponse | null> {
-    const apiKey = process.env.YANDEX_GPT_API_KEY
-    const folderId = process.env.YANDEX_GPT_FOLDER_ID
-    const model = process.env.YANDEX_GPT_MODEL || 'yandexgpt-lite'
-
-    if (!apiKey || !folderId) return null
-
-    const { context } = input
-    const prompt = [
-      `Компания: "${context.companyName}"`,
-      context.domain ? `Домен: "${context.domain}"` : null,
-      context.aliases.length ? `Алиасы/бренды: ${context.aliases.join(', ')}` : null,
-      context.excludedTerms.length ? `Исключающие слова (НЕ относятся к компании): ${context.excludedTerms.join(', ')}` : null,
-      `Поисковый запрос, по которому найдено сообщение: "${input.matchedQuery}"`,
-      input.sourceTitle ? `Канал/группа: "${input.sourceTitle}"` : null,
-      input.sourceUsername ? `Username источника: @${input.sourceUsername}` : null,
-      `Текст сообщения: """${input.messageText.slice(0, 1500)}"""`
-    ]
-      .filter(Boolean)
-      .join('\n')
-
-    try {
-      const { data } = await axios.post(
-        'https://llm.api.cloud.yandex.net/foundationModels/v1/completion',
-        {
-          modelUri: `gpt://${folderId}/${model}`,
-          completionOptions: { stream: false, temperature: 0, maxTokens: 300 },
-          messages: [
-            {
-              role: 'system',
-              text:
-                'Ты система фильтрации упоминаний компании в Telegram. Отвечай СТРОГО валидным JSON без markdown-разметки, ' +
-                'ровно с полями: decision ("YES"|"NO"|"UNSURE"), score (число 0..1), reason (краткая причина по-русски), ' +
-                'matchedEntity (что именно относится к компании), topic (тема сообщения). ' +
-                'YES — сообщение про именно эту компанию. NO — про другую компанию/сущность или случайное совпадение слов. ' +
-                'UNSURE — невозможно достоверно определить.'
-            },
-            {
-              role: 'user',
-              text: `Это сообщение упоминает именно эту компанию?\n\n${prompt}`
-            }
-          ]
-        },
-        {
-          headers: {
-            Authorization: `Api-Key ${apiKey}`,
-            'Content-Type': 'application/json'
-          },
-          timeout: 8000
-        }
-      )
-
-      const rawText: string = data?.result?.alternatives?.[0]?.message?.text?.trim() || ''
-      return this.parseLlmJson(rawText)
-    } catch (error: any) {
-      this.logger.warn(`LLM relevance check failed: ${error?.message}`)
-      return null
-    }
-  }
-
-  private parseLlmJson(rawText: string): RelevanceLlmResponse | null {
-    const jsonMatch = rawText.match(/\{[\s\S]*\}/)
-    if (!jsonMatch) return null
-
-    try {
-      const parsed = JSON.parse(jsonMatch[0])
-      const decision = String(parsed.decision || '').toUpperCase()
-
-      if (decision !== 'YES' && decision !== 'NO' && decision !== 'UNSURE') return null
-
-      const score = Number(parsed.score)
-
-      return {
-        decision: decision as RelevanceLlmResponse['decision'],
-        score: Number.isFinite(score) ? Math.max(0, Math.min(1, score)) : 0,
-        reason: typeof parsed.reason === 'string' ? parsed.reason.slice(0, 300) : '',
-        matchedEntity: typeof parsed.matchedEntity === 'string' ? parsed.matchedEntity.slice(0, 200) : '',
-        topic: typeof parsed.topic === 'string' ? parsed.topic.slice(0, 200) : ''
-      }
-    } catch {
-      return null
     }
   }
 }

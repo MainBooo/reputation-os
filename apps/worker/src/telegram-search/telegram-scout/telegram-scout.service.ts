@@ -7,10 +7,12 @@ import { TelegramQueryBuilderService } from './telegram-query-builder.service'
 import { TelegramGlobalSearchService } from './telegram-global-search.service'
 import { TelegramChannelSearchService } from './telegram-channel-search.service'
 import { TelegramRelevanceService } from './telegram-relevance.service'
+import { TelegramMessageClassifierService } from './telegram-message-classifier.service'
+import { resolveMessageRouting } from './telegram-message-routing.util'
 import { TelegramScoutSourceService } from './telegram-scout-source.service'
 import { buildRelevanceContext } from './telegram-relevance-context.util'
 import { mapTelegramMessageToMentionParams } from './telegram-result-mapper'
-import { loadTelegramScoutBudgets } from './telegram-scout.config'
+import { loadTelegramScoutBudgets, messageClassifierHideThreshold, messageClassifierReviewThreshold } from './telegram-scout.config'
 import type { TelegramMtprotoLockHandle } from '../mtproto-lock'
 import type { RelevanceContext, TelegramQuery, TelegramRawMessage, TelegramScoutRunStats } from './telegram-scout.types'
 
@@ -34,6 +36,7 @@ export class TelegramScoutService {
     private readonly globalSearch: TelegramGlobalSearchService,
     private readonly channelSearch: TelegramChannelSearchService,
     private readonly relevance: TelegramRelevanceService,
+    private readonly messageClassifier: TelegramMessageClassifierService,
     private readonly dedup: DedupService,
     private readonly scoutSource: TelegramScoutSourceService
   ) {}
@@ -62,6 +65,8 @@ export class TelegramScoutService {
       mentionsConfirmed: 0,
       mentionsRejected: 0,
       mentionsUnsure: 0,
+      mentionsHidden: 0,
+      mentionsNeedReview: 0,
       newChannelsFound: 0,
       newGroupsFound: 0,
       stoppedReason: null
@@ -217,6 +222,8 @@ export class TelegramScoutService {
       mentionsConfirmed: 0,
       mentionsRejected: 0,
       mentionsUnsure: 0,
+      mentionsHidden: 0,
+      mentionsNeedReview: 0,
       newChannelsFound: 0,
       newGroupsFound: 0,
       stoppedReason: 'exhausted'
@@ -298,42 +305,58 @@ export class TelegramScoutService {
       candidates: Map<string, CandidateChannel>
     }
   ) {
-    for (const message of messages) {
-      const verdict = await this.relevance.evaluate({
-        context,
-        messageText: message.text,
-        matchedQuery: query.text,
-        sourceTitle: message.title,
-        sourceUsername: message.username,
-        isWeakQuery: query.class === 'weak'
-      })
+    const thresholds = { reviewThreshold: messageClassifierReviewThreshold(), hideThreshold: messageClassifierHideThreshold() }
 
-      if (verdict.verdict === 'NO') {
+    for (const message of messages) {
+      const preFilter = this.relevance.preFilter(message.text, context, query.class === 'weak')
+
+      if (!preFilter.passesPreFilter) {
         ctx.stats.mentionsRejected += 1
         continue
       }
 
-      if (verdict.verdict === 'UNSURE') {
-        ctx.stats.mentionsUnsure += 1
-        continue
-      }
+      const classification = await this.messageClassifier.classify({
+        context,
+        messageText: message.text,
+        matchedQuery: query.text,
+        channelTitle: message.title,
+        channelUsername: message.username,
+        entityType: message.entityType,
+        channelClassification: null,
+        exactHit: preFilter.exactHit
+      })
 
-      // YES
+      const type = classification.ok ? classification.type : null
+      const confidence = classification.ok ? classification.confidence : 0
+      const routing = resolveMessageRouting(type, confidence, thresholds)
+
+      // Every message that passes the pre-filter is persisted as a Mention — the
+      // audit principle (plan §3): nothing after this point is silently dropped,
+      // visibility is controlled solely by isInboxVisible/needsManualReview.
       try {
         const params = mapTelegramMessageToMentionParams({
           message,
           matchedQuery: query.text,
-          relevance: verdict,
+          preFilter,
+          classification,
+          routing,
           companyId: ctx.companyId,
           sourceId: ctx.sourceId,
           companySourceTargetId: ctx.companySourceTargetId
         })
         await this.dedup.persistMention(params)
         ctx.stats.mentionsConfirmed += 1
+        if (!routing.isInboxVisible) ctx.stats.mentionsHidden += 1
+        if (routing.needsManualReview) ctx.stats.mentionsNeedReview += 1
       } catch (error) {
         this.logger.warn(`Failed to persist Telegram mention: ${error instanceof Error ? error.message : String(error)}`)
         continue
       }
+
+      // A technical classifier failure never suppresses channel discovery — only a
+      // confident IRRELEVANT/SPAM verdict does (plan §"Продвижение кандидата-канала").
+      const countsAsCandidateHit = !classification.ok || (type !== 'IRRELEVANT' && type !== 'SPAM')
+      if (!countsAsCandidateHit) continue
 
       const existing = ctx.candidates.get(message.chatId)
       if (existing) {

@@ -46,12 +46,26 @@ function emptyResult() {
   return { messages: [], pagesFetched: 1, stoppedReason: 'empty_page' as const }
 }
 
+const REJECT_PRE_FILTER = { passesPreFilter: false, hardRejectReason: 'no_signal', exactHit: false, heuristicScore: 0, heuristicReasons: [] }
+const PASS_PRE_FILTER = { passesPreFilter: true, exactHit: true, heuristicScore: 10, heuristicReasons: ['exact_name'] }
+
+const HIT_CLASSIFICATION = {
+  ok: true,
+  decision: 'YES',
+  type: 'CUSTOMER_REVIEW',
+  sentiment: 'POSITIVE',
+  urgency: 'LOW',
+  confidence: 0.95,
+  shortReason: 'Отзыв клиента'
+}
+
 describe('TelegramScoutService.runDiscovery', () => {
   let prisma: any
   let queryBuilder: any
   let globalSearch: any
   let channelSearch: any
   let relevance: any
+  let messageClassifier: any
   let dedup: any
   let scoutSource: any
   let service: TelegramScoutService
@@ -98,7 +112,9 @@ describe('TelegramScoutService.runDiscovery', () => {
 
     channelSearch = { searchWithinPeer: jest.fn().mockResolvedValue(emptyResult()) }
 
-    relevance = { evaluate: jest.fn().mockResolvedValue({ verdict: 'NO', score: 0, reason: 'no_signal', viaLlm: false }) }
+    relevance = { preFilter: jest.fn().mockReturnValue(REJECT_PRE_FILTER) }
+
+    messageClassifier = { classify: jest.fn().mockResolvedValue(HIT_CLASSIFICATION) }
 
     dedup = { persistMention: jest.fn().mockResolvedValue({ id: 'm1' }) }
 
@@ -106,7 +122,7 @@ describe('TelegramScoutService.runDiscovery', () => {
       ensureBootstrapTarget: jest.fn().mockResolvedValue({ sourceId: 's1', companySourceTargetId: 'cst1', autoAddToWatchlist: false })
     }
 
-    service = new TelegramScoutService(prisma, queryBuilder, globalSearch, channelSearch, relevance, dedup, scoutSource)
+    service = new TelegramScoutService(prisma, queryBuilder, globalSearch, channelSearch, relevance, messageClassifier, dedup, scoutSource)
   })
 
   it('runs a clean pass with no results and reports exhausted', async () => {
@@ -117,13 +133,70 @@ describe('TelegramScoutService.runDiscovery', () => {
     expect(stats.stoppedReason).toBe('exhausted')
   })
 
+  it('rejects a message that fails the pre-filter without calling the classifier or persisting anything', async () => {
+    globalSearch.searchChannels.mockResolvedValueOnce({
+      messages: [rawMessage(1, 'chat1', 'Сегодня хорошая погода')],
+      pagesFetched: 1,
+      stoppedReason: 'empty_page'
+    })
+
+    const stats = await service.runDiscovery({} as any, 'c1')
+
+    expect(stats.mentionsRejected).toBe(1)
+    expect(stats.mentionsConfirmed).toBe(0)
+    expect(messageClassifier.classify).not.toHaveBeenCalled()
+    expect(dedup.persistMention).not.toHaveBeenCalled()
+  })
+
+  it('persists every message that passes the pre-filter, including IRRELEVANT/technical-failure ones (audit principle)', async () => {
+    globalSearch.searchChannels.mockResolvedValueOnce({
+      messages: [rawMessage(1, 'chat1', 'Кофейня Ромашка это круто')],
+      pagesFetched: 1,
+      stoppedReason: 'empty_page'
+    })
+    relevance.preFilter.mockReturnValueOnce(PASS_PRE_FILTER)
+    messageClassifier.classify.mockResolvedValueOnce({
+      ok: true,
+      decision: 'NO',
+      type: 'IRRELEVANT',
+      sentiment: 'NEUTRAL',
+      urgency: 'LOW',
+      confidence: 0.95,
+      shortReason: 'Не относится к компании'
+    })
+
+    const stats = await service.runDiscovery({} as any, 'c1')
+
+    expect(stats.mentionsConfirmed).toBe(1)
+    expect(dedup.persistMention).toHaveBeenCalledTimes(1)
+    expect(stats.mentionsHidden).toBe(1)
+  })
+
+  it('does not lose a Mention on a technical classifier failure — persists with needsManualReview', async () => {
+    globalSearch.searchChannels.mockResolvedValueOnce({
+      messages: [rawMessage(1, 'chat1', 'Кофейня Ромашка это круто')],
+      pagesFetched: 1,
+      stoppedReason: 'empty_page'
+    })
+    relevance.preFilter.mockReturnValueOnce(PASS_PRE_FILTER)
+    messageClassifier.classify.mockResolvedValueOnce({ ok: false, errorReason: 'network_error:timeout' })
+
+    const stats = await service.runDiscovery({} as any, 'c1')
+
+    expect(stats.mentionsConfirmed).toBe(1)
+    expect(stats.mentionsNeedReview).toBe(1)
+    const persistedParams = dedup.persistMention.mock.calls[0][0]
+    expect(persistedParams.needsManualReview).toBe(true)
+    expect(persistedParams.isInboxVisible).toBe(true)
+  })
+
   it('persists a YES mention and creates a disabled watchlist candidate by default', async () => {
     globalSearch.searchChannels.mockResolvedValueOnce({
       messages: [rawMessage(1, 'chat1', 'Кофейня Ромашка это круто')],
       pagesFetched: 1,
       stoppedReason: 'empty_page'
     })
-    relevance.evaluate.mockResolvedValueOnce({ verdict: 'YES', score: 10, reason: 'exact_name', viaLlm: false })
+    relevance.preFilter.mockReturnValueOnce(PASS_PRE_FILTER)
 
     const stats = await service.runDiscovery({} as any, 'c1')
 
@@ -135,6 +208,30 @@ describe('TelegramScoutService.runDiscovery', () => {
     expect(link.enabled).toBe(false)
   })
 
+  it('does not count a confident IRRELEVANT/SPAM classification toward channel discovery yesCount', async () => {
+    globalSearch.searchChannels.mockResolvedValueOnce({
+      messages: [rawMessage(1, 'chat1', 'msg1')],
+      pagesFetched: 1,
+      stoppedReason: 'empty_page'
+    })
+    relevance.preFilter.mockReturnValueOnce(PASS_PRE_FILTER)
+    messageClassifier.classify.mockResolvedValueOnce({
+      ok: true,
+      decision: 'NO',
+      type: 'SPAM',
+      sentiment: 'NEUTRAL',
+      urgency: 'LOW',
+      confidence: 0.95,
+      shortReason: 'Спам'
+    })
+
+    const stats = await service.runDiscovery({} as any, 'c1')
+
+    expect(stats.mentionsConfirmed).toBe(1)
+    expect(stats.newChannelsFound).toBe(0)
+    expect(companyLinks.size).toBe(0)
+  })
+
   it('auto-enables a candidate only when autoAddToWatchlist is set and at least 2 YES mentions were found', async () => {
     scoutSource.ensureBootstrapTarget.mockResolvedValue({ sourceId: 's1', companySourceTargetId: 'cst1', autoAddToWatchlist: true })
 
@@ -143,7 +240,7 @@ describe('TelegramScoutService.runDiscovery', () => {
       pagesFetched: 1,
       stoppedReason: 'empty_page'
     })
-    relevance.evaluate.mockResolvedValue({ verdict: 'YES', score: 10, reason: 'exact_name', viaLlm: false })
+    relevance.preFilter.mockReturnValue(PASS_PRE_FILTER)
 
     await service.runDiscovery({} as any, 'c1')
 
@@ -159,7 +256,7 @@ describe('TelegramScoutService.runDiscovery', () => {
       pagesFetched: 1,
       stoppedReason: 'empty_page'
     })
-    relevance.evaluate.mockResolvedValueOnce({ verdict: 'YES', score: 10, reason: 'exact_name', viaLlm: false })
+    relevance.preFilter.mockReturnValueOnce(PASS_PRE_FILTER)
 
     await service.runDiscovery({} as any, 'c1')
 
@@ -200,7 +297,7 @@ describe('TelegramScoutService.runDiscovery', () => {
       pagesFetched: 1,
       stoppedReason: 'empty_page'
     })
-    relevance.evaluate.mockResolvedValue({ verdict: 'YES', score: 10, reason: 'exact_name', viaLlm: false })
+    relevance.preFilter.mockReturnValue(PASS_PRE_FILTER)
 
     const stats = await service.runDiscovery({} as any, 'c1')
     delete process.env.TELEGRAM_SCOUT_MAX_NEW_SOURCES_PER_RUN
@@ -218,7 +315,7 @@ describe('TelegramScoutService.runDiscovery', () => {
       pagesFetched: 1,
       stoppedReason: 'empty_page'
     })
-    relevance.evaluate.mockResolvedValueOnce({ verdict: 'YES', score: 10, reason: 'exact_name', viaLlm: false })
+    relevance.preFilter.mockReturnValueOnce(PASS_PRE_FILTER)
 
     await service.runDiscovery({} as any, 'c1')
 

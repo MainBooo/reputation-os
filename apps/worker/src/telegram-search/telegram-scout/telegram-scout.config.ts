@@ -7,6 +7,13 @@ function envInt(name: string, fallback: number): number {
   return Number.isFinite(parsed) ? parsed : fallback
 }
 
+function envFloat(name: string, fallback: number): number {
+  const raw = process.env[name]
+  if (!raw) return fallback
+  const parsed = Number(raw)
+  return Number.isFinite(parsed) ? parsed : fallback
+}
+
 /** Reads the hard DISCOVERY budgets from ENV on each call — cheap, and lets
  *  tests override process.env per-case without a singleton to reset. */
 export function loadTelegramScoutBudgets(): TelegramScoutBudgets {
@@ -44,4 +51,17 @@ export function isTelegramScoutEnabled(): boolean {
 
 export function watchlistDispatcherIntervalMin(): number {
   return envInt('TELEGRAM_WATCHLIST_DISPATCHER_INTERVAL_MIN', 5)
+}
+
+/** Below this confidence, a message always stays visible with needsManualReview=true,
+ *  regardless of its classified type. */
+export function messageClassifierReviewThreshold(): number {
+  return envFloat('TELEGRAM_AI_REVIEW_THRESHOLD', 0.8)
+}
+
+/** At/above this confidence, OWNED_PROMO/IRRELEVANT/SPAM are hidden from the Inbox
+ *  (isInboxVisible=false). The [reviewThreshold, hideThreshold) zone is intentionally
+ *  left visible with a normal type badge — a human can archive it manually. */
+export function messageClassifierHideThreshold(): number {
+  return envFloat('TELEGRAM_AI_HIDE_THRESHOLD', 0.9)
 }

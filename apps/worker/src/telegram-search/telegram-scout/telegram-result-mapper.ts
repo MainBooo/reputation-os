@@ -1,10 +1,19 @@
 import type { MentionType, Platform } from '@prisma/client'
-import type { RelevanceResult, TelegramRawMessage } from './telegram-scout.types'
+import type {
+  HeuristicPreFilterResult,
+  MessageClassificationType,
+  MessageClassifierResult,
+  MessageRoutingResult,
+  MessageUrgencyValue,
+  TelegramRawMessage
+} from './telegram-scout.types'
 
 export interface TelegramMentionMapperInput {
   message: TelegramRawMessage
   matchedQuery: string
-  relevance: RelevanceResult
+  preFilter: HeuristicPreFilterResult
+  classification: MessageClassifierResult
+  routing: MessageRoutingResult
   companyId: string
   sourceId: string
   companySourceTargetId?: string | null
@@ -27,6 +36,14 @@ export interface TelegramMentionPersistParams {
   relevanceScore: number
   rawPayload: Record<string, unknown>
   metadata: Record<string, unknown>
+  messageClassification: MessageClassificationType | null
+  messageClassConfidence: number | null
+  messageUrgency: MessageUrgencyValue | null
+  messageClassReason: string | null
+  messageClassModel: string | null
+  isInboxVisible: boolean
+  needsManualReview: boolean
+  classifiedAt: Date
 }
 
 /** Stable regardless of username changes — chatId (numeric) is the durable identity,
@@ -42,7 +59,9 @@ export function buildTelegramMessageUrl(username: string | null, messageId: numb
 }
 
 export function mapTelegramMessageToMentionParams(input: TelegramMentionMapperInput): TelegramMentionPersistParams {
-  const { message, relevance } = input
+  const { message, preFilter, classification, routing } = input
+
+  const messageClassModel = process.env.YANDEX_GPT_MODEL || 'yandexgpt-lite'
 
   return {
     companyId: input.companyId,
@@ -58,7 +77,7 @@ export function mapTelegramMessageToMentionParams(input: TelegramMentionMapperIn
     publishedAt: message.date,
     companySourceTargetId: input.companySourceTargetId ?? null,
     matchedQuery: input.matchedQuery,
-    relevanceScore: relevance.score,
+    relevanceScore: preFilter.heuristicScore,
     rawPayload: {
       chatId: message.chatId,
       username: message.username,
@@ -73,14 +92,29 @@ export function mapTelegramMessageToMentionParams(input: TelegramMentionMapperIn
     },
     metadata: {
       matchedQuery: input.matchedQuery,
-      relevance: {
-        verdict: relevance.verdict,
-        score: relevance.score,
-        reason: relevance.reason,
-        matchedEntity: relevance.matchedEntity ?? null,
-        topic: relevance.topic ?? null,
-        viaLlm: relevance.viaLlm
-      }
-    }
+      preFilter: {
+        exactHit: preFilter.exactHit,
+        heuristicScore: preFilter.heuristicScore,
+        heuristicReasons: preFilter.heuristicReasons
+      },
+      classification: classification.ok
+        ? {
+            decision: classification.decision,
+            type: classification.type,
+            sentiment: classification.sentiment,
+            urgency: classification.urgency,
+            confidence: classification.confidence,
+            shortReason: classification.shortReason
+          }
+        : { ok: false, errorReason: classification.errorReason }
+    },
+    messageClassification: classification.ok ? classification.type : null,
+    messageClassConfidence: classification.ok ? classification.confidence : null,
+    messageUrgency: classification.ok ? classification.urgency : null,
+    messageClassReason: classification.ok ? classification.shortReason : classification.errorReason,
+    messageClassModel,
+    isInboxVisible: routing.isInboxVisible,
+    needsManualReview: routing.needsManualReview,
+    classifiedAt: new Date()
   }
 }

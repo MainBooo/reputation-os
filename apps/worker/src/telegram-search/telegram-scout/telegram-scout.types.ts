@@ -12,8 +12,6 @@ export type TelegramScoutMode = 'discovery' | 'watchlist' | 'entity_search' | 's
 
 export type TelegramEntityType = 'channel' | 'group' | 'supergroup'
 
-export type RelevanceVerdict = 'YES' | 'NO' | 'UNSURE'
-
 export interface RelevanceContext {
   companyName: string
   normalizedCompanyName: string
@@ -29,33 +27,72 @@ export interface RelevanceContext {
   industry: string | null
 }
 
-export interface RelevanceInput {
+/** Cheap, LLM-free structural filter. `passesPreFilter=false` means the message
+ *  never reaches the meaning classifier at all — either an excluded term matched
+ *  (hard suppressor) or there is no token/city overlap whatsoever (zero signal).
+ *  Everything else, including what used to be the `exactHit` shortcut, must go
+ *  through TelegramMessageClassifierService — this is not a content decision. */
+export interface HeuristicPreFilterResult {
+  passesPreFilter: boolean
+  hardRejectReason?: string
+  exactHit: boolean
+  heuristicScore: number
+  heuristicReasons: string[]
+}
+
+export type MessageClassifierDecision = 'YES' | 'NO' | 'UNSURE'
+
+export type MessageClassificationType =
+  | 'OWNED_PROMO'
+  | 'CUSTOMER_REVIEW'
+  | 'CUSTOMER_COMPLAINT'
+  | 'CUSTOMER_QUESTION'
+  | 'CHAT_DISCUSSION'
+  | 'NEWS_MENTION'
+  | 'IRRELEVANT'
+  | 'SPAM'
+
+export type MessageSentimentValue = 'POSITIVE' | 'NEUTRAL' | 'NEGATIVE'
+
+export type MessageUrgencyValue = 'LOW' | 'MEDIUM' | 'HIGH'
+
+/** Input to TelegramMessageClassifierService.classify() — deliberately excludes
+ *  author name/username/authorExternalId (plan §"Минимизация данных в промпте");
+ *  `channelClassification` is a placeholder for Этап 2 (Channel Classifier), always
+ *  null until that stage exists. */
+export interface MessageClassifierInput {
   context: RelevanceContext
   messageText: string
   matchedQuery: string
-  sourceTitle: string | null
-  sourceUsername: string | null
-  /** weak-class matches always go to LLM regardless of heuristic score. */
-  isWeakQuery: boolean
+  channelTitle: string | null
+  channelUsername: string | null
+  entityType: TelegramEntityType
+  channelClassification: string | null
+  exactHit: boolean
 }
 
-/** Strict JSON contract returned by the LLM relevance check — see plan. Any parse
- *  failure or schema violation is treated as UNSURE by the caller, never thrown. */
-export interface RelevanceLlmResponse {
-  decision: RelevanceVerdict
-  score: number
-  reason: string
-  matchedEntity: string
-  topic: string
-}
+/** Discriminated union — `ok:false` is a technical failure (network error, timeout,
+ *  invalid JSON, unknown enum value, out-of-range/non-numeric confidence, empty
+ *  response), never a content judgement. Callers must never lose the Mention on
+ *  `ok:false` — see resolveMessageRouting. */
+export type MessageClassifierResult =
+  | {
+      ok: true
+      decision: MessageClassifierDecision
+      type: MessageClassificationType
+      sentiment: MessageSentimentValue
+      urgency: MessageUrgencyValue
+      confidence: number
+      shortReason: string
+    }
+  | {
+      ok: false
+      errorReason: string
+    }
 
-export interface RelevanceResult {
-  verdict: RelevanceVerdict
-  score: number
-  reason: string
-  matchedEntity?: string | null
-  topic?: string | null
-  viaLlm: boolean
+export interface MessageRoutingResult {
+  isInboxVisible: boolean
+  needsManualReview: boolean
 }
 
 /** One raw message as returned by teleproto, normalized just enough for the
@@ -111,6 +148,10 @@ export interface TelegramScoutRunStats {
   mentionsConfirmed: number
   mentionsRejected: number
   mentionsUnsure: number
+  /** confidence >= hideThreshold && type in {OWNED_PROMO, IRRELEVANT, SPAM} — isInboxVisible=false. */
+  mentionsHidden: number
+  /** confidence < reviewThreshold, or a technical classifier failure — needsManualReview=true. */
+  mentionsNeedReview: number
   newChannelsFound: number
   newGroupsFound: number
   stoppedReason: 'exhausted' | 'max_pages' | 'max_messages' | 'max_runtime' | 'empty_page' | 'flood_wait' | 'lock_lost' | null

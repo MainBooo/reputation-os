@@ -7,11 +7,13 @@ import { PrismaService } from '../../common/prisma/prisma.service'
 import { DedupService } from '../../services/dedup.service'
 import { TelegramChannelSearchService } from './telegram-channel-search.service'
 import { TelegramRelevanceService } from './telegram-relevance.service'
+import { TelegramMessageClassifierService } from './telegram-message-classifier.service'
+import { resolveMessageRouting } from './telegram-message-routing.util'
 import { TelegramScoutSourceService } from './telegram-scout-source.service'
 import { buildRelevanceContext } from './telegram-relevance-context.util'
 import { mapTelegramMessageToMentionParams } from './telegram-result-mapper'
 import { searchResultsLimit } from './telegram-retry.util'
-import { watchlistMaxMessagesPerChannel } from './telegram-scout.config'
+import { messageClassifierHideThreshold, messageClassifierReviewThreshold, watchlistMaxMessagesPerChannel } from './telegram-scout.config'
 import type { TelegramMtprotoLockHandle } from '../mtproto-lock'
 import type { TelegramRawMessage } from './telegram-scout.types'
 
@@ -75,6 +77,7 @@ export class TelegramWatchlistService {
     private readonly prisma: PrismaService,
     private readonly channelSearch: TelegramChannelSearchService,
     private readonly relevance: TelegramRelevanceService,
+    private readonly messageClassifier: TelegramMessageClassifierService,
     private readonly dedup: DedupService,
     private readonly scoutSource: TelegramScoutSourceService
   ) {}
@@ -290,24 +293,35 @@ export class TelegramWatchlistService {
     let lastGoodId: number | null = null
 
     const context = buildRelevanceContext(entry.company, entry.aliases)
+    const thresholds = { reviewThreshold: messageClassifierReviewThreshold(), hideThreshold: messageClassifierHideThreshold() }
 
     for (const message of sorted) {
       try {
-        const verdict = await this.relevance.evaluate({
-          context,
-          messageText: message.text,
-          matchedQuery: entry.matchedQuery ?? entry.company.name,
-          sourceTitle: message.title,
-          sourceUsername: message.username,
-          isWeakQuery: false
-        })
+        const preFilter = this.relevance.preFilter(message.text, context, false)
 
-        if (verdict.verdict === 'YES') {
+        if (preFilter.passesPreFilter) {
+          const classification = await this.messageClassifier.classify({
+            context,
+            messageText: message.text,
+            matchedQuery: entry.matchedQuery ?? entry.company.name,
+            channelTitle: message.title,
+            channelUsername: message.username,
+            entityType: message.entityType,
+            channelClassification: null,
+            exactHit: preFilter.exactHit
+          })
+
+          const type = classification.ok ? classification.type : null
+          const confidence = classification.ok ? classification.confidence : 0
+          const routing = resolveMessageRouting(type, confidence, thresholds)
+
           const bootstrap = await this.scoutSource.ensureBootstrapTarget(entry.companyId)
           const params = mapTelegramMessageToMentionParams({
             message,
             matchedQuery: entry.matchedQuery ?? entry.company.name,
-            relevance: verdict,
+            preFilter,
+            classification,
+            routing,
             companyId: entry.companyId,
             sourceId: bootstrap.sourceId,
             companySourceTargetId: bootstrap.companySourceTargetId

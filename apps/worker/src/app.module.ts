@@ -26,6 +26,7 @@ import { TelegramQueryBuilderService } from './telegram-search/telegram-scout/te
 import { TelegramGlobalSearchService } from './telegram-search/telegram-scout/telegram-global-search.service'
 import { TelegramChannelSearchService } from './telegram-search/telegram-scout/telegram-channel-search.service'
 import { TelegramRelevanceService } from './telegram-search/telegram-scout/telegram-relevance.service'
+import { TelegramMessageClassifierService } from './telegram-search/telegram-scout/telegram-message-classifier.service'
 import { TelegramScoutSourceService } from './telegram-search/telegram-scout/telegram-scout-source.service'
 import { TelegramWatchlistService } from './telegram-search/telegram-scout/telegram-watchlist.service'
 import { TelegramScoutService } from './telegram-search/telegram-scout/telegram-scout.service'
@@ -54,6 +55,7 @@ import { TelegramScoutService } from './telegram-search/telegram-scout/telegram-
     TelegramGlobalSearchService,
     TelegramChannelSearchService,
     TelegramRelevanceService,
+    TelegramMessageClassifierService,
     TelegramScoutSourceService,
     TelegramWatchlistService,
     TelegramScoutService,

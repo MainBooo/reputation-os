@@ -1,9 +1,5 @@
-import axios from 'axios'
 import { TelegramRelevanceService } from './telegram-relevance.service'
-import type { RelevanceContext, RelevanceInput } from './telegram-scout.types'
-
-jest.mock('axios')
-const mockedAxios = axios as jest.Mocked<typeof axios>
+import type { RelevanceContext } from './telegram-scout.types'
 
 function context(overrides: Partial<RelevanceContext> = {}): RelevanceContext {
   return {
@@ -20,170 +16,60 @@ function context(overrides: Partial<RelevanceContext> = {}): RelevanceContext {
   }
 }
 
-function input(overrides: Partial<RelevanceInput> = {}): RelevanceInput {
-  return {
-    context: context(),
-    messageText: 'Были вчера в Кофейне Ромашка на Тверской, очень понравилось',
-    matchedQuery: 'Кофейня Ромашка',
-    sourceTitle: 'Отзывы Москва',
-    sourceUsername: 'moscow_reviews',
-    isWeakQuery: false,
-    ...overrides
-  }
-}
+describe('TelegramRelevanceService.preFilter', () => {
+  it('passes an exact-name hit but does not decide relevance on its own (exactHit is contextual only)', () => {
+    const service = new TelegramRelevanceService()
+    const result = service.preFilter('Были вчера в Кофейне Ромашка на Тверской, очень понравилось', context(), false)
 
-describe('TelegramRelevanceService', () => {
-  beforeEach(() => {
-    jest.clearAllMocks()
-    delete process.env.YANDEX_GPT_API_KEY
-    delete process.env.YANDEX_GPT_FOLDER_ID
+    expect(result.passesPreFilter).toBe(true)
+    expect(result.exactHit).toBe(true)
   })
 
-  it('returns YES via heuristic exact match without calling the LLM', async () => {
+  it('rejects a message with no matching signal at all', () => {
     const service = new TelegramRelevanceService()
-    const result = await service.evaluate(input())
+    const result = service.preFilter('Сегодня отличная погода, идём гулять в парк', context(), false)
 
-    expect(result.verdict).toBe('YES')
-    expect(result.viaLlm).toBe(false)
-    expect(mockedAxios.post).not.toHaveBeenCalled()
+    expect(result.passesPreFilter).toBe(false)
+    expect(result.hardRejectReason).toBeDefined()
+    expect(result.exactHit).toBe(false)
   })
 
-  it('returns NO for a message with no matching signal at all, without calling the LLM', async () => {
+  it('rejects immediately when an excluded alias matches', () => {
     const service = new TelegramRelevanceService()
-    const result = await service.evaluate(
-      input({ messageText: 'Сегодня отличная погода, идём гулять в парк' })
+    const result = service.preFilter(
+      'Ромашка Клининг делает уборку офисов, а не кофе',
+      context({ excludedTerms: ['Ромашка Клининг'] }),
+      false
     )
 
-    expect(result.verdict).toBe('NO')
-    expect(result.viaLlm).toBe(false)
-    expect(mockedAxios.post).not.toHaveBeenCalled()
+    expect(result.passesPreFilter).toBe(false)
+    expect(result.hardRejectReason).toBe('excluded_term_match')
   })
 
-  it('returns NO immediately when an excluded alias matches, never calling the LLM', async () => {
+  it('always passes weak-class queries through to the classifier regardless of heuristic score', () => {
     const service = new TelegramRelevanceService()
-    const result = await service.evaluate(
-      input({
-        context: context({ excludedTerms: ['Ромашка Клининг'] }),
-        messageText: 'Ромашка Клининг делает уборку офисов, а не кофе'
-      })
+    const result = service.preFilter('Сегодня отличная погода, идём гулять в парк', context(), true)
+
+    expect(result.passesPreFilter).toBe(true)
+  })
+
+  it('passes a grey-zone message (partial token overlap, no exact hit) through to the classifier', () => {
+    const service = new TelegramRelevanceService()
+    const result = service.preFilter(
+      'В Москве открылась ромашка, но это аптечная сеть',
+      context({ aliases: ['Ромашка'], primaryAliases: [] }),
+      false
     )
 
-    expect(result.verdict).toBe('NO')
-    expect(result.reason).toBe('excluded_term_match')
-    expect(mockedAxios.post).not.toHaveBeenCalled()
+    expect(result.passesPreFilter).toBe(true)
+    expect(result.exactHit).toBe(false)
   })
 
-  it('always calls the LLM for weak-class queries even with a strong heuristic match', async () => {
-    process.env.YANDEX_GPT_API_KEY = 'key'
-    process.env.YANDEX_GPT_FOLDER_ID = 'folder'
-    mockedAxios.post.mockResolvedValue({
-      data: {
-        result: {
-          alternatives: [
-            {
-              message: {
-                text: JSON.stringify({
-                  decision: 'YES',
-                  score: 0.8,
-                  reason: 'ok',
-                  matchedEntity: 'Кофейня Ромашка',
-                  topic: 'отзыв'
-                })
-              }
-            }
-          ]
-        }
-      }
-    })
-
+  it('reports the heuristic score and reasons regardless of pass/reject outcome', () => {
     const service = new TelegramRelevanceService()
-    const result = await service.evaluate(input({ isWeakQuery: true }))
+    const result = service.preFilter('Были в Кофейне Ромашка', context(), false)
 
-    expect(mockedAxios.post).toHaveBeenCalledTimes(1)
-    expect(result.verdict).toBe('YES')
-    expect(result.viaLlm).toBe(true)
-  })
-
-  it('sends the grey-zone message to the LLM and returns its decision', async () => {
-    process.env.YANDEX_GPT_API_KEY = 'key'
-    process.env.YANDEX_GPT_FOLDER_ID = 'folder'
-    mockedAxios.post.mockResolvedValue({
-      data: {
-        result: {
-          alternatives: [
-            {
-              message: {
-                text: JSON.stringify({
-                  decision: 'NO',
-                  score: 0.2,
-                  reason: 'другая компания',
-                  matchedEntity: '',
-                  topic: 'ромашка аптека'
-                })
-              }
-            }
-          ]
-        }
-      }
-    })
-
-    const service = new TelegramRelevanceService()
-    // Only token overlap (weak city-only signal), not an exact name/domain/alias hit — grey zone.
-    const result = await service.evaluate(
-      input({
-        context: context({ aliases: ['Ромашка'], primaryAliases: [] }),
-        messageText: 'В Москве открылась ромашка, но это аптечная сеть'
-      })
-    )
-
-    expect(mockedAxios.post).toHaveBeenCalledTimes(1)
-    expect(result.verdict).toBe('NO')
-  })
-
-  it('treats invalid LLM JSON as UNSURE without throwing', async () => {
-    process.env.YANDEX_GPT_API_KEY = 'key'
-    process.env.YANDEX_GPT_FOLDER_ID = 'folder'
-    mockedAxios.post.mockResolvedValue({
-      data: { result: { alternatives: [{ message: { text: 'not json at all' } }] } }
-    })
-
-    const service = new TelegramRelevanceService()
-    const result = await service.evaluate(
-      input({
-        context: context({ aliases: ['Ромашка'], primaryAliases: [] }),
-        messageText: 'В Москве открылась ромашка, но это аптечная сеть'
-      })
-    )
-
-    expect(result.verdict).toBe('UNSURE')
-  })
-
-  it('treats an LLM/network failure as UNSURE without throwing', async () => {
-    process.env.YANDEX_GPT_API_KEY = 'key'
-    process.env.YANDEX_GPT_FOLDER_ID = 'folder'
-    mockedAxios.post.mockRejectedValue(new Error('timeout'))
-
-    const service = new TelegramRelevanceService()
-    const result = await service.evaluate(
-      input({
-        context: context({ aliases: ['Ромашка'], primaryAliases: [] }),
-        messageText: 'В Москве открылась ромашка, но это аптечная сеть'
-      })
-    )
-
-    expect(result.verdict).toBe('UNSURE')
-  })
-
-  it('treats a missing LLM configuration as UNSURE for grey-zone messages', async () => {
-    const service = new TelegramRelevanceService()
-    const result = await service.evaluate(
-      input({
-        context: context({ aliases: ['Ромашка'], primaryAliases: [] }),
-        messageText: 'В Москве открылась ромашка, но это аптечная сеть'
-      })
-    )
-
-    expect(result.verdict).toBe('UNSURE')
-    expect(mockedAxios.post).not.toHaveBeenCalled()
+    expect(result.heuristicScore).toBeGreaterThan(0)
+    expect(result.heuristicReasons.length).toBeGreaterThan(0)
   })
 })

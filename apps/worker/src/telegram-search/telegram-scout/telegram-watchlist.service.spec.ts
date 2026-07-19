@@ -43,6 +43,18 @@ function company(id: string) {
   } as any
 }
 
+const PASS_PRE_FILTER = { passesPreFilter: true, exactHit: true, heuristicScore: 10, heuristicReasons: ['exact_name'] }
+
+const HIT_CLASSIFICATION = {
+  ok: true,
+  decision: 'YES',
+  type: 'CUSTOMER_REVIEW',
+  sentiment: 'POSITIVE',
+  urgency: 'LOW',
+  confidence: 0.95,
+  shortReason: 'Отзыв клиента'
+}
+
 describe('TelegramWatchlistService — multi-company cursor isolation (plan §2)', () => {
   let cursors: Record<string, number>
   let persistCalls: Array<{ companyId: string; messageId: number }>
@@ -51,6 +63,7 @@ describe('TelegramWatchlistService — multi-company cursor isolation (plan §2)
   let prisma: any
   let channelSearch: any
   let relevance: any
+  let messageClassifier: any
   let dedup: any
   let scoutSource: any
   let service: TelegramWatchlistService
@@ -99,7 +112,11 @@ describe('TelegramWatchlistService — multi-company cursor isolation (plan §2)
     }
 
     relevance = {
-      evaluate: jest.fn().mockResolvedValue({ verdict: 'YES', score: 10, reason: 'exact_name', viaLlm: false })
+      preFilter: jest.fn().mockReturnValue(PASS_PRE_FILTER)
+    }
+
+    messageClassifier = {
+      classify: jest.fn().mockResolvedValue(HIT_CLASSIFICATION)
     }
 
     dedup = {
@@ -121,7 +138,7 @@ describe('TelegramWatchlistService — multi-company cursor isolation (plan §2)
       }))
     }
 
-    service = new TelegramWatchlistService(prisma, channelSearch, relevance, dedup, scoutSource)
+    service = new TelegramWatchlistService(prisma, channelSearch, relevance, messageClassifier, dedup, scoutSource)
   })
 
   it('advances the successful company past a message that fails for another company, without losing or duplicating it', async () => {
