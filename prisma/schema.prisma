@@ -57,6 +57,23 @@ enum Sentiment {
   UNKNOWN
 }
 
+enum MessageClassification {
+  OWNED_PROMO
+  CUSTOMER_REVIEW
+  CUSTOMER_COMPLAINT
+  CUSTOMER_QUESTION
+  CHAT_DISCUSSION
+  NEWS_MENTION
+  IRRELEVANT
+  SPAM
+}
+
+enum MessageUrgency {
+  LOW
+  MEDIUM
+  HIGH
+}
+
 enum WorkspaceRole {
   OWNER
   ADMIN
@@ -354,6 +371,15 @@ model Mention {
   hash           String
   duplicateOfId  String?
   matchedQuery   String?
+
+  messageClassification  MessageClassification?
+  messageClassConfidence Decimal?                @db.Decimal(3, 2)
+  messageUrgency         MessageUrgency?
+  messageClassReason     String?
+  messageClassModel      String?
+  isInboxVisible         Boolean                 @default(true)
+  needsManualReview      Boolean                 @default(false)
+  classifiedAt           DateTime?
 
   rawPayload Json?
   metadata   Json?
