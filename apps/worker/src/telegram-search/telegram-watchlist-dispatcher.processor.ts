@@ -106,7 +106,7 @@ export class TelegramWatchlistDispatcherProcessor implements OnModuleInit, OnMod
       {
         ...CRON_JOB_OPTIONS,
         repeat: { every: watchlistDispatcherIntervalMin() * 60_000 },
-        jobId: 'telegram-watchlist-dispatcher:global'
+        jobId: 'telegram-watchlist-dispatcher:global:tick'
       }
     )
   }

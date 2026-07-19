@@ -210,7 +210,7 @@ export class TelegramChannelsService {
     await this.assertTelegramMonitoringAllowed(company.workspaceId)
     await this.ensureTelegramBootstrapTarget(companyId)
 
-    const jobId = `telegram-discovery:${companyId}:manual:${Date.now()}`
+    const jobId = `telegram-discovery:${companyId}:manual-${Date.now()}`
     const job = await this.telegramSearchQueue.add(
       'telegram.discovery',
       { mode: 'discovery', companyId, triggeredByUserId: userId },

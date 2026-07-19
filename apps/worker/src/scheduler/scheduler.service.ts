@@ -238,7 +238,7 @@ export class SchedulerService implements OnModuleInit {
       await this.telegramSearchQueue.add(
         JOBS.TELEGRAM_DISCOVERY,
         { mode: 'discovery', companyId },
-        { ...CRON_JOB_OPTIONS, repeat: { every: discoveryIntervalMs }, jobId: `telegram-discovery:${companyId}` }
+        { ...CRON_JOB_OPTIONS, repeat: { every: discoveryIntervalMs }, jobId: `telegram-discovery:${companyId}:cron` }
       ).catch((error) => {
         this.logger.warn(`Failed to ensure telegram discovery cron companyId=${companyId}: ${error?.message || error}`)
       })
