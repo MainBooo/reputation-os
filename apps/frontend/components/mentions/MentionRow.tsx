@@ -5,7 +5,7 @@ import clsx from 'clsx'
 import Badge from '../ui/Badge'
 import MentionChatPanel from '@/components/chat/MentionChatPanel'
 import { generateReply } from '@/lib/api/mentions'
-import { platformLabel } from '@/lib/ui/mentions'
+import { messageClassificationLabel, platformLabel } from '@/lib/ui/mentions'
 
 type ReplyPreset = 'FORMAL' | 'FRIENDLY' | 'CONCISE'
 
@@ -205,13 +205,22 @@ export default function MentionRow({
           : 'border-amber-400/30 bg-amber-500/15 text-amber-100 shadow-[0_0_20px_rgba(245,158,11,0.2)]'
       : 'border-white/10 bg-white/10 text-brand'
 
+  const isUrgentComplaint = mention.messageClassification === 'CUSTOMER_COMPLAINT' && mention.messageUrgency === 'HIGH'
+  const messageConfidence =
+    mention.messageClassConfidence !== null && mention.messageClassConfidence !== undefined
+      ? Number(mention.messageClassConfidence)
+      : null
+
   const visibleBadges = hideMetaBadges
     ? []
     : [
         mention.platform !== 'WEB' ? { tone: mention.platform, label: platformLabel(mention.platform) } : null,
         { tone: effectiveSentiment, label: sentimentLabel(effectiveSentiment) },
         { tone: mention.status, label: statusLabel(mention.status) },
-        { tone: undefined, label: typeLabel(mention.type) }
+        { tone: undefined, label: typeLabel(mention.type) },
+        mention.messageClassification ? { tone: mention.messageClassification, label: messageClassificationLabel(mention.messageClassification) } : null,
+        isUrgentComplaint ? { tone: 'HIGH', label: 'Срочно' } : null,
+        mention.needsManualReview ? { tone: 'MEDIUM', label: 'Нужна проверка' } : null
       ].filter((item): item is { tone: any; label: string } => Boolean(item?.label))
 
   return (
@@ -317,6 +326,15 @@ export default function MentionRow({
           {typeof telegramStats.forwards === 'number' ? <span>↪ {telegramStats.forwards}</span> : null}
           {typeof telegramStats.replyCount === 'number' ? <span>💬 {telegramStats.replyCount}</span> : null}
           {typeof telegramStats.reactionsCount === 'number' ? <span>❤ {telegramStats.reactionsCount}</span> : null}
+        </div>
+      ) : null}
+
+      {mention.messageClassification && mention.messageClassReason ? (
+        <div className="mt-2 text-[11px] leading-5 text-zinc-500">
+          {messageClassificationLabel(mention.messageClassification)}
+          {messageConfidence !== null && Number.isFinite(messageConfidence) ? ` · уверенность ${Math.round(messageConfidence * 100)}%` : ''}
+          {' — '}
+          {mention.messageClassReason}
         </div>
       ) : null}
 

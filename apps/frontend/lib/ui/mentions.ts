@@ -104,3 +104,75 @@ export function mentionSentimentClass(value?: string | null) {
       return 'border-white/10 bg-white/[0.04] text-slate-200'
   }
 }
+
+export function messageClassificationLabel(value?: string | null) {
+  switch (value) {
+    case 'OWNED_PROMO':
+      return 'Реклама (свой канал)'
+    case 'CUSTOMER_REVIEW':
+      return 'Отзыв клиента'
+    case 'CUSTOMER_COMPLAINT':
+      return 'Жалоба'
+    case 'CUSTOMER_QUESTION':
+      return 'Вопрос клиента'
+    case 'CHAT_DISCUSSION':
+      return 'Обсуждение в чате'
+    case 'NEWS_MENTION':
+      return 'Упоминание в новости'
+    case 'IRRELEVANT':
+      return 'Не по теме'
+    case 'SPAM':
+      return 'Спам'
+    default:
+      return value || null
+  }
+}
+
+export function messageClassificationClass(value?: string | null) {
+  switch (value) {
+    case 'OWNED_PROMO':
+      return 'border-amber-300/25 bg-amber-400/10 text-amber-200'
+    case 'CUSTOMER_REVIEW':
+      return 'border-emerald-300/25 bg-emerald-400/10 text-emerald-200'
+    case 'CUSTOMER_COMPLAINT':
+      return 'border-rose-300/25 bg-rose-500/10 text-rose-200'
+    case 'CUSTOMER_QUESTION':
+      return 'border-blue-300/25 bg-blue-500/10 text-blue-200'
+    case 'CHAT_DISCUSSION':
+      return 'border-white/10 bg-white/[0.04] text-slate-300'
+    case 'NEWS_MENTION':
+      return 'border-violet-300/25 bg-violet-500/10 text-violet-200'
+    case 'IRRELEVANT':
+      return 'border-white/10 bg-white/[0.04] text-slate-400'
+    case 'SPAM':
+      return 'border-red-400/25 bg-red-500/15 text-red-300'
+    default:
+      return 'border-white/10 bg-white/[0.04] text-slate-200'
+  }
+}
+
+export function messageUrgencyLabel(value?: string | null) {
+  switch (value) {
+    case 'LOW':
+      return 'Низкая срочность'
+    case 'MEDIUM':
+      return 'Средняя срочность'
+    case 'HIGH':
+      return 'Срочно'
+    default:
+      return value || null
+  }
+}
+
+export function messageUrgencyClass(value?: string | null) {
+  switch (value) {
+    case 'LOW':
+      return 'border-white/10 bg-white/[0.04] text-slate-300'
+    case 'MEDIUM':
+      return 'border-amber-300/25 bg-amber-400/10 text-amber-200'
+    case 'HIGH':
+      return 'border-red-400/25 bg-red-500/15 text-red-300'
+    default:
+      return 'border-white/10 bg-white/[0.04] text-slate-200'
+  }
+}

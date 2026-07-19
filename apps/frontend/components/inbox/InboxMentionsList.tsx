@@ -9,12 +9,26 @@ import Card from '@/components/ui/Card'
 import EmptyState from '@/components/ui/EmptyState'
 import InboxPendingRefresh from '@/components/inbox/InboxPendingRefresh'
 import { deleteMention, getCompanyMentions, updateMentionStatus } from '@/lib/api/mentions'
-import { platformLabel } from '@/lib/ui/mentions'
+import { messageClassificationLabel, platformLabel } from '@/lib/ui/mentions'
 
 const PAGE_LIMIT = 20
 const PLATFORM_FILTERS = ['YANDEX', 'TWOGIS', 'WEB', 'TELEGRAM']
 const SENTIMENT_FILTERS = ['NEGATIVE', 'POSITIVE', 'NEUTRAL']
 const RATING_FILTERS = [1, 2, 3, 4, 5]
+const CLASSIFICATION_FILTERS = [
+  'OWNED_PROMO',
+  'CUSTOMER_REVIEW',
+  'CUSTOMER_COMPLAINT',
+  'CUSTOMER_QUESTION',
+  'CHAT_DISCUSSION',
+  'NEWS_MENTION',
+  'IRRELEVANT',
+  'SPAM'
+]
+
+function isUrgentComplaint(mention: any) {
+  return mention?.messageClassification === 'CUSTOMER_COMPLAINT' && mention?.messageUrgency === 'HIGH'
+}
 
 function sentimentLabel(value: string) {
   if (value === 'NEGATIVE') return 'Негатив'
@@ -64,10 +78,12 @@ function mentionMatchesFilters(
     from: string
     to: string
       statusFilter: string
+    messageClassification: string
   }
 ) {
     if (filters.statusFilter && filters.statusFilter !== 'ALL' && mention?.status !== filters.statusFilter) return false
   if (filters.platform && mention?.platform !== filters.platform) return false
+  if (filters.messageClassification && mention?.messageClassification !== filters.messageClassification) return false
 
   const numericRating =
     mention?.ratingValue !== null && mention?.ratingValue !== undefined
@@ -158,6 +174,8 @@ export default function InboxMentionsList({
   const [from, setFrom] = useState(initialFilters?.from || '')
   const [to, setTo] = useState(initialFilters?.to || '')
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'NEW' | 'REVIEWED' | 'ARCHIVED'>('ALL')
+  const [messageClassification, setMessageClassification] = useState('')
+  const [includeHidden, setIncludeHidden] = useState(false)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [bulkLoading, setBulkLoading] = useState<'REVIEWED' | 'ARCHIVED' | ''>('')
   const [filtersOpen, setFiltersOpen] = useState(Boolean(
@@ -210,15 +228,21 @@ export default function InboxMentionsList({
     if (rating) params.set('rating', String(rating))
     if (from) params.set('from', from)
     if (to) params.set('to', to)
+    if (messageClassification) params.set('messageClassification', messageClassification)
+    if (includeHidden) params.set('includeHidden', 'true')
     return `?${params.toString()}`
-  }, [platform, sentiment, rating, from, to])
+  }, [platform, sentiment, rating, from, to, messageClassification, includeHidden])
 
-  const hasActiveFilters = Boolean(platform || sentiment || rating || from || to || statusFilter !== 'ALL')
-  const activeFilterCount = [platform, sentiment, rating, from || to, statusFilter !== 'ALL'].filter(Boolean).length
-  const visibleMentions = useMemo(
-    () => mentions.filter((mention) => mentionMatchesFilters(mention, { platform, sentiment, rating, from, to, statusFilter })),
-    [mentions, platform, sentiment, rating, from, to, statusFilter]
-  )
+  const hasActiveFilters = Boolean(platform || sentiment || rating || from || to || statusFilter !== 'ALL' || messageClassification || includeHidden)
+  const activeFilterCount = [platform, sentiment, rating, from || to, statusFilter !== 'ALL', messageClassification, includeHidden].filter(Boolean).length
+  const visibleMentions = useMemo(() => {
+    const filtered = mentions.filter((mention) => mentionMatchesFilters(mention, { platform, sentiment, rating, from, to, statusFilter, messageClassification }))
+    return [...filtered].sort((a, b) => {
+      const urgentDiff = Number(isUrgentComplaint(b)) - Number(isUrgentComplaint(a))
+      if (urgentDiff !== 0) return urgentDiff
+      return getMentionSortTime(b) - getMentionSortTime(a)
+    })
+  }, [mentions, platform, sentiment, rating, from, to, statusFilter, messageClassification])
   const visibleCount = visibleMentions.length
   const visibleIds = visibleMentions.map((mention) => mention?.id).filter(Boolean)
   const selectedVisibleIds = selectedIds.filter((id) => visibleIds.includes(id))
@@ -376,6 +400,8 @@ export default function InboxMentionsList({
     setFrom('')
     setTo('')
     setStatusFilter('ALL')
+    setMessageClassification('')
+    setIncludeHidden(false)
     setSelectedIds([])
   }
 
@@ -446,6 +472,12 @@ export default function InboxMentionsList({
           {rating ? (
             <button type="button" onClick={() => setRating(null)} className="rounded-full border border-cyan-400/30 bg-cyan-500/15 px-3 py-2 text-sm font-semibold text-blue-100">
               {rating} ★ ×
+            </button>
+          ) : null}
+
+          {messageClassification ? (
+            <button type="button" onClick={() => setMessageClassification('')} className="rounded-full border border-violet-400/30 bg-violet-500/15 px-3 py-2 text-sm font-semibold text-violet-200">
+              {messageClassificationLabel(messageClassification)} ×
             </button>
           ) : null}
 
@@ -522,6 +554,22 @@ export default function InboxMentionsList({
                 <input type="date" value={to} onChange={(event) => setTo(event.target.value)} className="h-10 rounded-xl border border-line bg-[#050816] px-3 text-xs text-brand outline-none transition focus:border-cyan-400/50" />
               </div>
             </div>
+
+            <div>
+              <div className="mb-2 text-xs text-zinc-300">Тип сообщения (ИИ)</div>
+              <div className="flex flex-wrap gap-2">
+                {CLASSIFICATION_FILTERS.map((item) => (
+                  <button key={item} type="button" onClick={() => setMessageClassification(messageClassification === item ? '' : item)} className={clsx('rounded-full border px-3 py-1.5 text-xs font-semibold transition-all', messageClassification === item ? 'border-violet-400/30 bg-violet-500/15 text-violet-200' : 'border-white/10 bg-white/[0.04] text-zinc-300 hover:text-brand')}>
+                    {messageClassificationLabel(item)}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <label className="flex items-center gap-2 text-xs text-zinc-300">
+              <input type="checkbox" checked={includeHidden} onChange={(event) => setIncludeHidden(event.target.checked)} className="h-4 w-4 accent-cyan-400" />
+              Показать скрытые (реклама/спам/не по теме)
+            </label>
           </div>
         ) : null}
       </Card>
