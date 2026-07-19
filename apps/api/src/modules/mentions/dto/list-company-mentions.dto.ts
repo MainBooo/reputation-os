@@ -1,5 +1,5 @@
-import { IsDateString, IsEnum, IsInt, IsOptional, Max, Min } from 'class-validator'
-import { MentionStatus, MentionType, Platform, Sentiment } from '@prisma/client'
+import { IsBooleanString, IsDateString, IsEnum, IsInt, IsOptional, Max, Min } from 'class-validator'
+import { MentionStatus, MentionType, MessageClassification, MessageUrgency, Platform, Sentiment } from '@prisma/client'
 import { Type } from 'class-transformer'
 
 export class ListCompanyMentionsDto {
@@ -45,4 +45,20 @@ export class ListCompanyMentionsDto {
   @Min(1)
   @Max(5)
   rating?: number
+
+  @IsOptional()
+  @IsEnum(MessageClassification)
+  messageClassification?: MessageClassification
+
+  @IsOptional()
+  @IsEnum(MessageUrgency)
+  messageUrgency?: MessageUrgency
+
+  @IsOptional()
+  @IsBooleanString()
+  needsManualReview?: string
+
+  @IsOptional()
+  @IsBooleanString()
+  includeHidden?: string
 }

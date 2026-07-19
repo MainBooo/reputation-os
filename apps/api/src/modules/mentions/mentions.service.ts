@@ -46,7 +46,11 @@ export class MentionsService {
           ...(query.from ? { gte: new Date(query.from) } : {}),
           ...(query.to ? { lte: new Date(query.to) } : {})
         }
-      } : {})
+      } : {}),
+      ...(query.messageClassification ? { messageClassification: query.messageClassification } : {}),
+      ...(query.messageUrgency ? { messageUrgency: query.messageUrgency } : {}),
+      ...(query.needsManualReview !== undefined ? { needsManualReview: query.needsManualReview === 'true' } : {}),
+      ...(query.includeHidden === 'true' ? {} : { isInboxVisible: true })
     }
 
       if (query.platform === 'WEB') {
