@@ -174,6 +174,67 @@ describe('TelegramMessageClassifierService.classify', () => {
     const promptText = JSON.stringify(body)
     expect(promptText).not.toMatch(/authorName|authorExternalId/)
   })
+
+  it('retries once with a repair prompt when the first response is empty, then succeeds', async () => {
+    mockedAxios.post
+      .mockResolvedValueOnce({ data: { result: { alternatives: [{ message: { text: '' } }] } } })
+      .mockResolvedValueOnce({ data: { result: { alternatives: [{ message: { text: JSON.stringify(validPayload()) } }] } } })
+
+    const service = new TelegramMessageClassifierService()
+    const result = await service.classify(input())
+
+    expect(mockedAxios.post).toHaveBeenCalledTimes(2)
+    expect(result.ok).toBe(true)
+
+    const [, repairBody] = mockedAxios.post.mock.calls[1]
+    const repairMessages = (repairBody as any).messages
+    expect(repairMessages[repairMessages.length - 1].text).toContain('не прошёл машинную проверку')
+  })
+
+  it('retries once when the first response has no JSON, then succeeds', async () => {
+    mockedAxios.post
+      .mockResolvedValueOnce({ data: { result: { alternatives: [{ message: { text: 'Извините, не могу помочь.' } }] } } })
+      .mockResolvedValueOnce({ data: { result: { alternatives: [{ message: { text: JSON.stringify(validPayload()) } }] } } })
+
+    const service = new TelegramMessageClassifierService()
+    const result = await service.classify(input())
+
+    expect(mockedAxios.post).toHaveBeenCalledTimes(2)
+    expect(result.ok).toBe(true)
+  })
+
+  it('gives up after exactly one repair retry when both responses are invalid', async () => {
+    mockLlmText('this is not json either time')
+    const service = new TelegramMessageClassifierService()
+    const result = await service.classify(input())
+
+    expect(mockedAxios.post).toHaveBeenCalledTimes(2)
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.errorReason).toBe('no_json_found')
+  })
+
+  it('never retries on a network error — at most one call', async () => {
+    mockedAxios.post.mockRejectedValue(new Error('timeout of 8000ms exceeded'))
+    const service = new TelegramMessageClassifierService()
+    await service.classify(input())
+
+    expect(mockedAxios.post).toHaveBeenCalledTimes(1)
+  })
+
+  it('retries once when the first response is decision/type-inconsistent, then succeeds', async () => {
+    mockedAxios.post
+      .mockResolvedValueOnce({
+        data: { result: { alternatives: [{ message: { text: JSON.stringify(validPayload({ decision: 'NO', type: 'CUSTOMER_REVIEW' })) } }] } }
+      })
+      .mockResolvedValueOnce({ data: { result: { alternatives: [{ message: { text: JSON.stringify(validPayload({ decision: 'NO', type: 'IRRELEVANT' })) } }] } } })
+
+    const service = new TelegramMessageClassifierService()
+    const result = await service.classify(input())
+
+    expect(mockedAxios.post).toHaveBeenCalledTimes(2)
+    expect(result.ok).toBe(true)
+    if (result.ok) expect(result.type).toBe('IRRELEVANT')
+  })
 })
 
 describe('parseClassifierResponse — strict contract validation', () => {
@@ -250,5 +311,49 @@ describe('parseClassifierResponse — strict contract validation', () => {
   it('rejects a response missing required fields rather than defaulting them', () => {
     const result = parseClassifierResponse(JSON.stringify({ decision: 'YES' }))
     expect(result.ok).toBe(false)
+  })
+
+  it('accepts clean JSON with no surrounding text', () => {
+    const result = parseClassifierResponse(JSON.stringify(validPayload()))
+    expect(result.ok).toBe(true)
+  })
+
+  it('extracts JSON from a ```json fenced code block', () => {
+    const result = parseClassifierResponse('```json\n' + JSON.stringify(validPayload()) + '\n```')
+    expect(result.ok).toBe(true)
+  })
+
+  it('extracts JSON from a plain (untagged) markdown fenced code block', () => {
+    const result = parseClassifierResponse('```\n' + JSON.stringify(validPayload()) + '\n```')
+    expect(result.ok).toBe(true)
+  })
+
+  it('extracts a single JSON object surrounded by explanatory text before and after', () => {
+    const result = parseClassifierResponse(
+      `Вот результат классификации:\n${JSON.stringify(validPayload())}\nНадеюсь, это поможет!`
+    )
+    expect(result.ok).toBe(true)
+  })
+
+  it('rejects decision=NO paired with a non-IRRELEVANT/SPAM type as a technical failure', () => {
+    const result = parseClassifierResponse(JSON.stringify(validPayload({ decision: 'NO', type: 'OWNED_PROMO' })))
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.errorReason).toContain('decision_type_mismatch')
+  })
+
+  it('rejects decision=YES paired with type=IRRELEVANT as a technical failure', () => {
+    const result = parseClassifierResponse(JSON.stringify(validPayload({ decision: 'YES', type: 'IRRELEVANT' })))
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.errorReason).toContain('decision_type_mismatch')
+  })
+
+  it('rejects decision=YES paired with type=SPAM as a technical failure', () => {
+    const result = parseClassifierResponse(JSON.stringify(validPayload({ decision: 'YES', type: 'SPAM' })))
+    expect(result.ok).toBe(false)
+  })
+
+  it('accepts decision=UNSURE regardless of type (no consistency constraint)', () => {
+    const result = parseClassifierResponse(JSON.stringify(validPayload({ decision: 'UNSURE', type: 'IRRELEVANT' })))
+    expect(result.ok).toBe(true)
   })
 })

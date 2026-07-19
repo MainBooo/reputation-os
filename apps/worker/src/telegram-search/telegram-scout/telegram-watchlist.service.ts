@@ -313,7 +313,8 @@ export class TelegramWatchlistService {
 
           const type = classification.ok ? classification.type : null
           const confidence = classification.ok ? classification.confidence : 0
-          const routing = resolveMessageRouting(type, confidence, thresholds)
+          const decision = classification.ok ? classification.decision : null
+          const routing = resolveMessageRouting(type, confidence, thresholds, decision)
 
           const bootstrap = await this.scoutSource.ensureBootstrapTarget(entry.companyId)
           const params = mapTelegramMessageToMentionParams({

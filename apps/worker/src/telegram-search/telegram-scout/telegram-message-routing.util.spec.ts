@@ -78,4 +78,14 @@ describe('resolveMessageRouting', () => {
   it('confidence of exactly 1.0 with a hide-eligible type is hidden', () => {
     expect(resolveMessageRouting('SPAM', 1, THRESHOLDS)).toEqual({ isInboxVisible: false, needsManualReview: false })
   })
+
+  describe('decision=UNSURE never auto-hides, regardless of type/confidence', () => {
+    it.each(HIDE_ELIGIBLE)('%s at confidence 1.0 with decision=UNSURE stays visible', (type) => {
+      expect(resolveMessageRouting(type, 1, THRESHOLDS, 'UNSURE')).toEqual({ isInboxVisible: true, needsManualReview: false })
+    })
+
+    it('UNSURE below the review threshold still needs review (review threshold takes precedence)', () => {
+      expect(resolveMessageRouting('SPAM', 0.5, THRESHOLDS, 'UNSURE')).toEqual({ isInboxVisible: true, needsManualReview: true })
+    })
+  })
 })

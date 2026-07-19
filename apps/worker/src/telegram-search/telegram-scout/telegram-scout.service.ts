@@ -328,7 +328,8 @@ export class TelegramScoutService {
 
       const type = classification.ok ? classification.type : null
       const confidence = classification.ok ? classification.confidence : 0
-      const routing = resolveMessageRouting(type, confidence, thresholds)
+      const decision = classification.ok ? classification.decision : null
+      const routing = resolveMessageRouting(type, confidence, thresholds, decision)
 
       // Every message that passes the pre-filter is persisted as a Mention — the
       // audit principle (plan §3): nothing after this point is silently dropped,
