@@ -1,5 +1,5 @@
 import { Test } from '@nestjs/testing'
-import { MentionsService } from './mentions.service'
+import { IRRELEVANT_BUCKET, MentionsService, RELEVANT_BUCKET } from './mentions.service'
 import { PrismaService } from '../../common/prisma/prisma.service'
 import { AuditLogService } from '../admin/audit-log.service'
 
@@ -94,31 +94,14 @@ describe('MentionsService — findByCompany filters', () => {
     expect(where.needsManualReview).toBe(false)
   })
 
-  it('excludes IRRELEVANT-classified mentions from the default Inbox view', async () => {
+  it('excludes IRRELEVANT-classified mentions from the default Inbox view (RELEVANT_BUCKET)', async () => {
     await service.findByCompany('uid-1', 'co-1', {} as any)
 
     const where = mockPrisma.mention.findMany.mock.calls[0][0].where
-    expect(where.AND).toEqual([{
-      OR: [
-        { messageClassification: null },
-        { NOT: { messageClassification: 'IRRELEVANT' } },
-        { reviewDecision: 'RELEVANT' }
-      ]
-    }])
+    expect(where.AND).toEqual([RELEVANT_BUCKET])
   })
 
-  it('a human-confirmed-relevant mention (reviewDecision=RELEVANT) is allowed back into the default Inbox despite messageClassification=IRRELEVANT', async () => {
-    // The default-view AND clause ORs in reviewDecision=RELEVANT as an escape hatch;
-    // Prisma (not this mock) evaluates it against real rows, so we assert the clause
-    // that makes that possible is actually present in the query sent to Prisma.
-    await service.findByCompany('uid-1', 'co-1', {} as any)
-
-    const where = mockPrisma.mention.findMany.mock.calls[0][0].where
-    const orClause = where.AND[0].OR
-    expect(orClause).toContainEqual({ reviewDecision: 'RELEVANT' })
-  })
-
-  it('"На проверку" view (needsManualReview=true) is not additionally filtered by classification', async () => {
+  it('"На проверку" view (needsManualReview=true) is not additionally filtered by classification or reviewDecision', async () => {
     await service.findByCompany('uid-1', 'co-1', { needsManualReview: 'true' } as any)
 
     const where = mockPrisma.mention.findMany.mock.calls[0][0].where
@@ -126,18 +109,56 @@ describe('MentionsService — findByCompany filters', () => {
     expect(where.AND).toBeUndefined()
   })
 
-  it('"Не по теме" view (onlyIrrelevant=true) matches IRRELEVANT classification or a human IRRELEVANT decision, excludes pending review, and bypasses isInboxVisible', async () => {
+  it('"Не по теме" view (onlyIrrelevant=true) uses IRRELEVANT_BUCKET and bypasses isInboxVisible', async () => {
     await service.findByCompany('uid-1', 'co-1', { onlyIrrelevant: 'true' } as any)
 
     const where = mockPrisma.mention.findMany.mock.calls[0][0].where
     expect(where.needsManualReview).toBe(false)
     expect(where.isInboxVisible).toBeUndefined()
-    expect(where.AND).toEqual([{
-      OR: [
-        { messageClassification: 'IRRELEVANT' },
-        { reviewDecision: 'IRRELEVANT' }
-      ]
-    }])
+    expect(where.AND).toEqual([IRRELEVANT_BUCKET])
+  })
+
+  // --- Human-decision-priority truth table ---------------------------------
+  // IRRELEVANT_BUCKET/RELEVANT_BUCKET must be exact logical complements: a human
+  // reviewDecision always overrides the model's messageClassification, in both
+  // directions. Verified against real Postgres NULL/NOT semantics in a rolled-back
+  // transaction against the actual "Руки Вверх Бар" company (no data persisted,
+  // production mention cmrsglg5f00h99e2zrvuuei48 left untouched) — see
+  // project-telegram-inbox-review-queue memory for the raw output. These two tests
+  // pin the exact query shape that produced those verified results.
+  function evaluateBucket(bucket: any, record: { messageClassification: string | null; reviewDecision: string | null }): boolean {
+    if (bucket.OR) return bucket.OR.some((clause: any) => evaluateBucket(clause, record))
+    if (bucket.AND) return bucket.AND.every((clause: any) => evaluateBucket(clause, record))
+    if (bucket.NOT) return !evaluateBucket(bucket.NOT, record)
+    const [[field, value]] = Object.entries(bucket)
+    return (record as any)[field] === value
+  }
+
+  it('scenario 1 — AI classified IRRELEVANT, human confirms relevant: excluded from "Не по теме", included in main Inbox bucket', () => {
+    const record = { messageClassification: 'IRRELEVANT', reviewDecision: 'RELEVANT' }
+    expect(evaluateBucket(RELEVANT_BUCKET, record)).toBe(true)
+    expect(evaluateBucket(IRRELEVANT_BUCKET, record)).toBe(false)
+  })
+
+  it('scenario 2 — AI classified a relevant type, human marks not-relevant: excluded from main Inbox bucket, included in "Не по теме"', () => {
+    const record = { messageClassification: 'CUSTOMER_QUESTION', reviewDecision: 'IRRELEVANT' }
+    expect(evaluateBucket(RELEVANT_BUCKET, record)).toBe(false)
+    expect(evaluateBucket(IRRELEVANT_BUCKET, record)).toBe(true)
+  })
+
+  it('no human decision yet — bucket membership falls back to messageClassification alone, and the two buckets never overlap or leave a gap', () => {
+    const cases: Array<{ messageClassification: string | null; reviewDecision: null }> = [
+      { messageClassification: 'IRRELEVANT', reviewDecision: null },
+      { messageClassification: 'CUSTOMER_QUESTION', reviewDecision: null },
+      { messageClassification: null, reviewDecision: null }
+    ]
+
+    for (const record of cases) {
+      const inRelevant = evaluateBucket(RELEVANT_BUCKET, record)
+      const inIrrelevant = evaluateBucket(IRRELEVANT_BUCKET, record)
+      expect(inRelevant).toBe(!inIrrelevant) // exact complements — no overlap, no gap
+      expect(inIrrelevant).toBe(record.messageClassification === 'IRRELEVANT')
+    }
   })
 
   it('returns needsReviewCount and irrelevantCount in meta', async () => {

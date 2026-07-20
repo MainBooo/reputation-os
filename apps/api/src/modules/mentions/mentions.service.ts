@@ -6,6 +6,32 @@ import { ListCompanyMentionsDto } from './dto/list-company-mentions.dto'
 import { UpdateMentionStatusDto } from './dto/update-mention-status.dto'
 import { ResolveMentionReviewDto } from './dto/resolve-mention-review.dto'
 
+// A human reviewDecision always takes priority over the model's own messageClassification
+// when deciding which Inbox bucket a mention belongs to. These two fragments are exact
+// logical complements for every reachable (messageClassification, reviewDecision) pair:
+//  - reviewDecision=RELEVANT   → always RELEVANT_BUCKET, even if classification=IRRELEVANT.
+//  - reviewDecision=IRRELEVANT → always IRRELEVANT_BUCKET, even if classification≠IRRELEVANT.
+//  - reviewDecision=null       → falls back to messageClassification alone.
+export const IRRELEVANT_BUCKET: Prisma.MentionWhereInput = {
+  OR: [
+    { AND: [{ messageClassification: 'IRRELEVANT' }, { NOT: { reviewDecision: 'RELEVANT' } }] },
+    { reviewDecision: 'IRRELEVANT' }
+  ]
+}
+
+export const RELEVANT_BUCKET: Prisma.MentionWhereInput = {
+  AND: [
+    { NOT: { reviewDecision: 'IRRELEVANT' } },
+    {
+      OR: [
+        { messageClassification: null },
+        { NOT: { messageClassification: 'IRRELEVANT' } },
+        { reviewDecision: 'RELEVANT' }
+      ]
+    }
+  ]
+}
+
 @Injectable()
 export class MentionsService {
   constructor(
@@ -69,26 +95,19 @@ export class MentionsService {
     }
 
     if (onlyIrrelevant) {
-      where.AND = [{
-        OR: [
-          { messageClassification: 'IRRELEVANT' },
-          { reviewDecision: 'IRRELEVANT' }
-        ]
-      }]
+      // A human reviewDecision always wins over the model's own guess:
+      //  - reviewDecision=RELEVANT excludes it here even if messageClassification=IRRELEVANT.
+      //  - reviewDecision=IRRELEVANT includes it here even if the model called it something else.
+      where.AND = [IRRELEVANT_BUCKET]
     } else if (needsManualReview) {
-      // "На проверку" shows every pending item regardless of what the model guessed —
-      // including ones it happened to (unconfidently) call IRRELEVANT — so no
-      // classification exclusion applies here.
+      // "На проверку" shows every still-pending item regardless of what the model
+      // guessed — including ones it happened to (unconfidently) call IRRELEVANT — so
+      // no classification/reviewDecision exclusion applies here. Once resolved,
+      // needsManualReview flips to false and the record leaves this view on its own.
     } else if (!query.messageClassification) {
-      // Default main-Inbox exclusion: hide anything the model flagged IRRELEVANT,
-      // unless a human explicitly confirmed it relevant on manual review.
-      where.AND = [{
-        OR: [
-          { messageClassification: null },
-          { NOT: { messageClassification: 'IRRELEVANT' } },
-          { reviewDecision: 'RELEVANT' }
-        ]
-      }]
+      // Default main-Inbox membership — same reviewDecision-priority rule as above,
+      // just inverted: this is exactly the complement of IRRELEVANT_BUCKET.
+      where.AND = [RELEVANT_BUCKET]
     }
 
       if (query.platform === 'WEB') {
@@ -135,7 +154,7 @@ export class MentionsService {
     const irrelevantCountWhere: Prisma.MentionWhereInput = {
       ...commonWhere,
       needsManualReview: false,
-      AND: [{ OR: [{ messageClassification: 'IRRELEVANT' }, { reviewDecision: 'IRRELEVANT' }] }]
+      AND: [IRRELEVANT_BUCKET]
     }
 
     const [items, total, ratingAggregate, ratedCount, sourceTargets, needsReviewCount, irrelevantCount] = await Promise.all([
