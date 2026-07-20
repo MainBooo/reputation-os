@@ -124,29 +124,56 @@ describe('MentionsService — findByCompany filters', () => {
   // directions. Verified against real Postgres NULL/NOT semantics in a rolled-back
   // transaction against the actual "Руки Вверх Бар" company (no data persisted,
   // production mention cmrsglg5f00h99e2zrvuuei48 left untouched) — see
-  // project-telegram-inbox-review-queue memory for the raw output. These two tests
-  // pin the exact query shape that produced those verified results.
-  function evaluateBucket(bucket: any, record: { messageClassification: string | null; reviewDecision: string | null }): boolean {
-    if (bucket.OR) return bucket.OR.some((clause: any) => evaluateBucket(clause, record))
-    if (bucket.AND) return bucket.AND.every((clause: any) => evaluateBucket(clause, record))
-    if (bucket.NOT) return !evaluateBucket(bucket.NOT, record)
+  // project-telegram-inbox-review-queue memory for the raw output.
+  //
+  // A first version of this evaluator used plain JS `===`/`!` on the fragments,
+  // which passed even though the fragments were broken: SQL's `NOT (col = value)`
+  // is NULL (excluded from WHERE) — not TRUE — when `col` IS NULL, but JS's
+  // `!(null === value)` is just `true`. That mismatch hid a real bug (a bare
+  // `NOT: { reviewDecision: 'X' }` with no explicit null branch silently excluded
+  // every never-reviewed row — 638 of 673 mentions in production) until an actual
+  // Postgres round-trip caught it. This evaluator now implements SQL's 3-valued
+  // logic (true/false/null) so it would catch the same class of bug again.
+  type SqlBool = true | false | null
+  function sqlNot(v: SqlBool): SqlBool { return v === null ? null : !v }
+  function sqlAnd(vs: SqlBool[]): SqlBool {
+    if (vs.some((v) => v === false)) return false
+    if (vs.some((v) => v === null)) return null
+    return true
+  }
+  function sqlOr(vs: SqlBool[]): SqlBool {
+    if (vs.some((v) => v === true)) return true
+    if (vs.some((v) => v === null)) return null
+    return false
+  }
+  function evaluateBucket(bucket: any, record: { messageClassification: string | null; reviewDecision: string | null }): SqlBool {
+    if (bucket.OR) return sqlOr(bucket.OR.map((clause: any) => evaluateBucket(clause, record)))
+    if (bucket.AND) return sqlAnd(bucket.AND.map((clause: any) => evaluateBucket(clause, record)))
+    if (bucket.NOT) return sqlNot(evaluateBucket(bucket.NOT, record))
     const [[field, value]] = Object.entries(bucket)
-    return (record as any)[field] === value
+    const columnValue = (record as any)[field]
+    if (value === null) return columnValue === null // Prisma `{ field: null }` compiles to IS NULL, always definite.
+    if (columnValue === null) return null // comparing NULL to anything is unknown in SQL, not false.
+    return columnValue === value
+  }
+  // A WHERE clause only keeps rows where the predicate is definitely TRUE — NULL is excluded too.
+  function isInBucket(bucket: any, record: { messageClassification: string | null; reviewDecision: string | null }): boolean {
+    return evaluateBucket(bucket, record) === true
   }
 
   it('scenario 1 — AI classified IRRELEVANT, human confirms relevant: excluded from "Не по теме", included in main Inbox bucket', () => {
     const record = { messageClassification: 'IRRELEVANT', reviewDecision: 'RELEVANT' }
-    expect(evaluateBucket(RELEVANT_BUCKET, record)).toBe(true)
-    expect(evaluateBucket(IRRELEVANT_BUCKET, record)).toBe(false)
+    expect(isInBucket(RELEVANT_BUCKET, record)).toBe(true)
+    expect(isInBucket(IRRELEVANT_BUCKET, record)).toBe(false)
   })
 
   it('scenario 2 — AI classified a relevant type, human marks not-relevant: excluded from main Inbox bucket, included in "Не по теме"', () => {
     const record = { messageClassification: 'CUSTOMER_QUESTION', reviewDecision: 'IRRELEVANT' }
-    expect(evaluateBucket(RELEVANT_BUCKET, record)).toBe(false)
-    expect(evaluateBucket(IRRELEVANT_BUCKET, record)).toBe(true)
+    expect(isInBucket(RELEVANT_BUCKET, record)).toBe(false)
+    expect(isInBucket(IRRELEVANT_BUCKET, record)).toBe(true)
   })
 
-  it('no human decision yet — bucket membership falls back to messageClassification alone, and the two buckets never overlap or leave a gap', () => {
+  it('no human decision yet (reviewDecision=null, the common never-reviewed case — 638/673 real rows) — bucket membership falls back to messageClassification alone, and the two buckets never overlap or leave a gap', () => {
     const cases: Array<{ messageClassification: string | null; reviewDecision: null }> = [
       { messageClassification: 'IRRELEVANT', reviewDecision: null },
       { messageClassification: 'CUSTOMER_QUESTION', reviewDecision: null },
@@ -154,8 +181,8 @@ describe('MentionsService — findByCompany filters', () => {
     ]
 
     for (const record of cases) {
-      const inRelevant = evaluateBucket(RELEVANT_BUCKET, record)
-      const inIrrelevant = evaluateBucket(IRRELEVANT_BUCKET, record)
+      const inRelevant = isInBucket(RELEVANT_BUCKET, record)
+      const inIrrelevant = isInBucket(IRRELEVANT_BUCKET, record)
       expect(inRelevant).toBe(!inIrrelevant) // exact complements — no overlap, no gap
       expect(inIrrelevant).toBe(record.messageClassification === 'IRRELEVANT')
     }

@@ -11,17 +11,30 @@ import { ResolveMentionReviewDto } from './dto/resolve-mention-review.dto'
 // logical complements for every reachable (messageClassification, reviewDecision) pair:
 //  - reviewDecision=RELEVANT   → always RELEVANT_BUCKET, even if classification=IRRELEVANT.
 //  - reviewDecision=IRRELEVANT → always IRRELEVANT_BUCKET, even if classification≠IRRELEVANT.
-//  - reviewDecision=null       → falls back to messageClassification alone.
+//  - reviewDecision=null       → falls back to messageClassification alone (the common case —
+//    almost nothing has been through manual review yet).
+//
+// IMPORTANT: `NOT: { field: value }` on a *nullable* Prisma field compiles to raw SQL
+// `NOT (field = value)`, which is NULL — not TRUE — when the column is NULL, so a bare NOT
+// silently drops every never-reviewed row. Every NOT below is therefore paired with an
+// explicit `{ field: null }` OR-branch. (Confirmed against production Postgres: `SELECT NOT
+// (NULL = 'IRRELEVANT')` returns NULL, and a first version of this fragment without the
+// null branch returned 0 rows for the entire company instead of the expected 638.)
 export const IRRELEVANT_BUCKET: Prisma.MentionWhereInput = {
   OR: [
-    { AND: [{ messageClassification: 'IRRELEVANT' }, { NOT: { reviewDecision: 'RELEVANT' } }] },
+    {
+      AND: [
+        { messageClassification: 'IRRELEVANT' },
+        { OR: [{ reviewDecision: null }, { NOT: { reviewDecision: 'RELEVANT' } }] }
+      ]
+    },
     { reviewDecision: 'IRRELEVANT' }
   ]
 }
 
 export const RELEVANT_BUCKET: Prisma.MentionWhereInput = {
   AND: [
-    { NOT: { reviewDecision: 'IRRELEVANT' } },
+    { OR: [{ reviewDecision: null }, { NOT: { reviewDecision: 'IRRELEVANT' } }] },
     {
       OR: [
         { messageClassification: null },
