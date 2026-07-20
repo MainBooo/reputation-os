@@ -8,6 +8,8 @@ export type CompanyMentionsResponse = {
     limit: number
     averageRating?: number | null
     ratedCount?: number
+    needsReviewCount?: number
+    irrelevantCount?: number
   }
 }
 
@@ -36,6 +38,13 @@ export function updateMentionStatus(id: string, status: 'REVIEWED' | 'ARCHIVED')
   return apiFetch(`/mentions/${id}/status`, {
     method: 'PATCH',
     body: JSON.stringify({ status })
+  })
+}
+
+export function resolveMentionReview(id: string, decision: 'RELEVANT' | 'IRRELEVANT') {
+  return apiFetch(`/mentions/${id}/review`, {
+    method: 'PATCH',
+    body: JSON.stringify({ decision })
   })
 }
 

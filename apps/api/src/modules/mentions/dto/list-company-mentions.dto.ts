@@ -61,4 +61,11 @@ export class ListCompanyMentionsDto {
   @IsOptional()
   @IsBooleanString()
   includeHidden?: string
+
+  /** Powers the "Не по теме" filter: matches messageClassification=IRRELEVANT
+   *  OR a human reviewDecision=IRRELEVANT, and implies includeHidden (some
+   *  IRRELEVANT mentions have isInboxVisible=false at high confidence). */
+  @IsOptional()
+  @IsBooleanString()
+  onlyIrrelevant?: string
 }

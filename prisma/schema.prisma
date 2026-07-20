@@ -74,6 +74,11 @@ enum MessageUrgency {
   HIGH
 }
 
+enum MentionReviewDecision {
+  RELEVANT
+  IRRELEVANT
+}
+
 enum WorkspaceRole {
   OWNER
   ADMIN
@@ -112,39 +117,40 @@ enum NotificationType {
 }
 
 model User {
-  id           String     @id @default(cuid())
-  email        String     @unique
-  passwordHash String
-  fullName     String?
-  isActive     Boolean    @default(true)
-  systemRole   SystemRole @default(USER)
-  lastLoginAt  DateTime?
-  welcomeSeen  Boolean    @default(false)
-  createdAt    DateTime   @default(now())
-  telegramChatId    BigInt?   @unique
-  telegramLinkedAt  DateTime?
-  yandexId     String?    @unique
-  updatedAt    DateTime   @updatedAt
-  deletedAt    DateTime?
-  deletedById  String?
+  id               String     @id @default(cuid())
+  email            String     @unique
+  passwordHash     String
+  fullName         String?
+  isActive         Boolean    @default(true)
+  systemRole       SystemRole @default(USER)
+  lastLoginAt      DateTime?
+  welcomeSeen      Boolean    @default(false)
+  createdAt        DateTime   @default(now())
+  telegramChatId   BigInt?    @unique
+  telegramLinkedAt DateTime?
+  yandexId         String?    @unique
+  updatedAt        DateTime   @updatedAt
+  deletedAt        DateTime?
+  deletedById      String?
 
   workspaceMembers     WorkspaceMember[]
   workspaceInvitesSent WorkspaceInvite[]
   notifications        Notification[]
-  aiReplyDrafts        AIReplyDraft[]        @relation("AIReplyDraftCreatedBy")
-  jobLogsTriggered     JobLog[]              @relation("JobLogTriggeredBy")
+  aiReplyDrafts        AIReplyDraft[]            @relation("AIReplyDraftCreatedBy")
+  jobLogsTriggered     JobLog[]                  @relation("JobLogTriggeredBy")
   webPushSubscriptions WebPushSubscription[]
   telegramLinkToken    TelegramLinkToken?
   telegramDeliveries   TelegramMentionDelivery[]
-  auditLogsAuthored    AuditLog[]            @relation("AuditLogActor")
-  auditLogsTargeted    AuditLog[]            @relation("AuditLogTarget")
-  subscriptionsManaged Subscription[]        @relation("SubscriptionManagedBy")
+  auditLogsAuthored    AuditLog[]                @relation("AuditLogActor")
+  auditLogsTargeted    AuditLog[]                @relation("AuditLogTarget")
+  subscriptionsManaged Subscription[]            @relation("SubscriptionManagedBy")
 
-  chatThreadsCreated ChatThread[]     @relation("ChatThreadCreatedBy")
+  chatThreadsCreated ChatThread[]      @relation("ChatThreadCreatedBy")
   chatMessages       ChatMessage[]
   chatReadStates     ChatReadState[]
   chatMentions       ChatMention[]
   chatParticipants   ChatParticipant[]
+  mentionsReviewed   Mention[]         @relation("MentionReviewedBy")
 }
 
 model Workspace {
@@ -154,9 +160,9 @@ model Workspace {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  isActive    Boolean   @default(true)
-  deletedAt   DateTime?
-  deletedById String?
+  isActive             Boolean               @default(true)
+  deletedAt            DateTime?
+  deletedById          String?
   members              WorkspaceMember[]
   invites              WorkspaceInvite[]
   companies            Company[]
@@ -232,7 +238,7 @@ enum ResponsePreset {
 }
 
 model Company {
-  id                     String    @id @default(cuid())
+  id                     String         @id @default(cuid())
   workspaceId            String
   name                   String
   normalizedName         String
@@ -243,14 +249,14 @@ model Company {
   industry               String?
   description            String?
   logoUrl                String?
-  isActive               Boolean   @default(true)
+  isActive               Boolean        @default(true)
   responsePreset         ResponsePreset @default(FORMAL)
   initialSyncCompletedAt DateTime?
   lastSyncedAt           DateTime?
-  createdAt              DateTime  @default(now())
-  updatedAt              DateTime  @updatedAt
+  createdAt              DateTime       @default(now())
+  updatedAt              DateTime       @updatedAt
 
-  workspace         Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace         Workspace                @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   aliases           CompanyAlias[]
   sourceTargets     CompanySourceTarget[]
   mentions          Mention[]
@@ -260,8 +266,8 @@ model Company {
   telegramChannels  CompanyTelegramChannel[]
   aiReplyDrafts     AIReplyDraft[]
   notificationRules NotificationRule[]
-  chatThreads       ChatThread[]          @relation("CompanyChatThreads")
-  subscription      Subscription?         @relation(fields: [subscriptionId], references: [id])
+  chatThreads       ChatThread[]             @relation("CompanyChatThreads")
+  subscription      Subscription?            @relation(fields: [subscriptionId], references: [id])
   payments          Payment[]
   featureOverrides  FeatureOverride[]
   jobLogs           JobLog[]
@@ -373,13 +379,22 @@ model Mention {
   matchedQuery   String?
 
   messageClassification  MessageClassification?
-  messageClassConfidence Decimal?                @db.Decimal(3, 2)
+  messageClassConfidence Decimal?               @db.Decimal(3, 2)
   messageUrgency         MessageUrgency?
   messageClassReason     String?
   messageClassModel      String?
-  isInboxVisible         Boolean                 @default(true)
-  needsManualReview      Boolean                 @default(false)
+  isInboxVisible         Boolean                @default(true)
+  needsManualReview      Boolean                @default(false)
   classifiedAt           DateTime?
+
+  // Human resolution of a needsManualReview item. Never overwrites the model's
+  // messageClassification/messageClassConfidence/messageClassReason — those stay
+  // as the AI's original verdict for audit purposes; this is the separate human
+  // decision that determines which Inbox section the mention lives in afterward.
+  reviewDecision   MentionReviewDecision?
+  reviewedAt       DateTime?
+  reviewedByUserId String?
+  reviewedByUser   User?                  @relation("MentionReviewedBy", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
 
   rawPayload Json?
   metadata   Json?
@@ -394,9 +409,9 @@ model Mention {
   duplicateOf Mention?  @relation("MentionDuplicateLink", fields: [duplicateOfId], references: [id], onDelete: SetNull)
   duplicates  Mention[] @relation("MentionDuplicateLink")
 
-  aiReplyDrafts AIReplyDraft[]
+  aiReplyDrafts      AIReplyDraft[]
   telegramDeliveries TelegramMentionDelivery[]
-  chatThreads    ChatThread[]    @relation("MentionChatThreads")
+  chatThreads        ChatThread[]              @relation("MentionChatThreads")
 
   @@unique([companyId, platform, externalMentionId], map: "mention_company_platform_external_unique")
   @@unique([companyId, hash], map: "mention_company_hash_unique")
@@ -410,6 +425,9 @@ model Mention {
   @@index([externalMentionId])
   @@index([hash])
   @@index([duplicateOfId])
+  @@index([companyId, needsManualReview])
+  @@index([companyId, messageClassification])
+  @@index([reviewedByUserId])
 }
 
 model RatingSnapshot {
@@ -594,10 +612,10 @@ model Plan {
   id           String   @id @default(cuid())
   code         PlanCode @unique
   name         String
-  priceMonthly Int      // рубли в месяц
-  priceYearly  Int?     // рубли в год (скидка ~20%)
+  priceMonthly Int // рубли в месяц
+  priceYearly  Int? // рубли в год (скидка ~20%)
   isActive     Boolean  @default(true)
-  limits       Json     // { maxCompanies, maxAiRepliesPerMonth, platforms[], telegramNotifications, advancedAnalytics }
+  limits       Json // { maxCompanies, maxAiRepliesPerMonth, platforms[], telegramNotifications, advancedAnalytics }
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -618,9 +636,9 @@ model Subscription {
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
 
-  workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  plan           Plan      @relation(fields: [planId], references: [id])
-  updatedByAdmin User?     @relation("SubscriptionManagedBy", fields: [updatedByAdminId], references: [id], onDelete: SetNull)
+  workspace      Workspace                 @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  plan           Plan                      @relation(fields: [planId], references: [id])
+  updatedByAdmin User?                     @relation("SubscriptionManagedBy", fields: [updatedByAdminId], references: [id], onDelete: SetNull)
   Company        Company[]
   reminderLogs   SubscriptionReminderLog[]
 
@@ -631,8 +649,8 @@ model Subscription {
 model SubscriptionReminderLog {
   id             String   @id @default(cuid())
   subscriptionId String
-  reminderType   String   // TRIAL_ENDING | SUBSCRIPTION_ENDING
-  daysBefore     Int      // 3, 1, 0
+  reminderType   String // TRIAL_ENDING | SUBSCRIPTION_ENDING
+  daysBefore     Int // 3, 1, 0
   periodEndDate  DateTime // trialEndsAt or currentPeriodEnd (для идемпотентности)
   sentAt         DateTime @default(now())
   channels       String[] // ['PUSH', 'TELEGRAM', 'IN_APP']
@@ -648,7 +666,7 @@ model Payment {
   workspaceId       String
   userId            String?
   planCode          PlanCode
-  amount            Int             // рубли
+  amount            Int // рубли
   currency          String          @default("RUB")
   billingPeriod     String          @default("monthly") // 'monthly' | 'yearly'
   status            PaymentStatus   @default(PENDING)
@@ -723,31 +741,31 @@ model TelegramMentionDelivery {
 }
 
 model WatchedPage {
-  id                String    @id @default(cuid())
-  companyId         String
-  sourceTargetId    String?
-  url               String
-  domain            String
-  pageType          String    @default("UNKNOWN")
-  pageTypeCheckedAt DateTime?
-  enabled           Boolean   @default(true)
-  lastCheckedAt     DateTime?
-  lastChangedAt     DateTime?
-  lastError         String?
-  contentHash       String?
-  checkIntervalMin  Int       @default(1440)
-  nextCheckAt       DateTime?
-  etag              String?
+  id                 String    @id @default(cuid())
+  companyId          String
+  sourceTargetId     String?
+  url                String
+  domain             String
+  pageType           String    @default("UNKNOWN")
+  pageTypeCheckedAt  DateTime?
+  enabled            Boolean   @default(true)
+  lastCheckedAt      DateTime?
+  lastChangedAt      DateTime?
+  lastError          String?
+  contentHash        String?
+  checkIntervalMin   Int       @default(1440)
+  nextCheckAt        DateTime?
+  etag               String?
   lastModifiedHeader String?
-  consecutiveErrors Int       @default(0)
-  disabledReason    String?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  consecutiveErrors  Int       @default(0)
+  disabledReason     String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   company      Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
   sourceTarget CompanySourceTarget? @relation(fields: [sourceTargetId], references: [id], onDelete: SetNull)
 
-  items        WatchedPageItem[]
+  items WatchedPageItem[]
 
   @@unique([companyId, url])
   @@index([companyId])
@@ -756,7 +774,7 @@ model WatchedPage {
 }
 
 model WatchedPageItem {
-  id            String   @id @default(cuid())
+  id            String    @id @default(cuid())
   watchedPageId String
   companyId     String
   itemHash      String
@@ -767,7 +785,7 @@ model WatchedPageItem {
   ratingValue   Int?
   publishedAt   DateTime?
   url           String?
-  createdAt     DateTime @default(now())
+  createdAt     DateTime  @default(now())
 
   watchedPage WatchedPage @relation(fields: [watchedPageId], references: [id], onDelete: Cascade)
   company     Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
@@ -854,10 +872,10 @@ model ChatThread {
   updatedAt     DateTime       @updatedAt
   lastMessageAt DateTime?
 
-  workspace    Workspace?       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  company      Company?         @relation("CompanyChatThreads", fields: [companyId], references: [id], onDelete: Cascade)
-  mention      Mention?         @relation("MentionChatThreads", fields: [mentionId], references: [id], onDelete: Cascade)
-  createdBy    User?            @relation("ChatThreadCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  workspace    Workspace?        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  company      Company?          @relation("CompanyChatThreads", fields: [companyId], references: [id], onDelete: Cascade)
+  mention      Mention?          @relation("MentionChatThreads", fields: [mentionId], references: [id], onDelete: Cascade)
+  createdBy    User?             @relation("ChatThreadCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   messages     ChatMessage[]
   readStates   ChatReadState[]
   participants ChatParticipant[]
@@ -884,7 +902,7 @@ model ChatParticipant {
 }
 
 model ChatMessage {
-  id          String          @id @default(cuid())
+  id          String  @id @default(cuid())
   threadId    String
   workspaceId String?
   authorId    String
@@ -897,8 +915,8 @@ model ChatMessage {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  thread   ChatThread  @relation(fields: [threadId], references: [id], onDelete: Cascade)
-  author   User        @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  thread   ChatThread    @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  author   User          @relation(fields: [authorId], references: [id], onDelete: Cascade)
   mentions ChatMention[]
 
   @@index([threadId, createdAt(sort: Desc)])
@@ -942,7 +960,7 @@ model ChatMention {
 // ============================================
 
 model AuditLog {
-  id           String    @id @default(cuid())
+  id           String   @id @default(cuid())
   actorUserId  String?
   actorEmail   String?
   action       String
@@ -953,11 +971,11 @@ model AuditLog {
   beforeJson   Json?
   afterJson    Json?
   metadata     Json?
-  createdAt    DateTime  @default(now())
+  createdAt    DateTime @default(now())
 
-  actorUser  User?      @relation("AuditLogActor",     fields: [actorUserId],  references: [id], onDelete: SetNull)
-  workspace  Workspace? @relation("AuditLogWorkspace", fields: [workspaceId],  references: [id], onDelete: SetNull)
-  targetUser User?      @relation("AuditLogTarget",    fields: [targetUserId], references: [id], onDelete: SetNull)
+  actorUser  User?      @relation("AuditLogActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  workspace  Workspace? @relation("AuditLogWorkspace", fields: [workspaceId], references: [id], onDelete: SetNull)
+  targetUser User?      @relation("AuditLogTarget", fields: [targetUserId], references: [id], onDelete: SetNull)
 
   @@index([createdAt(sort: Desc)])
   @@index([actorUserId])

@@ -113,12 +113,14 @@ function getFaviconUrl(sourceUrl?: string | null) {
 export default function MentionRow({
   mention,
   actions,
+  reviewActions,
   checkbox,
   hideMetaBadges = false,
   workspaceId
 }: {
   mention: any
   actions?: ReactNode
+  reviewActions?: ReactNode
   checkbox?: ReactNode
   hideMetaBadges?: boolean
   workspaceId?: string
@@ -337,6 +339,8 @@ export default function MentionRow({
           {mention.messageClassReason}
         </div>
       ) : null}
+
+      {reviewActions ? <div className="mt-3">{reviewActions}</div> : null}
 
       {replyError ? (
         <div className="mt-3 rounded-xl border border-red-400/20 bg-red-500/10 px-3 py-2 text-xs text-red-200">{replyError}</div>

@@ -5,6 +5,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator'
 import { AuthUser } from '../../common/auth/auth-user.type'
 import { ListCompanyMentionsDto } from './dto/list-company-mentions.dto'
 import { UpdateMentionStatusDto } from './dto/update-mention-status.dto'
+import { ResolveMentionReviewDto } from './dto/resolve-mention-review.dto'
 
 @UseGuards(JwtAuthGuard)
 @Controller()
@@ -24,6 +25,11 @@ export class MentionsController {
   @Patch('mentions/:id/status')
   updateStatus(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: UpdateMentionStatusDto) {
     return this.mentionsService.updateStatus(user.id, id, dto)
+  }
+
+  @Patch('mentions/:id/review')
+  resolveReview(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: ResolveMentionReviewDto) {
+    return this.mentionsService.resolveReview(user.id, id, dto)
   }
 
   @Delete('mentions/:id')

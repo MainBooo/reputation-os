@@ -8,8 +8,31 @@ import Button from '@/components/ui/Button'
 import Card from '@/components/ui/Card'
 import EmptyState from '@/components/ui/EmptyState'
 import InboxPendingRefresh from '@/components/inbox/InboxPendingRefresh'
-import { deleteMention, getCompanyMentions, updateMentionStatus } from '@/lib/api/mentions'
+import { deleteMention, getCompanyMentions, resolveMentionReview, updateMentionStatus } from '@/lib/api/mentions'
 import { messageClassificationLabel, platformLabel } from '@/lib/ui/mentions'
+
+type ReviewView = 'INBOX' | 'REVIEW' | 'IRRELEVANT'
+
+function reviewViewLabel(value: ReviewView) {
+  if (value === 'REVIEW') return 'На проверку'
+  if (value === 'IRRELEVANT') return 'Не по теме'
+  return 'Упоминания'
+}
+
+/** Mirrors the backend's view logic in apps/api mentions.service.ts exactly, so
+ *  polling merges and optimistic local updates never show a mention in a tab the
+ *  server itself would exclude it from. */
+function mentionMatchesReviewView(mention: any, reviewView: ReviewView) {
+  const needsReview = Boolean(mention?.needsManualReview)
+  const isIrrelevant = mention?.messageClassification === 'IRRELEVANT' || mention?.reviewDecision === 'IRRELEVANT'
+
+  if (reviewView === 'REVIEW') return needsReview
+  if (reviewView === 'IRRELEVANT') return !needsReview && isIrrelevant
+
+  if (needsReview) return false
+  if (isIrrelevant && mention?.reviewDecision !== 'RELEVANT') return false
+  return true
+}
 
 const PAGE_LIMIT = 20
 const PLATFORM_FILTERS = ['YANDEX', 'TWOGIS', 'WEB', 'TELEGRAM']
@@ -176,6 +199,10 @@ export default function InboxMentionsList({
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'NEW' | 'REVIEWED' | 'ARCHIVED'>('ALL')
   const [messageClassification, setMessageClassification] = useState('')
   const [includeHidden, setIncludeHidden] = useState(false)
+  const [reviewView, setReviewView] = useState<ReviewView>('INBOX')
+  const [needsReviewCount, setNeedsReviewCount] = useState(0)
+  const [irrelevantCount, setIrrelevantCount] = useState(0)
+  const [reviewActionId, setReviewActionId] = useState('')
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [bulkLoading, setBulkLoading] = useState<'REVIEWED' | 'ARCHIVED' | ''>('')
   const [filtersOpen, setFiltersOpen] = useState(Boolean(
@@ -230,19 +257,24 @@ export default function InboxMentionsList({
     if (to) params.set('to', to)
     if (messageClassification) params.set('messageClassification', messageClassification)
     if (includeHidden) params.set('includeHidden', 'true')
+    if (reviewView === 'REVIEW') params.set('needsManualReview', 'true')
+    if (reviewView === 'IRRELEVANT') params.set('onlyIrrelevant', 'true')
     return `?${params.toString()}`
-  }, [platform, sentiment, rating, from, to, messageClassification, includeHidden])
+  }, [platform, sentiment, rating, from, to, messageClassification, includeHidden, reviewView])
 
   const hasActiveFilters = Boolean(platform || sentiment || rating || from || to || statusFilter !== 'ALL' || messageClassification || includeHidden)
   const activeFilterCount = [platform, sentiment, rating, from || to, statusFilter !== 'ALL', messageClassification, includeHidden].filter(Boolean).length
   const visibleMentions = useMemo(() => {
-    const filtered = mentions.filter((mention) => mentionMatchesFilters(mention, { platform, sentiment, rating, from, to, statusFilter, messageClassification }))
+    const filtered = mentions.filter((mention) =>
+      mentionMatchesFilters(mention, { platform, sentiment, rating, from, to, statusFilter, messageClassification }) &&
+      mentionMatchesReviewView(mention, reviewView)
+    )
     return [...filtered].sort((a, b) => {
       const urgentDiff = Number(isUrgentComplaint(b)) - Number(isUrgentComplaint(a))
       if (urgentDiff !== 0) return urgentDiff
       return getMentionSortTime(b) - getMentionSortTime(a)
     })
-  }, [mentions, platform, sentiment, rating, from, to, statusFilter, messageClassification])
+  }, [mentions, platform, sentiment, rating, from, to, statusFilter, messageClassification, reviewView])
   const visibleCount = visibleMentions.length
   const visibleIds = visibleMentions.map((mention) => mention?.id).filter(Boolean)
   const selectedVisibleIds = selectedIds.filter((id) => visibleIds.includes(id))
@@ -280,6 +312,8 @@ export default function InboxMentionsList({
         setTotalCount(Math.max(nextTotal, items.length))
         setAverageRating(nextAverage === null || nextAverage === undefined ? null : Number(nextAverage))
         setRatedCount(nextRatedCount)
+        if (res?.meta?.needsReviewCount !== undefined) setNeedsReviewCount(Number(res.meta.needsReviewCount || 0))
+        if (res?.meta?.irrelevantCount !== undefined) setIrrelevantCount(Number(res.meta.irrelevantCount || 0))
 
         if (replace) {
           setMentions(sortMentionsDesc(items))
@@ -354,6 +388,28 @@ export default function InboxMentionsList({
     }
   }
 
+  async function handleResolveReview(mentionId: string, decision: 'RELEVANT' | 'IRRELEVANT') {
+    if (!mentionId || reviewActionId) return
+
+    setReviewActionId(mentionId)
+    setError('')
+
+    try {
+      await resolveMentionReview(mentionId, decision)
+      setMentions((current) =>
+        current.map((item) =>
+          item?.id === mentionId ? { ...item, needsManualReview: false, reviewDecision: decision } : item
+        )
+      )
+      setNeedsReviewCount((current) => Math.max(0, current - 1))
+      if (decision === 'IRRELEVANT') setIrrelevantCount((current) => current + 1)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Не удалось сохранить решение')
+    } finally {
+      setReviewActionId('')
+    }
+  }
+
   function toggleMentionSelection(mentionId: string) {
     if (!mentionId || bulkLoading) return
     setSelectedIds((current) =>
@@ -425,6 +481,51 @@ export default function InboxMentionsList({
           </div>
         </div>
       </Card>
+
+      <Card className="mb-4 overflow-hidden p-2">
+        <div className="flex flex-wrap gap-2">
+          {(['INBOX', 'REVIEW', 'IRRELEVANT'] as ReviewView[]).map((view) => (
+            <button
+              key={view}
+              type="button"
+              onClick={() => {
+                setReviewView(view)
+                setSelectedIds([])
+              }}
+              className={clsx(
+                'inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold transition-all',
+                reviewView === view
+                  ? 'border-cyan-400/30 bg-cyan-500/15 text-blue-100'
+                  : 'border-white/10 bg-white/[0.04] text-zinc-300 hover:text-brand'
+              )}
+            >
+              {reviewViewLabel(view)}
+              {view === 'REVIEW' && needsReviewCount > 0 ? (
+                <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-400/20 px-1.5 text-xs text-amber-100">
+                  {needsReviewCount}
+                </span>
+              ) : null}
+              {view === 'IRRELEVANT' && irrelevantCount > 0 ? (
+                <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-white/10 px-1.5 text-xs text-zinc-300">
+                  {irrelevantCount}
+                </span>
+              ) : null}
+            </button>
+          ))}
+        </div>
+      </Card>
+
+      {reviewView === 'REVIEW' ? (
+        <div className="mb-4 rounded-2xl border border-amber-400/20 bg-amber-500/[0.06] px-4 py-3 text-xs leading-5 text-amber-100/90">
+          ИИ не уверен в классификации этих сообщений — подтвердите вручную, к какому упоминанию они относятся.
+        </div>
+      ) : null}
+
+      {reviewView === 'IRRELEVANT' ? (
+        <div className="mb-4 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-xs leading-5 text-zinc-400">
+          Сообщения, которые ИИ или модератор посчитали не относящимися к компании. Записи не удаляются.
+        </div>
+      ) : null}
 
       <Card className="mb-4 p-3">
         <div className="flex flex-wrap items-center gap-2">
@@ -594,13 +695,23 @@ export default function InboxMentionsList({
         </>
       ) : !mentions.length ? (
         <EmptyState
-          title={initialLoadTimedOut ? 'Данные из Яндекс Карт пока не получены' : 'Inbox пока пуст'}
+          title={
+            reviewView === 'REVIEW'
+              ? 'Нечего проверять'
+              : reviewView === 'IRRELEVANT'
+                ? 'Нет сообщений «не по теме»'
+                : initialLoadTimedOut ? 'Данные из Яндекс Карт пока не получены' : 'Inbox пока пуст'
+          }
           description={
-            hasActiveFilters
-              ? 'По выбранным фильтрам ничего не найдено.'
-              : initialLoadTimedOut
-                ? 'Первичная загрузка не вернула отзывы. Проверьте ссылку на Яндекс Карты или дождитесь следующей синхронизации.'
-                : 'Для этой компании пока не найдено упоминаний.'
+            reviewView === 'REVIEW'
+              ? 'Все сообщения с низкой уверенностью классификации уже проверены.'
+              : reviewView === 'IRRELEVANT'
+                ? 'Сюда попадают сообщения, признанные не относящимися к компании.'
+                : hasActiveFilters
+                  ? 'По выбранным фильтрам ничего не найдено.'
+                  : initialLoadTimedOut
+                    ? 'Первичная загрузка не вернула отзывы. Проверьте ссылку на Яндекс Карты или дождитесь следующей синхронизации.'
+                    : 'Для этой компании пока не найдено упоминаний.'
           }
         />
       ) : (
@@ -644,6 +755,28 @@ export default function InboxMentionsList({
                       <button type="button" disabled={removingId === mention.id} onClick={() => handleDelete(mention.id)} className="inline-flex items-center justify-center rounded-md border border-red-500/20 bg-red-500/10 px-2.5 py-1 text-xs text-red-300 transition-all hover:bg-red-500/20 hover:text-white disabled:cursor-not-allowed disabled:opacity-60">
                         {removingId === mention.id ? 'Удаление...' : 'Удалить'}
                       </button>
+                    }
+                    reviewActions={
+                      reviewView === 'REVIEW' ? (
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            disabled={reviewActionId === mention.id}
+                            onClick={() => handleResolveReview(mention.id, 'RELEVANT')}
+                            className="inline-flex items-center gap-1 rounded-md border border-emerald-400/30 bg-emerald-500/10 px-2.5 py-1.5 text-xs font-semibold text-emerald-200 transition-all hover:bg-emerald-500/20 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {reviewActionId === mention.id ? 'Сохранение...' : 'Подтвердить упоминение'}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={reviewActionId === mention.id}
+                            onClick={() => handleResolveReview(mention.id, 'IRRELEVANT')}
+                            className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/[0.04] px-2.5 py-1.5 text-xs font-semibold text-zinc-300 transition-all hover:bg-white/[0.08] hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {reviewActionId === mention.id ? 'Сохранение...' : 'Отметить как не по теме'}
+                          </button>
+                        </div>
+                      ) : null
                     }
                   />
                 </div>

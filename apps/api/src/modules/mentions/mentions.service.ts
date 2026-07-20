@@ -1,12 +1,17 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common'
 import { Prisma } from '@prisma/client'
 import { PrismaService } from '../../common/prisma/prisma.service'
+import { AuditLogService } from '../admin/audit-log.service'
 import { ListCompanyMentionsDto } from './dto/list-company-mentions.dto'
 import { UpdateMentionStatusDto } from './dto/update-mention-status.dto'
+import { ResolveMentionReviewDto } from './dto/resolve-mention-review.dto'
 
 @Injectable()
 export class MentionsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auditLog: AuditLogService
+  ) {}
 
   private async assertCompanyAccess(userId: string, companyId: string) {
     const company = await this.prisma.company.findUnique({ where: { id: companyId }, select: { id: true, workspaceId: true } })
@@ -35,6 +40,16 @@ export class MentionsService {
 
     const platformFilter = query.platform
 
+    // Three Inbox views share this one query path, distinguished by explicit params:
+    //  - main Inbox (default): confirmed-relevant only — no IRRELEVANT, no pending review.
+    //  - "На проверку" (needsManualReview=true): everything still awaiting a human call,
+    //    regardless of what the model guessed.
+    //  - "Не по теме" (onlyIrrelevant=true): confidently-IRRELEVANT or human-confirmed
+    //    irrelevant, with pending-review items excluded (they belong in the review queue).
+    const onlyIrrelevant = query.onlyIrrelevant === 'true'
+    const needsManualReview = query.needsManualReview !== undefined ? query.needsManualReview === 'true' : false
+    const includeHidden = query.includeHidden === 'true' || onlyIrrelevant
+
     const where: Prisma.MentionWhereInput = {
       companyId,
       ...(platformFilter ? { platform: platformFilter } : {}),
@@ -49,8 +64,31 @@ export class MentionsService {
       } : {}),
       ...(query.messageClassification ? { messageClassification: query.messageClassification } : {}),
       ...(query.messageUrgency ? { messageUrgency: query.messageUrgency } : {}),
-      ...(query.needsManualReview !== undefined ? { needsManualReview: query.needsManualReview === 'true' } : {}),
-      ...(query.includeHidden === 'true' ? {} : { isInboxVisible: true })
+      needsManualReview,
+      ...(includeHidden ? {} : { isInboxVisible: true })
+    }
+
+    if (onlyIrrelevant) {
+      where.AND = [{
+        OR: [
+          { messageClassification: 'IRRELEVANT' },
+          { reviewDecision: 'IRRELEVANT' }
+        ]
+      }]
+    } else if (needsManualReview) {
+      // "На проверку" shows every pending item regardless of what the model guessed —
+      // including ones it happened to (unconfidently) call IRRELEVANT — so no
+      // classification exclusion applies here.
+    } else if (!query.messageClassification) {
+      // Default main-Inbox exclusion: hide anything the model flagged IRRELEVANT,
+      // unless a human explicitly confirmed it relevant on manual review.
+      where.AND = [{
+        OR: [
+          { messageClassification: null },
+          { NOT: { messageClassification: 'IRRELEVANT' } },
+          { reviewDecision: 'RELEVANT' }
+        ]
+      }]
     }
 
       if (query.platform === 'WEB') {
@@ -89,7 +127,18 @@ export class MentionsService {
       ]
     }
 
-    const [items, total, ratingAggregate, ratedCount, sourceTargets] = await Promise.all([
+    // Tab badge counts share the same non-review filters (platform/status/date/etc.)
+    // as `where`, but always count their own review-state slice regardless of which
+    // view the caller actually requested — so switching tabs shows a live count.
+    const { needsManualReview: _ignoredReview, isInboxVisible: _ignoredVisible, AND: _ignoredAnd, ...commonWhere } = where
+    const needsReviewCountWhere: Prisma.MentionWhereInput = { ...commonWhere, needsManualReview: true }
+    const irrelevantCountWhere: Prisma.MentionWhereInput = {
+      ...commonWhere,
+      needsManualReview: false,
+      AND: [{ OR: [{ messageClassification: 'IRRELEVANT' }, { reviewDecision: 'IRRELEVANT' }] }]
+    }
+
+    const [items, total, ratingAggregate, ratedCount, sourceTargets, needsReviewCount, irrelevantCount] = await Promise.all([
       this.prisma.mention.findMany({
         where,
         include: { source: true },
@@ -106,7 +155,9 @@ export class MentionsService {
       this.prisma.companySourceTarget.findMany({
         where: { companyId, isActive: true },
         include: { source: true }
-      })
+      }),
+      this.prisma.mention.count({ where: needsReviewCountWhere }),
+      this.prisma.mention.count({ where: irrelevantCountWhere })
     ])
 
     const averageRatingRaw = ratingAggregate._avg.ratingValue
@@ -123,7 +174,7 @@ export class MentionsService {
       sourceUrl: item.url || sourceUrlByPlatform.get(item.platform) || item.source?.baseUrl || null
     }))
 
-    return { data, meta: { total, page, limit, averageRating, ratedCount } }
+    return { data, meta: { total, page, limit, averageRating, ratedCount, needsReviewCount, irrelevantCount } }
   }
 
   async findOne(userId: string, id: string) {
@@ -141,6 +192,46 @@ export class MentionsService {
     if (!mention) throw new NotFoundException('Mention not found')
     await this.assertCompanyAccess(userId, mention.companyId)
     return this.prisma.mention.update({ where: { id }, data: { status: dto.status } })
+  }
+
+  /** Resolves a "На проверку" item. Only ever touches needsManualReview/reviewDecision/
+   *  reviewedAt/reviewedByUserId — the model's own messageClassification/confidence/reason
+   *  stay untouched so the AI's original verdict remains visible for audit, separate from
+   *  the human's decision. Logged to AuditLog for traceability. */
+  async resolveReview(userId: string, id: string, dto: ResolveMentionReviewDto) {
+    const mention = await this.prisma.mention.findUnique({ where: { id } })
+    if (!mention) throw new NotFoundException('Mention not found')
+    const company = await this.assertCompanyAccess(userId, mention.companyId)
+
+    const updated = await this.prisma.mention.update({
+      where: { id },
+      data: {
+        needsManualReview: false,
+        reviewDecision: dto.decision,
+        reviewedAt: new Date(),
+        reviewedByUserId: userId
+      }
+    })
+
+    await this.auditLog.log({
+      actorUserId: userId,
+      action: 'mention.review_decision',
+      entityType: 'Mention',
+      entityId: id,
+      workspaceId: company.workspaceId,
+      beforeJson: {
+        needsManualReview: mention.needsManualReview,
+        reviewDecision: mention.reviewDecision,
+        messageClassification: mention.messageClassification,
+        messageClassConfidence: mention.messageClassConfidence
+      },
+      afterJson: {
+        needsManualReview: updated.needsManualReview,
+        reviewDecision: updated.reviewDecision
+      }
+    })
+
+    return updated
   }
 
   async remove(userId: string, id: string) {
