@@ -257,7 +257,7 @@ export default function MentionRow({
           </div>
         </div>
 
-        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
+        <div className="flex w-full flex-wrap items-center gap-2 pr-20 sm:w-auto sm:justify-end sm:pr-0">
           {yandexDeepLink ? (
             <a href={yandexDeepLink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded-md border border-violet-400/40 bg-cyan-400/10 px-2.5 py-1 text-xs text-blue-300 transition-all hover:bg-cyan-400/20 hover:text-white">
               Открыть отзыв →
