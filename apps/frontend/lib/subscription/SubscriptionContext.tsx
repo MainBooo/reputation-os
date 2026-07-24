@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import { getMyEntitlements, isSubscriptionActive, type BillingEntitlements } from '@/lib/api/billing'
+import { useChatContext } from '@/lib/chat/ChatContext'
 
 interface SubscriptionContextValue {
   entitlements: BillingEntitlements | null
@@ -16,16 +17,17 @@ const SubscriptionContext = createContext<SubscriptionContextValue>({
 })
 
 export function SubscriptionProvider({ children }: { children: React.ReactNode }) {
+  const { workspaceId } = useChatContext()
   const [entitlements, setEntitlements] = useState<BillingEntitlements | null>(null)
   const [loading, setLoading] = useState(true)
 
   const load = useCallback(() => {
     setLoading(true)
-    getMyEntitlements()
+    getMyEntitlements(workspaceId || undefined)
       .then((data) => setEntitlements(data))
       .catch(() => {})
       .finally(() => setLoading(false))
-  }, [])
+  }, [workspaceId])
 
   useEffect(() => {
     load()

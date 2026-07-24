@@ -1,4 +1,4 @@
-import { Body, Controller, ForbiddenException, Get, Headers, HttpCode, Post, UseGuards } from '@nestjs/common'
+import { Body, Controller, ForbiddenException, Get, Headers, HttpCode, Post, Query, UseGuards } from '@nestjs/common'
 import { Throttle } from '@nestjs/throttler'
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard'
 import { CurrentUser } from '../../common/decorators/current-user.decorator'
@@ -28,9 +28,16 @@ export class BillingController {
     })
   }
 
+  // workspaceId необязателен для обратной совместимости старых клиентов,
+  // но фронтенд должен передавать текущий выбранный workspace явно —
+  // без него бэкенд не может знать, какой workspace сейчас открыт в UI.
   @UseGuards(JwtAuthGuard)
   @Get('entitlements')
-  getEntitlements(@CurrentUser() user: AuthUser) {
+  async getEntitlements(@CurrentUser() user: AuthUser, @Query('workspaceId') workspaceId?: string) {
+    if (workspaceId) {
+      await this.entitlements.assertMember(user.id, workspaceId)
+      return this.entitlements.getForWorkspace(workspaceId)
+    }
     return this.entitlements.getForUser(user.id)
   }
 

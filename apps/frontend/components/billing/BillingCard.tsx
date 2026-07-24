@@ -3,12 +3,8 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Card from '@/components/ui/Card'
-import {
-  getBillingPlans,
-  getMyEntitlements,
-  type BillingEntitlements,
-  type BillingPlan,
-} from '@/lib/api/billing'
+import { getBillingPlans, type BillingPlan } from '@/lib/api/billing'
+import { useSubscription } from '@/lib/subscription/SubscriptionContext'
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
@@ -77,17 +73,15 @@ function FeatureRow({
 
 export default function BillingCard() {
   const router = useRouter()
-  const [entitlements, setEntitlements] = useState<BillingEntitlements | null>(null)
+  const { entitlements, loading: entitlementsLoading } = useSubscription()
   const [plans, setPlans] = useState<BillingPlan[]>([])
-  const [loading, setLoading] = useState(true)
+  const [plansLoading, setPlansLoading] = useState(true)
+  const loading = entitlementsLoading || plansLoading
 
   useEffect(() => {
-    Promise.all([getMyEntitlements(), getBillingPlans()])
-      .then(([ent, pl]) => {
-        setEntitlements(ent)
-        setPlans(Array.isArray(pl) ? pl : [])
-      })
-      .finally(() => setLoading(false))
+    getBillingPlans()
+      .then((pl) => setPlans(Array.isArray(pl) ? pl : []))
+      .finally(() => setPlansLoading(false))
   }, [])
 
   const currentPlan = plans.find((p) => p.code === entitlements?.planCode)

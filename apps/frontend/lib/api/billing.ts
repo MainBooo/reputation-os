@@ -87,9 +87,13 @@ export function getBillingPlans() {
   return apiFetch<BillingPlan[]>('/billing/plans', undefined, [])
 }
 
-/** GET /billing/entitlements — текущий тариф + usage текущего пользователя */
-export function getMyEntitlements() {
-  return apiFetch<BillingEntitlements | null>('/billing/entitlements', undefined, null)
+/** GET /billing/entitlements — тариф + usage текущего workspace.
+ *  workspaceId нужно передавать явно (тот же id, что в переключателе workspace) —
+ *  без него бэкенд использует собственный фолбэк, который не обязан совпадать
+ *  с workspace, выбранным в UI. */
+export function getMyEntitlements(workspaceId?: string) {
+  const qs = workspaceId ? `?workspaceId=${encodeURIComponent(workspaceId)}` : ''
+  return apiFetch<BillingEntitlements | null>(`/billing/entitlements${qs}`, undefined, null)
 }
 
 /** POST /billing/yookassa/create-payment — создаёт платёж через ЮKassa, возвращает confirmationUrl */

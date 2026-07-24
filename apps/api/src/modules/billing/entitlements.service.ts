@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common'
+import { ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common'
 import { Platform, PlanCode, SubscriptionStatus } from '@prisma/client'
 import { PrismaService } from '../../common/prisma/prisma.service'
 import { FEATURE_KEYS, FREE_LIMITS, FeatureKey, PlanLimits } from './billing.constants'
@@ -96,6 +96,12 @@ export class EntitlementsService {
   async getForUser(userId: string): Promise<WorkspaceEntitlements> {
     const workspaceId = await this.resolveWorkspaceId(userId)
     return this.getForWorkspace(workspaceId)
+  }
+
+  /** Проверяет, что пользователь состоит в указанном workspace — для явного workspaceId с фронтенда. */
+  async assertMember(userId: string, workspaceId: string): Promise<void> {
+    const member = await this.prisma.workspaceMember.findFirst({ where: { userId, workspaceId } })
+    if (!member) throw new ForbiddenException('No access to workspace')
   }
 
   async getForWorkspace(workspaceId: string): Promise<WorkspaceEntitlements> {
