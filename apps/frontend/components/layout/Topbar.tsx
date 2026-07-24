@@ -264,7 +264,7 @@ export default function Topbar() {
                       <span className="block truncate text-[12px] font-semibold tracking-[-0.035em] text-white sm:text-[19px]">
                         {item.label}
                       </span>
-                      <span className="mt-1 hidden truncate text-sm text-slate-400 md:block">
+                      <span className="mt-1 hidden text-sm leading-tight text-slate-400 md:block">
                         {item.description}
                       </span>
                     </span>
