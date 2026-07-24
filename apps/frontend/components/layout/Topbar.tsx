@@ -151,12 +151,12 @@ export default function Topbar() {
       <div className="relative px-4 py-4 sm:px-5 lg:px-8">
         <div className="rounded-[34px] border border-white/10 bg-white/[0.035] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.07),0_0_52px_rgba(59,130,246,0.12)]">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-            <div className="min-w-0">
+            <div className="shrink-0">
               <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.36em] text-blue-100">
                 <Sparkles className="h-3.5 w-3.5" />
                 Workspace
               </div>
-              <div className="mt-2 truncate text-[30px] font-semibold leading-none tracking-[-0.055em] text-white sm:text-[36px]">
+              <div className="mt-2 text-[30px] font-semibold leading-none tracking-[-0.055em] text-white sm:text-[36px]">
                 Reputation OS
               </div>
             </div>
@@ -233,7 +233,12 @@ export default function Topbar() {
             </div>
           </div>
 
-          <div className="mt-5 grid grid-cols-4 gap-2 sm:gap-3 xl:grid-cols-5">
+          <div
+            className={clsx(
+              'mt-5 grid grid-cols-4 gap-2 sm:gap-3',
+              visibleNavItems.length >= 5 && 'xl:grid-cols-5'
+            )}
+          >
             {visibleNavItems.map((item) => {
               const Icon = item.icon
               const active = pathname === item.href || pathname.startsWith(item.href + '/')
