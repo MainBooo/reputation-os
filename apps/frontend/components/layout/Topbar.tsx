@@ -255,12 +255,16 @@ export default function Topbar() {
                   <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_10%_0%,rgba(255,255,255,0.10),transparent_42%)] opacity-80" />
                   <div className="pointer-events-none absolute inset-x-8 bottom-0 h-px bg-gradient-to-r from-transparent via-current to-transparent opacity-50" />
 
-                  <div className="relative flex flex-col items-center justify-center gap-2 text-center sm:flex-row sm:justify-start sm:gap-4 sm:text-left">
-                    <span className={clsx('flex h-10 w-10 shrink-0 items-center justify-center rounded-[16px] border transition sm:h-14 sm:w-14 sm:rounded-[22px]', iconTone(item.tone, active))}>
+                  {active ? (
+                    <Radio className="absolute right-4 top-4 hidden h-4 w-4 shrink-0 text-blue-100 sm:block" />
+                  ) : null}
+
+                  <div className="relative flex flex-col items-center justify-center gap-2 text-center xl:flex-row xl:justify-start xl:gap-3 xl:text-left">
+                    <span className={clsx('flex h-10 w-10 shrink-0 items-center justify-center rounded-[16px] border transition sm:h-12 sm:w-12 sm:rounded-[20px]', iconTone(item.tone, active))}>
                       <Icon className="h-5 w-5 sm:h-6 sm:w-6" />
                     </span>
 
-                    <span className="min-w-0">
+                    <span className="min-w-0 xl:flex-1">
                       <span className="block truncate text-[12px] font-semibold tracking-[-0.035em] text-white sm:text-[19px]">
                         {item.label}
                       </span>
@@ -268,10 +272,6 @@ export default function Topbar() {
                         {item.description}
                       </span>
                     </span>
-
-                    {active ? (
-                      <Radio className="ml-auto hidden h-4 w-4 shrink-0 text-blue-100 sm:block" />
-                    ) : null}
                   </div>
                 </Link>
               )
