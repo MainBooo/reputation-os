@@ -8,6 +8,7 @@ import { ChatProvider } from '@/lib/chat/ChatContext'
 import ChatDrawer from '@/components/chat/ChatDrawer'
 import { SubscriptionProvider } from '@/lib/subscription/SubscriptionContext'
 import SubscriptionPopup from '@/components/billing/SubscriptionPopup'
+import { MobileDrawerProvider } from '@/lib/layout/MobileDrawerContext'
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const token = cookies().get('accessToken')?.value
@@ -19,21 +20,23 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <ChatProvider>
       <SubscriptionProvider>
-        <div className="min-h-screen overflow-x-hidden bg-[#050b12] text-white">
-          <MobileSidebarDrawer />
-          <div className="flex min-h-screen overflow-x-hidden">
-            <Sidebar />
-            <div className="flex min-h-screen min-w-0 flex-1 flex-col overflow-x-hidden">
-              <Topbar />
-              <main className="flex-1 min-w-0 px-4 py-4 lg:px-8 lg:py-6">
-                {children}
-              </main>
-              <MobileNav />
+        <MobileDrawerProvider>
+          <div className="min-h-screen overflow-x-hidden bg-[#050b12] text-white">
+            <MobileSidebarDrawer />
+            <div className="flex min-h-screen overflow-x-hidden">
+              <Sidebar />
+              <div className="flex min-h-screen min-w-0 flex-1 flex-col overflow-x-hidden">
+                <Topbar />
+                <main className="flex-1 min-w-0 px-4 py-4 lg:px-8 lg:py-6">
+                  {children}
+                </main>
+                <MobileNav />
+              </div>
             </div>
+            <ChatDrawer />
+            <SubscriptionPopup />
           </div>
-          <ChatDrawer />
-          <SubscriptionPopup />
-        </div>
+        </MobileDrawerProvider>
       </SubscriptionProvider>
     </ChatProvider>
   )
