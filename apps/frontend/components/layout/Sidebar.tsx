@@ -1,66 +1,15 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useMemo, useState } from 'react'
 import { usePathname } from 'next/navigation'
 import clsx from 'clsx'
-import { LayoutDashboard, Building2, Settings, Shield, Users } from 'lucide-react'
 import SidebarTasksCard from './SidebarTasksCard'
 import AccountPanel from './AccountPanel'
-import { me, type AuthMe } from '@/lib/api/auth'
-import { getWorkspaces } from '@/lib/api/companies'
-
-const baseItems = [
-  { href: '/dashboard', label: 'Дашборд', icon: LayoutDashboard },
-  { href: '/companies', label: 'Компании', icon: Building2 },
-  { href: '/settings', label: 'Настройки', icon: Settings }
-]
+import { useSidebarNavItems, isNavItemActive } from '@/lib/layout/useSidebarNavItems'
 
 export default function Sidebar() {
   const pathname = usePathname()
-  const [user, setUser] = useState<AuthMe | null>(null)
-  const [canManageTeam, setCanManageTeam] = useState(false)
-
-  useEffect(() => {
-    let mounted = true
-
-    async function loadAccess() {
-      try {
-        const [userData, workspaces] = await Promise.all([me(), getWorkspaces()])
-        if (!mounted) return
-
-        setUser(userData)
-
-        const list = Array.isArray(workspaces) ? workspaces : []
-        // All workspace members (including MEMBER role) can view /team
-        const allowed = list.some((workspace: any) =>
-          Array.isArray(workspace?.members) &&
-          workspace.members.some((member: any) => member?.userId === userData.id)
-        )
-
-        setCanManageTeam(allowed)
-      } catch {}
-    }
-
-    loadAccess()
-
-    return () => {
-      mounted = false
-    }
-  }, [])
-
-  const items = useMemo(() => {
-    const nextItems = canManageTeam
-      ? [...baseItems, { href: '/team', label: 'Команда', icon: Users }]
-      : baseItems
-
-    if (user?.systemRole !== 'SUPER_ADMIN') return nextItems
-
-    return [
-      ...nextItems,
-      { href: '/admin', label: 'Админка', icon: Shield }
-    ]
-  }, [canManageTeam, user?.systemRole])
+  const items = useSidebarNavItems()
 
   return (
     <aside className="hidden w-80 print:hidden border-r border-cyan-300/10 bg-[#06101b]/95 shadow-[inset_-1px_0_0_rgba(255,255,255,0.04),0_0_80px_rgba(34,211,238,0.05)] backdrop-blur-2xl lg:sticky lg:top-0 lg:flex lg:h-screen lg:flex-col">
@@ -76,7 +25,7 @@ export default function Sidebar() {
         <nav className="mt-7 space-y-3">
           {items.map((item) => {
             const Icon = item.icon
-            const active = pathname === item.href || pathname.startsWith(item.href + '/')
+            const active = isNavItemActive(pathname, item.href)
             return (
               <Link
                 key={item.href}
