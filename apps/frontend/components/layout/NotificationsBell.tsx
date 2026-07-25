@@ -18,7 +18,7 @@ function formatDate(value?: string | null) {
   }
 }
 
-export default function NotificationsBell() {
+export default function NotificationsBell({ dropdownAlign = 'down' }: { dropdownAlign?: 'up' | 'down' }) {
   const [open, setOpen] = useState(false)
   const [items, setItems] = useState<AppNotification[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
@@ -134,7 +134,12 @@ export default function NotificationsBell() {
       </button>
 
       {open ? (
-        <div className="fixed left-4 right-4 top-36 z-[80] overflow-hidden sm:absolute sm:left-auto sm:right-0 sm:top-14 sm:w-[420px] rounded-[28px] border border-white/10 bg-[#07111f] shadow-[0_28px_90px_rgba(0,0,0,0.78),inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-3xl">
+        <div
+          className={clsx(
+            'fixed left-4 right-4 top-36 z-[80] overflow-hidden sm:absolute sm:left-auto sm:right-0 sm:w-[420px] rounded-[28px] border border-white/10 bg-[#07111f] shadow-[0_28px_90px_rgba(0,0,0,0.78),inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-3xl',
+            dropdownAlign === 'up' ? 'sm:bottom-14 sm:top-auto' : 'sm:top-14'
+          )}
+        >
           <div className="border-b border-white/10 bg-[#0b1728] px-5 py-4">
             <div className="flex items-center justify-between gap-3">
               <div>

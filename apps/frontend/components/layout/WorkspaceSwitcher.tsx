@@ -9,7 +9,7 @@ import { useChatContext } from '@/lib/chat/ChatContext'
 
 type Workspace = { id: string; name: string; slug: string }
 
-export default function WorkspaceSwitcher() {
+export default function WorkspaceSwitcher({ dropdownAlign = 'down' }: { dropdownAlign?: 'up' | 'down' }) {
   const { workspaceId, setWorkspaceId } = useChatContext()
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
   const [open, setOpen] = useState(false)
@@ -67,7 +67,12 @@ export default function WorkspaceSwitcher() {
       </button>
 
       {open && (
-        <div className="absolute left-0 top-full z-50 mt-2 min-w-[200px] rounded-[18px] border border-white/10 bg-[#070b16] py-1.5 shadow-2xl">
+        <div
+          className={clsx(
+            'absolute left-0 z-50 min-w-[200px] rounded-[18px] border border-white/10 bg-[#070b16] py-1.5 shadow-2xl',
+            dropdownAlign === 'up' ? 'bottom-full mb-2' : 'top-full mt-2'
+          )}
+        >
           {workspaces.map((w) => {
             const active = w.id === current?.id
             return (

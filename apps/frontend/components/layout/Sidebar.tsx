@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation'
 import clsx from 'clsx'
 import { LayoutDashboard, Building2, Settings, Shield, Users } from 'lucide-react'
 import SidebarTasksCard from './SidebarTasksCard'
+import AccountPanel from './AccountPanel'
 import { me, type AuthMe } from '@/lib/api/auth'
 import { getWorkspaces } from '@/lib/api/companies'
 
@@ -62,8 +63,8 @@ export default function Sidebar() {
   }, [canManageTeam, user?.systemRole])
 
   return (
-    <aside className="hidden w-80 print:hidden border-r border-cyan-300/10 bg-[#06101b]/95 shadow-[inset_-1px_0_0_rgba(255,255,255,0.04),0_0_80px_rgba(34,211,238,0.05)] backdrop-blur-2xl lg:block">
-      <div className="flex h-full flex-col p-5">
+    <aside className="hidden w-80 print:hidden border-r border-cyan-300/10 bg-[#06101b]/95 shadow-[inset_-1px_0_0_rgba(255,255,255,0.04),0_0_80px_rgba(34,211,238,0.05)] backdrop-blur-2xl lg:sticky lg:top-0 lg:flex lg:h-screen lg:flex-col">
+      <div className="flex-1 overflow-y-auto p-5">
         <div className="rounded-[30px] border border-cyan-400/15 bg-[radial-gradient(circle_at_15%_0%,rgba(34,211,238,0.12),transparent_38%),rgba(255,255,255,0.035)] p-6 shadow-[0_0_52px_rgba(59,130,246,0.14)]">
           <div className="text-[11px] uppercase tracking-[0.35em] text-blue-100/70">Reputation OS</div>
           <div className="mt-2 text-xl font-semibold text-white">Reputation Inbox</div>
@@ -101,7 +102,11 @@ export default function Sidebar() {
           })}
         </nav>
 
-          <SidebarTasksCard />
+        <SidebarTasksCard />
+      </div>
+
+      <div className="shrink-0 border-t border-white/10 bg-white/[0.02] p-5">
+        <AccountPanel dropdownAlign="up" />
       </div>
     </aside>
   )
