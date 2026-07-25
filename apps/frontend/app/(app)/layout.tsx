@@ -4,6 +4,7 @@ import Sidebar from '@/components/layout/Sidebar'
 import MobileNav from '@/components/layout/MobileNav'
 import MobileSidebarDrawer from '@/components/layout/MobileSidebarDrawer'
 import MobileMenuButton from '@/components/layout/MobileMenuButton'
+import ScrollToTopButton from '@/components/layout/ScrollToTopButton'
 import WorkspaceBootstrap from '@/components/layout/WorkspaceBootstrap'
 import { ChatProvider } from '@/lib/chat/ChatContext'
 import ChatDrawer from '@/components/chat/ChatDrawer'
@@ -26,10 +27,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <WorkspaceBootstrap />
             <MobileSidebarDrawer />
             <MobileMenuButton />
+            <ScrollToTopButton />
             <div className="flex min-h-screen overflow-x-hidden">
               <Sidebar />
               <div className="flex min-h-screen min-w-0 flex-1 flex-col overflow-x-hidden">
-                <main className="flex-1 min-w-0 px-4 pb-4 pt-16 lg:px-8 lg:pb-6 lg:pt-6">
+                <main className="flex-1 min-w-0 px-4 pb-4 pt-4 lg:px-8 lg:pb-6 lg:pt-6">
                   {children}
                 </main>
                 <MobileNav />
