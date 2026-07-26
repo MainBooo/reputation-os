@@ -19,7 +19,9 @@ const STATUS_LABEL: Record<string, string> = {
   PARTIAL: 'Частично',
   FAILED: 'Ошибка',
   PENDING: 'Ожидание',
-  RUNNING: 'Выполняется'
+  RUNNING: 'Выполняется',
+  SKIPPED_ALREADY_RUNNING: 'Пропущен (уже выполняется)',
+  BLOCKED_TELEGRAM_CONNECTION: 'Нет подключения к Telegram'
 }
 
 export default function TelegramScoutPanel({ companyId }: { companyId: string }) {
@@ -68,17 +70,32 @@ export default function TelegramScoutPanel({ companyId }: { companyId: string })
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <Stat label="Статус последнего запуска" value={jobStatus ? STATUS_LABEL[jobStatus] || jobStatus : '—'} />
             <Stat label="Дата последнего запуска" value={formatDate(status?.latestLog?.finishedAt || status?.latestLog?.startedAt)} />
-            <Stat label="Найдено сообщений" value={String(result.messagesScanned ?? '—')} />
-            <Stat label="Подтверждено" value={String(result.mentionsConfirmed ?? '—')} />
-            <Stat label="Отсеяно" value={String(result.mentionsRejected ?? '—')} />
+            <Stat label="Поисковых запросов" value={`${result.queriesExecuted ? (result.queriesExecuted as unknown[]).length : '—'} / ${result.queriesPlanned ?? '—'}`} />
+            <Stat label="Найдено каналов" value={String(result.channelsFoundUnique ?? '—')} />
+            <Stat label="Проверено сообщений" value={String(result.messagesScanned ?? '—')} />
+            <Stat label="Создано упоминаний" value={String(result.mentionsCreated ?? result.mentionsConfirmed ?? '—')} />
+            <Stat label="Отсеяно дублей" value={String(result.duplicatesSkipped ?? '—')} />
+            <Stat label="Отсеяно (не по теме)" value={String(result.mentionsRejected ?? '—')} />
             <Stat label="Новых каналов" value={String(result.newChannelsFound ?? '—')} />
             <Stat label="Новых групп" value={String(result.newGroupsFound ?? '—')} />
+            <Stat label="Ошибок Telegram API" value={String(result.telegramApiErrors ?? '—')} />
+            <Stat label="Ошибок AI-классификации" value={String(result.aiClassificationErrors ?? '—')} />
             <Stat label="Размер watchlist" value={`${status?.watchlistEnabledCount ?? 0} / ${status?.watchlistTotalCount ?? 0}`} />
+            <Stat label="Watchlist-каналов проверено" value={String(result.watchlistChannelsChecked ?? '—')} />
+            <Stat label="Последний успешный запуск" value={formatDate(status?.lastSuccessAt)} />
+            <Stat label="Следующий запуск" value={formatDate(status?.nextRunAt)} />
           </div>
 
-          {status?.latestLog?.errorMessage ? (
+          {status?.health && !status.health.ok ? (
             <div className="mt-3 rounded-lg border border-red-400/20 bg-red-500/10 px-3 py-2 text-xs text-red-200">
-              Последняя ошибка: {status.latestLog.errorMessage}
+              {status.health.consecutiveFailures > 1
+                ? `Сессия недоступна ${status.health.consecutiveFailures} запусков подряд с ${formatDate(status.health.since)} (${status.health.errorCode ?? 'ошибка'}).`
+                : `Ошибка: ${status.latestLog?.errorMessage ?? status.health.errorCode ?? 'неизвестно'}`}
+              {status.health.errorCode && ['AUTH_KEY_UNREGISTERED', 'AUTH_KEY_INVALID', 'SESSION_REVOKED', 'USER_DEACTIVATED', 'USER_DEACTIVATED_BAN', 'NO_SESSION'].includes(status.health.errorCode) ? (
+                <div className="mt-1 text-red-300/80">
+                  Требуется повторный вход: <code>pnpm tsx scripts/telegram-search-login.ts</code>
+                </div>
+              ) : null}
             </div>
           ) : null}
 

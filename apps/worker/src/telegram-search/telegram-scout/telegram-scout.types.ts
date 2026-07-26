@@ -138,14 +138,44 @@ export interface DiscoverySourceCandidate {
   matchedQuery: string
 }
 
-/** Aggregated run statistics persisted into JobLog.result — no dedicated table. */
+/** Aggregated run statistics persisted into JobLog.result (structured metadata
+ *  JSON — no dedicated table; see JobLogService). Every field here is meant to
+ *  be independently inspectable, not folded into one summary line. */
 export interface TelegramScoutRunStats {
   mode: TelegramScoutMode
   companyId?: string
+  /** queryBuilder.build() output, captured before the search loop runs — the
+   *  full planned set regardless of whether the run later stops early. */
+  queriesPlanned: number
+  /** Queries actually attempted this run — equals queriesPlanned unless the
+   *  run stopped early (max_runtime/max_messages/flood_wait). */
   queriesExecuted: Array<{ text: string; class: TelegramQueryClass }>
   pagesFetched: number
+  /** Raw candidate-channel hits this run, counted before collapsing to unique
+   *  chatId (i.e. before the same channel dedup that channelsFoundUnique reflects). */
+  channelsFoundTotal: number
+  /** Distinct chatIds found this run (global search + entity search + deep
+   *  search), after dedup — same channel hit via two different queries counts once. */
+  channelsFoundUnique: number
   messagesScanned: number
+  /** Passed the heuristic pre-filter and were sent on to AI classification —
+   *  distinct from messagesScanned (includes hard-rejected messages) and from
+   *  messagesClassified (an AI call can still fail technically). */
+  candidateMessages: number
+  /** classifier.classify() was actually invoked (ok:true or ok:false). */
+  messagesClassified: number
+  /** classifier.classify() succeeded AND decision !== 'NO' — a genuine positive
+   *  signal, not just "survived the pre-filter". */
+  relevantMessages: number
+  /** Every message that passed the pre-filter is persisted as a Mention
+   *  (audit principle — see evaluateMessages) — mentionsCreated + duplicatesSkipped
+   *  always equals this. Kept for backward compatibility with existing consumers. */
   mentionsConfirmed: number
+  /** persistMention() resolved to a brand-new Mention row. */
+  mentionsCreated: number
+  /** persistMention() matched an existing Mention (externalMentionId/hash/
+   *  author+content fallback) and merged into it instead of creating a new row. */
+  duplicatesSkipped: number
   mentionsRejected: number
   mentionsUnsure: number
   /** confidence >= hideThreshold && type in {OWNED_PROMO, IRRELEVANT, SPAM} — isInboxVisible=false. */
@@ -154,6 +184,22 @@ export interface TelegramScoutRunStats {
   mentionsNeedReview: number
   newChannelsFound: number
   newGroupsFound: number
+  /** Already-enabled CompanyTelegramChannel rows checked via the cursor-based
+   *  watchlist path at the end of this same daily run — replaces the old
+   *  standalone 5-15min dispatcher (see plan: "один суточный проход"). Covers
+   *  every enabled channel, not a sample — a channel is only skipped here if it
+   *  was already deep-searched as a fresh candidate earlier in the same run. */
+  watchlistChannelsChecked: number
+  watchlistMentionsFound: number
+  /** Technical Telegram API failures this run: FloodWait occurrences plus
+   *  per-message errors surfaced by the watchlist phase (WatchlistProcessResult.errors).
+   *  Silently-logged-only failures (e.g. a single username resolve retry) are not
+   *  counted here — only ones that actually interrupted or skipped real work. */
+  telegramApiErrors: number
+  /** classifier.classify() returned ok:false — a technical failure (network,
+   *  timeout, bad response shape), never a content judgement. The message is
+   *  still persisted (needsManualReview), but was NOT successfully classified. */
+  aiClassificationErrors: number
   stoppedReason: 'exhausted' | 'max_pages' | 'max_messages' | 'max_runtime' | 'empty_page' | 'flood_wait' | 'lock_lost' | null
   floodWaitSeconds?: number
 }

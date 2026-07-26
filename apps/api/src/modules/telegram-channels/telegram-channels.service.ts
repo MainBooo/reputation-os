@@ -234,10 +234,20 @@ export class TelegramChannelsService {
   async getScoutStatus(userId: string, companyId: string) {
     await this.resolveCompany(userId, companyId, 'read')
 
-    const latestLog = await this.prisma.jobLog.findFirst({
-      where: { companyId, queueName: 'telegram_search' },
-      orderBy: { createdAt: 'desc' }
+    // Enough history to walk back through a run of identical consecutive failures
+    // (see computeSessionHealth) without a second query.
+    const recentLogs = await this.prisma.jobLog.findMany({
+      where: { companyId, queueName: 'telegram_search', jobName: 'telegram.discovery' },
+      orderBy: { createdAt: 'desc' },
+      take: 20
     })
+
+    const latestLog = recentLogs[0] ?? null
+    const lastSuccessLog = recentLogs.find((log) => log.jobStatus === 'SUCCESS') ?? null
+    const health = this.computeSessionHealth(recentLogs)
+
+    const repeatableJobs = await this.telegramSearchQueue.getRepeatableJobs().catch(() => [])
+    const discoveryRepeat = repeatableJobs.find((job) => job.id === `telegram-discovery:${companyId}:cron`)
 
     const [enabledCount, totalCount, aggregate] = await Promise.all([
       this.prisma.companyTelegramChannel.count({ where: { companyId, enabled: true } }),
@@ -251,10 +261,48 @@ export class TelegramChannelsService {
     return {
       companyId,
       latestLog,
+      lastRunAt: latestLog?.createdAt ?? null,
+      lastSuccessAt: lastSuccessLog?.createdAt ?? null,
+      nextRunAt: discoveryRepeat?.next ? new Date(discoveryRepeat.next) : null,
+      health,
       watchlistEnabledCount: enabledCount,
       watchlistTotalCount: totalCount,
       totalMentionsFound: aggregate._sum.mentionsFoundCount || 0
     }
+  }
+
+  /** Consolidates a run of identical consecutive unhealthy rows into one health signal
+   *  (ok, errorCode, since, consecutiveFailures) instead of the admin UI showing N
+   *  identical "No valid session" rows — the underlying JobLog audit trail is
+   *  unchanged, this only changes what a status view surfaces by default.
+   *  BLOCKED_TELEGRAM_CONNECTION counts as unhealthy alongside FAILED — it's the
+   *  status telegram-search.processor.ts now uses for exactly the "no session /
+   *  can't reach DC2" case this health signal exists to surface (see JobStatus
+   *  comment in schema.prisma); treating only FAILED as unhealthy would silently
+   *  report ok:true while the Scout can't connect at all. */
+  private static readonly UNHEALTHY_STATUSES = new Set(['FAILED', 'BLOCKED_TELEGRAM_CONNECTION'])
+
+  private computeSessionHealth(
+    recentLogs: Array<{ jobStatus: string; result: unknown; createdAt: Date }>
+  ): { ok: boolean; errorCode: string | null; since: Date | null; consecutiveFailures: number } {
+    const newest = recentLogs[0]
+    if (!newest || !TelegramChannelsService.UNHEALTHY_STATUSES.has(newest.jobStatus)) {
+      return { ok: true, errorCode: null, since: null, consecutiveFailures: 0 }
+    }
+
+    const errorCodeOf = (log: { result: unknown }) => (log.result as any)?.errorCode ?? null
+    const errorCode = errorCodeOf(newest)
+
+    let consecutiveFailures = 0
+    let since = newest.createdAt
+
+    for (const log of recentLogs) {
+      if (!TelegramChannelsService.UNHEALTHY_STATUSES.has(log.jobStatus) || errorCodeOf(log) !== errorCode) break
+      consecutiveFailures += 1
+      since = log.createdAt
+    }
+
+    return { ok: false, errorCode, since, consecutiveFailures }
   }
 
   private async ensureTelegramBootstrapTarget(companyId: string) {

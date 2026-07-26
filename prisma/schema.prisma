@@ -97,6 +97,15 @@ enum JobStatus {
   FAILED
   PARTIAL
   CANCELLED
+  // Telegram Scout only (see apps/worker/src/telegram-search/telegram-search.processor.ts):
+  // SKIPPED_ALREADY_RUNNING — the distributed MTProto lock was held by another run and
+  // self-requeue retries were exhausted (see mtproto-lock.ts). BLOCKED_TELEGRAM_CONNECTION —
+  // the Telegram client itself never connected/authenticated, so no part of the pass ran.
+  // PARTIAL (existing, unchanged, used by every other job type) already means
+  // "PARTIAL_SUCCESS" for Telegram Scout too — not renamed to avoid an unrelated
+  // system-wide rename across every other queue that reuses this enum.
+  SKIPPED_ALREADY_RUNNING
+  BLOCKED_TELEGRAM_CONNECTION
 }
 
 enum NotificationChannel {

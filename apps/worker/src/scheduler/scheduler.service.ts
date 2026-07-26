@@ -4,6 +4,7 @@ import { PrismaService } from '../common/prisma/prisma.service'
 import { QUEUES } from '../queues/queue.names'
 import { JOBS } from '../queues/job.names'
 import { CRON_JOB_OPTIONS } from '../queues/job-options'
+import { ensureSingleRepeatableJob } from '../queues/repeatable-cron.util'
 import { PageWatchDispatcherProcessor } from '../processors/page-watch-dispatcher.processor'
 import { DeepScanProcessor } from '../processors/deep-scan.processor'
 import { TelegramWatchlistDispatcherProcessor } from '../telegram-search/telegram-watchlist-dispatcher.processor'
@@ -231,23 +232,36 @@ export class SchedulerService implements OnModuleInit {
       this.logger.warn(`Failed to ensure page-watch dispatcher cron: ${error?.message || error}`)
     })
 
+    // Exactly one automatic Telegram Scout pass per company per day — global search
+    // (name/domain/aliases) AND checking every already-enabled watchlist channel both
+    // happen inside this single run (see TelegramScoutService.runDiscovery phase 4).
+    // ensureSingleRepeatableJob self-heals: if a future deploy ever changes this
+    // jobId or interval again, the stale registration is removed here instead of
+    // ticking forever alongside the new one (see repeatable-cron.util.ts for why —
+    // this exact bug already happened once, for the watchlist dispatcher below).
     const discoveryIntervalMs = Math.max(1, Number(process.env.TELEGRAM_SCOUT_DISCOVERY_INTERVAL_HOURS) || 24) * 60 * 60 * 1000
     const telegramCompanyIds = new Set<string>(telegramTargets.map((t: any) => t.companyId).filter(Boolean))
 
     for (const companyId of telegramCompanyIds) {
-      await this.telegramSearchQueue.add(
+      await ensureSingleRepeatableJob(
+        this.telegramSearchQueue,
         JOBS.TELEGRAM_DISCOVERY,
         { mode: 'discovery', companyId },
-        { ...CRON_JOB_OPTIONS, repeat: { every: discoveryIntervalMs }, jobId: `telegram-discovery:${companyId}:cron` }
+        `telegram-discovery:${companyId}:cron`,
+        discoveryIntervalMs,
+        CRON_JOB_OPTIONS
       ).catch((error) => {
         this.logger.warn(`Failed to ensure telegram discovery cron companyId=${companyId}: ${error?.message || error}`)
       })
     }
 
-    // Telegram watchlist: dispatcher tick every TELEGRAM_WATCHLIST_DISPATCHER_INTERVAL_MIN
-    // finds due CompanyTelegramChannel rows and dispatches one job per physical channel.
-    await this.telegramWatchlistDispatcher.ensureCron(this.telegramWatchlistDispatcherQueue).catch((error) => {
-      this.logger.warn(`Failed to ensure telegram watchlist dispatcher cron: ${error?.message || error}`)
+    // Telegram watchlist: the standalone 5-15min dispatcher tick is retired (see
+    // TelegramWatchlistDispatcherProcessor.disableCron) — per-channel checks now run
+    // once/day inside the discovery job above. This call is what actually stops the
+    // duplicate 5-min ticks already found running in Redis (two stale repeatable
+    // registrations, one from before commit e446aae renamed the jobId).
+    await this.telegramWatchlistDispatcher.disableCron(this.telegramWatchlistDispatcherQueue).catch((error) => {
+      this.logger.warn(`Failed to disable telegram watchlist dispatcher cron: ${error?.message || error}`)
     })
 
     // Subscription reminder: daily check for trial/subscription expiry (3d, 1d, 0d before end)

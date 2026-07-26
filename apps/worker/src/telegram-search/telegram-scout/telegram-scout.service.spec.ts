@@ -92,6 +92,7 @@ describe('TelegramScoutService.runDiscovery', () => {
           const key = `${where.companyId_telegramChannelId.companyId}:${where.companyId_telegramChannelId.telegramChannelId}`
           return companyLinks.get(key) ?? null
         }),
+        findMany: jest.fn().mockResolvedValue([]),
         create: jest.fn().mockImplementation(async ({ data }: any) => {
           const key = `${data.companyId}:${data.telegramChannelId}`
           const row = { id: `ctc-${key}`, ...data }
@@ -116,13 +117,25 @@ describe('TelegramScoutService.runDiscovery', () => {
 
     messageClassifier = { classify: jest.fn().mockResolvedValue(HIT_CLASSIFICATION) }
 
-    dedup = { persistMention: jest.fn().mockResolvedValue({ id: 'm1' }) }
+    dedup = { persistMention: jest.fn().mockResolvedValue({ id: 'm1', createdAt: new Date(0), updatedAt: new Date(0) }) }
 
     scoutSource = {
       ensureBootstrapTarget: jest.fn().mockResolvedValue({ sourceId: 's1', companySourceTargetId: 'cst1', autoAddToWatchlist: false })
     }
 
-    service = new TelegramScoutService(prisma, queryBuilder, globalSearch, channelSearch, relevance, messageClassifier, dedup, scoutSource)
+    const watchlistService = { processChannel: jest.fn() }
+
+    service = new TelegramScoutService(
+      prisma,
+      queryBuilder,
+      globalSearch,
+      channelSearch,
+      relevance,
+      messageClassifier,
+      dedup,
+      scoutSource,
+      watchlistService as any
+    )
   })
 
   it('runs a clean pass with no results and reports exhausted', async () => {

@@ -59,13 +59,13 @@ describe('TelegramSearchProcessor.handle', () => {
     expect(result).toEqual({ skipped: true, reason: 'telegram_scout_disabled' })
   })
 
-  it('marks the job FAILED when the MTProto client fails to connect', async () => {
+  it('marks the job BLOCKED_TELEGRAM_CONNECTION when the MTProto client fails to connect', async () => {
     mockedGetClient.mockRejectedValue(new Error('no session'))
 
     await expect(processor.handle(fakeJob())).rejects.toThrow('no session')
 
     expect(jobLogService.finish).toHaveBeenCalledWith(
-      expect.objectContaining({ status: 'FAILED', errorMessage: 'no session' })
+      expect.objectContaining({ status: 'BLOCKED_TELEGRAM_CONNECTION', errorMessage: 'no session' })
     )
   })
 
@@ -147,7 +147,7 @@ describe('TelegramSearchProcessor.handle', () => {
         expect.objectContaining({ where: { telegramChannelId: 'tc1', enabled: true } })
       )
       expect(result).toEqual({ ok: false, reason: 'mtproto_lock_busy' })
-      expect(jobLogService.finish).toHaveBeenCalledWith(expect.objectContaining({ status: 'PARTIAL' }))
+      expect(jobLogService.finish).toHaveBeenCalledWith(expect.objectContaining({ status: 'SKIPPED_ALREADY_RUNNING' }))
     })
 
     it('discovery: self-requeues with a unique jobId distinct from the original', async () => {

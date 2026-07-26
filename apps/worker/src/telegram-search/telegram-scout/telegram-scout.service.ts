@@ -10,6 +10,7 @@ import { TelegramRelevanceService } from './telegram-relevance.service'
 import { TelegramMessageClassifierService } from './telegram-message-classifier.service'
 import { resolveMessageRouting } from './telegram-message-routing.util'
 import { TelegramScoutSourceService } from './telegram-scout-source.service'
+import { TelegramWatchlistService } from './telegram-watchlist.service'
 import { buildRelevanceContext } from './telegram-relevance-context.util'
 import { mapTelegramMessageToMentionParams } from './telegram-result-mapper'
 import { loadTelegramScoutBudgets, messageClassifierHideThreshold, messageClassifierReviewThreshold } from './telegram-scout.config'
@@ -38,7 +39,8 @@ export class TelegramScoutService {
     private readonly relevance: TelegramRelevanceService,
     private readonly messageClassifier: TelegramMessageClassifierService,
     private readonly dedup: DedupService,
-    private readonly scoutSource: TelegramScoutSourceService
+    private readonly scoutSource: TelegramScoutSourceService,
+    private readonly watchlistService: TelegramWatchlistService
   ) {}
 
   async runDiscovery(
@@ -59,16 +61,28 @@ export class TelegramScoutService {
     const stats: TelegramScoutRunStats = {
       mode: 'discovery',
       companyId,
+      queriesPlanned: queries.length,
       queriesExecuted: [],
       pagesFetched: 0,
+      channelsFoundTotal: 0,
+      channelsFoundUnique: 0,
       messagesScanned: 0,
+      candidateMessages: 0,
+      messagesClassified: 0,
+      relevantMessages: 0,
       mentionsConfirmed: 0,
+      mentionsCreated: 0,
+      duplicatesSkipped: 0,
       mentionsRejected: 0,
       mentionsUnsure: 0,
       mentionsHidden: 0,
       mentionsNeedReview: 0,
       newChannelsFound: 0,
       newGroupsFound: 0,
+      watchlistChannelsChecked: 0,
+      watchlistMentionsFound: 0,
+      telegramApiErrors: 0,
+      aiClassificationErrors: 0,
       stoppedReason: null
     }
 
@@ -117,6 +131,7 @@ export class TelegramScoutService {
         if (result.stoppedReason === 'flood_wait') {
           stats.stoppedReason = 'flood_wait'
           stats.floodWaitSeconds = result.floodWaitSeconds
+          stats.telegramApiErrors += 1
           break queryLoop
         }
       }
@@ -129,6 +144,7 @@ export class TelegramScoutService {
       const entities = await this.globalSearch.searchEntities(client, topQuery, 10)
       for (const entity of entities) {
         if (!entity.username) continue
+        stats.channelsFoundTotal += 1
         if (!candidates.has(entity.chatId)) {
           candidates.set(entity.chatId, {
             chatId: entity.chatId,
@@ -185,6 +201,56 @@ export class TelegramScoutService {
         if (deep.stoppedReason === 'flood_wait') {
           stats.stoppedReason = 'flood_wait'
           stats.floodWaitSeconds = deep.floodWaitSeconds
+          stats.telegramApiErrors += 1
+          break
+        }
+      }
+    }
+
+    stats.channelsFoundUnique = candidates.size
+
+    // Phase 4: re-check every already-enabled watchlist channel via the cursor-based
+    // path (lastMessageId), once per day, inside this same run — replaces the old
+    // standalone 5-15min dispatcher entirely. Full coverage: every enabled channel is
+    // checked every run, not a sampled subset; only skip one already deep-searched
+    // above (fresh candidate hit this run) to avoid scanning it twice in one pass.
+    if (stats.stoppedReason === null) {
+      const enabledLinks = await this.prisma.companyTelegramChannel.findMany({
+        where: { companyId, enabled: true },
+        include: { telegramChannel: true }
+      })
+
+      for (const link of enabledLinks) {
+        lockHandle?.assertHeld()
+
+        if (candidates.has(link.telegramChannel.chatId)) continue
+        if (isOutOfTime()) {
+          stats.stoppedReason = 'max_runtime'
+          break
+        }
+
+        const watchlistResult = await this.watchlistService.processChannel(client, link.telegramChannelId, lockHandle)
+        stats.watchlistChannelsChecked += 1
+        stats.watchlistMentionsFound += watchlistResult.mentionsFound
+        stats.mentionsConfirmed += watchlistResult.mentionsFound
+        stats.messagesScanned += watchlistResult.messagesScanned
+        stats.candidateMessages += watchlistResult.candidateMessages
+        stats.messagesClassified += watchlistResult.messagesClassified
+        stats.relevantMessages += watchlistResult.relevantMessages
+        stats.mentionsCreated += watchlistResult.mentionsCreated
+        stats.duplicatesSkipped += watchlistResult.duplicatesSkipped
+        stats.aiClassificationErrors += watchlistResult.aiClassificationErrors
+        stats.telegramApiErrors += watchlistResult.errors.length
+        if (watchlistResult.errors.length > 0) {
+          this.logger.warn(
+            `Watchlist channel ${link.telegramChannelId} had ${watchlistResult.errors.length} processing error(s) this run — see per-company errors`
+          )
+        }
+
+        if (watchlistResult.stoppedReason === 'flood_wait') {
+          stats.stoppedReason = 'flood_wait'
+          stats.floodWaitSeconds = watchlistResult.floodWaitSeconds
+          stats.telegramApiErrors += 1
           break
         }
       }
@@ -216,16 +282,28 @@ export class TelegramScoutService {
     const stats: TelegramScoutRunStats = {
       mode: 'entity_search',
       companyId,
+      queriesPlanned: queries.length,
       queriesExecuted: queries.map((q) => ({ text: q.text, class: q.class })),
       pagesFetched: 0,
+      channelsFoundTotal: 0,
+      channelsFoundUnique: 0,
       messagesScanned: 0,
+      candidateMessages: 0,
+      messagesClassified: 0,
+      relevantMessages: 0,
       mentionsConfirmed: 0,
+      mentionsCreated: 0,
+      duplicatesSkipped: 0,
       mentionsRejected: 0,
       mentionsUnsure: 0,
       mentionsHidden: 0,
       mentionsNeedReview: 0,
       newChannelsFound: 0,
       newGroupsFound: 0,
+      watchlistChannelsChecked: 0,
+      watchlistMentionsFound: 0,
+      telegramApiErrors: 0,
+      aiClassificationErrors: 0,
       stoppedReason: 'exhausted'
     }
 
@@ -237,6 +315,7 @@ export class TelegramScoutService {
       const entities = await this.globalSearch.searchEntities(client, query.text, 10)
       for (const entity of entities) {
         if (!entity.username || candidates.has(entity.chatId)) continue
+        stats.channelsFoundTotal += 1
         candidates.set(entity.chatId, {
           chatId: entity.chatId,
           username: entity.username,
@@ -248,6 +327,8 @@ export class TelegramScoutService {
         })
       }
     }
+
+    stats.channelsFoundUnique = candidates.size
 
     // yesCount is always 0 here, so promoteCandidates would normally skip every
     // candidate (see its `if (candidate.yesCount === 0) continue` guard) — entity
@@ -315,6 +396,8 @@ export class TelegramScoutService {
         continue
       }
 
+      ctx.stats.candidateMessages += 1
+
       const classification = await this.messageClassifier.classify({
         context,
         messageText: message.text,
@@ -325,6 +408,9 @@ export class TelegramScoutService {
         channelClassification: null,
         exactHit: preFilter.exactHit
       })
+      ctx.stats.messagesClassified += 1
+      if (!classification.ok) ctx.stats.aiClassificationErrors += 1
+      else if (classification.decision !== 'NO') ctx.stats.relevantMessages += 1
 
       const type = classification.ok ? classification.type : null
       const confidence = classification.ok ? classification.confidence : 0
@@ -345,7 +431,15 @@ export class TelegramScoutService {
           sourceId: ctx.sourceId,
           companySourceTargetId: ctx.companySourceTargetId
         })
-        await this.dedup.persistMention(params)
+        const persisted = await this.dedup.persistMention(params)
+        // See telegram-watchlist.service.ts processCompanyMessages for why this
+        // createdAt/updatedAt comparison is a safe create-vs-merge signal without
+        // changing DedupService's shared signature.
+        if (persisted.createdAt.getTime() === persisted.updatedAt.getTime()) {
+          ctx.stats.mentionsCreated += 1
+        } else {
+          ctx.stats.duplicatesSkipped += 1
+        }
         ctx.stats.mentionsConfirmed += 1
         if (!routing.isInboxVisible) ctx.stats.mentionsHidden += 1
         if (routing.needsManualReview) ctx.stats.mentionsNeedReview += 1
@@ -359,6 +453,7 @@ export class TelegramScoutService {
       const countsAsCandidateHit = !classification.ok || (type !== 'IRRELEVANT' && type !== 'SPAM')
       if (!countsAsCandidateHit) continue
 
+      ctx.stats.channelsFoundTotal += 1
       const existing = ctx.candidates.get(message.chatId)
       if (existing) {
         existing.yesCount += 1

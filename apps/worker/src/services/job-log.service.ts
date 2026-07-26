@@ -6,7 +6,7 @@ type FinishJobLogParams = {
   queueName: string
   jobName: string
   bullJobId?: string | number | null
-  status: 'SUCCESS' | 'FAILED' | 'PARTIAL'
+  status: 'SUCCESS' | 'FAILED' | 'PARTIAL' | 'SKIPPED_ALREADY_RUNNING' | 'BLOCKED_TELEGRAM_CONNECTION'
   startedAt?: Date | null
   finishedAt?: Date | null
   itemsDiscovered?: number | null

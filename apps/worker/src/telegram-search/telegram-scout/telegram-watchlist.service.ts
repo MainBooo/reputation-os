@@ -55,6 +55,16 @@ export interface WatchlistProcessResult {
   telegramChannelId: string
   companiesProcessed: number
   mentionsFound: number
+  /** Breakdown of mentionsFound — see TelegramScoutRunStats for field meanings;
+   *  mirrored here so the daily discovery run (phase 4) can aggregate them
+   *  into the same run-level counters used by the global-search phases. */
+  messagesScanned: number
+  candidateMessages: number
+  messagesClassified: number
+  relevantMessages: number
+  mentionsCreated: number
+  duplicatesSkipped: number
+  aiClassificationErrors: number
   errors: WatchlistCompanyError[]
   stoppedReason: 'ok' | 'flood_wait' | 'no_public_username' | 'no_enabled_companies'
   floodWaitSeconds?: number
@@ -89,11 +99,22 @@ export class TelegramWatchlistService {
   ): Promise<WatchlistProcessResult> {
     const channel = await this.prisma.telegramChannel.findUnique({ where: { id: telegramChannelId } })
 
+    const zeroCounters = {
+      messagesScanned: 0,
+      candidateMessages: 0,
+      messagesClassified: 0,
+      relevantMessages: 0,
+      mentionsCreated: 0,
+      duplicatesSkipped: 0,
+      aiClassificationErrors: 0
+    }
+
     if (!channel) {
       return {
         telegramChannelId,
         companiesProcessed: 0,
         mentionsFound: 0,
+        ...zeroCounters,
         errors: [],
         stoppedReason: 'no_enabled_companies'
       }
@@ -105,7 +126,7 @@ export class TelegramWatchlistService {
     })
 
     if (links.length === 0) {
-      return { telegramChannelId, companiesProcessed: 0, mentionsFound: 0, errors: [], stoppedReason: 'no_enabled_companies' }
+      return { telegramChannelId, companiesProcessed: 0, mentionsFound: 0, ...zeroCounters, errors: [], stoppedReason: 'no_enabled_companies' }
     }
 
     if (!channel.username) {
@@ -116,6 +137,7 @@ export class TelegramWatchlistService {
         telegramChannelId,
         companiesProcessed: 0,
         mentionsFound: 0,
+        ...zeroCounters,
         errors: [],
         stoppedReason: 'no_public_username'
       }
@@ -137,6 +159,7 @@ export class TelegramWatchlistService {
     let mentionsFound = 0
     let stoppedReason: WatchlistProcessResult['stoppedReason'] = 'ok'
     let floodWaitSeconds: number | undefined
+    const counters = { ...zeroCounters }
 
     if (newJoiners.length > 0) {
       const backfillPageSize = searchResultsLimit()
@@ -145,6 +168,10 @@ export class TelegramWatchlistService {
         { chatId: channel.chatId, username: channel.username },
         { minId: 0, maxPages: 1, remainingMessageBudget: backfillPageSize, pageSize: backfillPageSize }
       )
+
+      // Counted once per fetch, not per company sharing the channel — these are
+      // the same raw messages handed to every newJoiner entry below.
+      counters.messagesScanned += backfill.messages.length
 
       if (backfill.stoppedReason === 'flood_wait') {
         stoppedReason = 'flood_wait'
@@ -156,6 +183,7 @@ export class TelegramWatchlistService {
         const outcome = await this.processCompanyMessages(entry, backfill.messages, null)
         mentionsFound += outcome.mentionsFound
         if (outcome.error) errors.push(outcome.error)
+        this.addOutcomeCounters(counters, outcome)
 
         await this.prisma.companyTelegramChannel.update({
           where: { id: entry.companyTelegramChannelId },
@@ -181,6 +209,8 @@ export class TelegramWatchlistService {
         { minId: minCursor, maxPages, remainingMessageBudget: maxMessages, pageSize }
       )
 
+      counters.messagesScanned += page.messages.length
+
       if (page.stoppedReason === 'flood_wait') {
         stoppedReason = 'flood_wait'
         floodWaitSeconds = page.floodWaitSeconds
@@ -198,6 +228,7 @@ export class TelegramWatchlistService {
         const outcome = await this.processCompanyMessages(entry, ownMessages, entry.lastMessageId)
         mentionsFound += outcome.mentionsFound
         if (outcome.error) errors.push(outcome.error)
+        this.addOutcomeCounters(counters, outcome)
 
         // Advance strictly to the last message this company processed without error —
         // never past a failure, so a failed message is retried next cycle (plan §2).
@@ -219,10 +250,30 @@ export class TelegramWatchlistService {
       telegramChannelId,
       companiesProcessed: entries.length,
       mentionsFound,
+      ...counters,
       errors,
       stoppedReason,
       floodWaitSeconds
     }
+  }
+
+  private addOutcomeCounters(
+    counters: {
+      candidateMessages: number
+      messagesClassified: number
+      relevantMessages: number
+      mentionsCreated: number
+      duplicatesSkipped: number
+      aiClassificationErrors: number
+    },
+    outcome: Awaited<ReturnType<TelegramWatchlistService['processCompanyMessages']>>
+  ): void {
+    counters.candidateMessages += outcome.candidateMessages
+    counters.messagesClassified += outcome.messagesClassified
+    counters.relevantMessages += outcome.relevantMessages
+    counters.mentionsCreated += outcome.mentionsCreated
+    counters.duplicatesSkipped += outcome.duplicatesSkipped
+    counters.aiClassificationErrors += outcome.aiClassificationErrors
   }
 
   /** Manual "add by username" flow (API POST .../telegram-channels). Resolves a
@@ -287,10 +338,26 @@ export class TelegramWatchlistService {
     entry: CompanyEntry,
     messages: TelegramRawMessage[],
     initialCursor: number | null
-  ): Promise<{ mentionsFound: number; lastGoodId: number | null; error?: WatchlistCompanyError }> {
+  ): Promise<{
+    mentionsFound: number
+    lastGoodId: number | null
+    error?: WatchlistCompanyError
+    candidateMessages: number
+    messagesClassified: number
+    relevantMessages: number
+    mentionsCreated: number
+    duplicatesSkipped: number
+    aiClassificationErrors: number
+  }> {
     const sorted = [...messages].sort((a, b) => a.id - b.id)
     let mentionsFound = 0
     let lastGoodId: number | null = null
+    let candidateMessages = 0
+    let messagesClassified = 0
+    let relevantMessages = 0
+    let mentionsCreated = 0
+    let duplicatesSkipped = 0
+    let aiClassificationErrors = 0
 
     const context = buildRelevanceContext(entry.company, entry.aliases)
     const thresholds = { reviewThreshold: messageClassifierReviewThreshold(), hideThreshold: messageClassifierHideThreshold() }
@@ -300,6 +367,8 @@ export class TelegramWatchlistService {
         const preFilter = this.relevance.preFilter(message.text, context, false)
 
         if (preFilter.passesPreFilter) {
+          candidateMessages += 1
+
           const classification = await this.messageClassifier.classify({
             context,
             messageText: message.text,
@@ -310,6 +379,9 @@ export class TelegramWatchlistService {
             channelClassification: null,
             exactHit: preFilter.exactHit
           })
+          messagesClassified += 1
+          if (!classification.ok) aiClassificationErrors += 1
+          else if (classification.decision !== 'NO') relevantMessages += 1
 
           const type = classification.ok ? classification.type : null
           const confidence = classification.ok ? classification.confidence : 0
@@ -327,7 +399,18 @@ export class TelegramWatchlistService {
             sourceId: bootstrap.sourceId,
             companySourceTargetId: bootstrap.companySourceTargetId
           })
-          await this.dedup.persistMention(params)
+          const persisted = await this.dedup.persistMention(params)
+          // DedupService.persistMention() doesn't report create-vs-merge directly
+          // (out of scope to change its signature — shared by every other platform
+          // too) — a freshly created row's createdAt/updatedAt are set by the same
+          // INSERT statement and are therefore identical; an update always moves
+          // updatedAt forward while createdAt stays put, so this is a safe,
+          // non-invasive way to tell the two cases apart from the caller side.
+          if (persisted.createdAt.getTime() === persisted.updatedAt.getTime()) {
+            mentionsCreated += 1
+          } else {
+            duplicatesSkipped += 1
+          }
           mentionsFound += 1
 
           await this.prisma.companyTelegramChannel.update({
@@ -343,11 +426,26 @@ export class TelegramWatchlistService {
         return {
           mentionsFound,
           lastGoodId,
-          error: { companyId: entry.companyId, companyTelegramChannelId: entry.companyTelegramChannelId, message: errorMessage }
+          error: { companyId: entry.companyId, companyTelegramChannelId: entry.companyTelegramChannelId, message: errorMessage },
+          candidateMessages,
+          messagesClassified,
+          relevantMessages,
+          mentionsCreated,
+          duplicatesSkipped,
+          aiClassificationErrors
         }
       }
     }
 
-    return { mentionsFound, lastGoodId: lastGoodId ?? initialCursor }
+    return {
+      mentionsFound,
+      lastGoodId: lastGoodId ?? initialCursor,
+      candidateMessages,
+      messagesClassified,
+      relevantMessages,
+      mentionsCreated,
+      duplicatesSkipped,
+      aiClassificationErrors
+    }
   }
 }

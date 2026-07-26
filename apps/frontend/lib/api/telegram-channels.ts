@@ -21,6 +21,13 @@ export interface TelegramChannelDto {
   updatedAt: string
 }
 
+export interface TelegramScoutHealth {
+  ok: boolean
+  errorCode: string | null
+  since: string | null
+  consecutiveFailures: number
+}
+
 export interface TelegramScoutStatus {
   companyId: string
   latestLog: {
@@ -30,6 +37,10 @@ export interface TelegramScoutStatus {
     errorMessage: string | null
     result: Record<string, unknown> | null
   } | null
+  lastRunAt: string | null
+  lastSuccessAt: string | null
+  nextRunAt: string | null
+  health: TelegramScoutHealth
   watchlistEnabledCount: number
   watchlistTotalCount: number
   totalMentionsFound: number

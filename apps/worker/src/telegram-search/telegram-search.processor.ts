@@ -1,11 +1,12 @@
 import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common'
 import { Job, Queue, Worker } from 'bullmq'
+import { errors as teleprotoErrors } from 'teleproto'
 import { PrismaService } from '../common/prisma/prisma.service'
 import { JobLogService } from '../services/job-log.service'
 import { QUEUES } from '../queues/queue.names'
 import { JOBS } from '../queues/job.names'
 import { WORKER_OPTIONS } from '../queues/job-options'
-import { getTelegramSearchClient } from './client'
+import { getTelegramSearchClient, invalidateTelegramSearchClient, isSessionInvalidationError } from './client'
 import { withTelegramMtprotoLock } from './mtproto-lock'
 import { TelegramScoutService } from './telegram-scout/telegram-scout.service'
 import {
@@ -91,24 +92,61 @@ export class TelegramSearchProcessor implements OnModuleInit, OnModuleDestroy {
           queueName: QUEUES.TELEGRAM_SEARCH,
           jobName: job.name,
           bullJobId: job.id,
-          status: 'FAILED',
+          // The client never connected/authenticated at all — no part of the pass
+          // ran, so this is distinct from a mid-run failure (see JobStatus comment
+          // in schema.prisma). Never SUCCESS/PARTIAL: nothing ran.
+          status: 'BLOCKED_TELEGRAM_CONNECTION',
           startedAt,
           errorMessage: message,
-          result: { mode, reason: 'mtproto_connect_failed' }
+          result: { mode, reason: 'mtproto_connect_failed', errorCode: this.classifyTelegramError(error) }
         })
         .catch(() => null)
       throw error
     }
 
-    const lockResult = await withTelegramMtprotoLock(this.redis, String(job.id), mode, (handle) =>
-      this.runMode(mode, job.data, client, handle)
-    )
+    let lockResult
+    try {
+      lockResult = await withTelegramMtprotoLock(this.redis, String(job.id), mode, (handle) =>
+        this.runMode(mode, job.data, client, handle)
+      )
+    } catch (error) {
+      // A live-but-broken client (auth revoked mid-lifetime, after an earlier
+      // successful connect) previously kept being reused forever — see
+      // invalidateTelegramSearchClient() for why this matters. This also fixes a
+      // real gap: this class of failure used to skip JobLog entirely (it threw
+      // before the finish() call below), so a whole day's run could vanish from
+      // the audit trail with no record at all.
+      if (isSessionInvalidationError(error)) {
+        await invalidateTelegramSearchClient()
+      }
+
+      const message = error instanceof Error ? error.message : String(error)
+      await this.jobLogService
+        .finish({
+          companyId: job.data.companyId ?? null,
+          queueName: QUEUES.TELEGRAM_SEARCH,
+          jobName: job.name,
+          bullJobId: job.id,
+          // A session-invalidation error mid-run means the connection itself was
+          // never actually usable for this pass — same "blocked" semantics as the
+          // connect-failure case above, not a generic crash. Anything else (a real
+          // bug, a DB error, etc.) stays FAILED so it doesn't get lost among
+          // routine connection-health noise.
+          status: isSessionInvalidationError(error) ? 'BLOCKED_TELEGRAM_CONNECTION' : 'FAILED',
+          startedAt,
+          errorMessage: message,
+          result: { mode, reason: 'run_failed', errorCode: this.classifyTelegramError(error) }
+        })
+        .catch(() => null)
+      throw error
+    }
 
     if (!lockResult.ok) {
       return this.handleLockFailure(job, mode, lockResult.reason, startedAt)
     }
 
     const status = this.computeStatus(mode, lockResult.result)
+    const counters = this.computeJobLogCounters(mode, lockResult.result)
 
     await this.jobLogService
       .finish({
@@ -118,11 +156,62 @@ export class TelegramSearchProcessor implements OnModuleInit, OnModuleDestroy {
         bullJobId: job.id,
         status,
         startedAt,
+        ...counters,
         result: { mode, ...lockResult.result }
       })
       .catch(() => null)
 
     return lockResult.result
+  }
+
+  /** Maps a raw error to a short, stable code for admin display / dedup —
+   *  e.g. "AUTH_KEY_UNREGISTERED", "SESSION_REVOKED", "FLOOD_WAIT", "NO_SESSION" —
+   *  so the health status can group repeats instead of showing N identical rows. */
+  private classifyTelegramError(error: unknown): string {
+    if (error instanceof teleprotoErrors.FloodWaitError) return 'FLOOD_WAIT'
+
+    if (isSessionInvalidationError(error)) {
+      return error.constructor.name
+        .replace(/Error$/, '')
+        .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+        .toUpperCase()
+    }
+
+    const message = error instanceof Error ? error.message : String(error)
+    if (/No valid Telegram Scout session found/i.test(message)) return 'NO_SESSION'
+    if (/timed out/i.test(message)) return 'CONNECTION_TIMEOUT'
+    return 'UNKNOWN'
+  }
+
+  /** Structured JobLog counters, surfaced separately from the free-form `result`
+   *  JSON so an admin list/health view can query them without parsing JSON. The
+   *  full breakdown (queries planned/executed, channels found total vs unique,
+   *  candidate/classified/relevant message counts, API/AI error counts, etc.) is
+   *  always in `result` too — these 4 generic columns exist for quick listing,
+   *  matching the "at least queries/channels/messages/mentions" requirement. */
+  private computeJobLogCounters(
+    mode: TelegramScoutMode,
+    result: ModeResult
+  ): { itemsDiscovered?: number; itemsCreated?: number; itemsUpdated?: number; itemsDeduped?: number } {
+    if (mode === 'discovery' || mode === 'entity_search') {
+      const stats = result as TelegramScoutRunStats
+      return {
+        itemsDiscovered: stats.messagesScanned,
+        itemsCreated: stats.mentionsCreated,
+        itemsUpdated: stats.channelsFoundUnique,
+        itemsDeduped: stats.duplicatesSkipped
+      }
+    }
+
+    if ('ok' in result) return {}
+
+    const watchlistResult = result as WatchlistProcessResult
+    return {
+      itemsDiscovered: watchlistResult.messagesScanned,
+      itemsCreated: watchlistResult.mentionsCreated,
+      itemsUpdated: watchlistResult.companiesProcessed,
+      itemsDeduped: watchlistResult.duplicatesSkipped
+    }
   }
 
   private async runMode(
@@ -195,7 +284,10 @@ export class TelegramSearchProcessor implements OnModuleInit, OnModuleDestroy {
       return { ok: false, reason: 'mtproto_lock_lost' }
     }
 
-    // lock_busy
+    // lock_busy — another Telegram Scout run already holds the single distributed
+    // MTProto lock. Every outcome below is SKIPPED_ALREADY_RUNNING, not PARTIAL:
+    // this specific invocation did no work at all, regardless of whether it will
+    // self-requeue to try again (see mtproto-lock.ts for the TTL/heartbeat design).
     if (mode === 'watchlist') {
       // No self-requeue for watchlist — just push this channel's companies out a
       // couple minutes; the next dispatcher tick creates a fresh job (plan §1).
@@ -214,7 +306,7 @@ export class TelegramSearchProcessor implements OnModuleInit, OnModuleDestroy {
           queueName: QUEUES.TELEGRAM_SEARCH,
           jobName: job.name,
           bullJobId: job.id,
-          status: 'PARTIAL',
+          status: 'SKIPPED_ALREADY_RUNNING',
           startedAt,
           result: { mode, reason: 'mtproto_lock_busy' }
         })
@@ -233,7 +325,7 @@ export class TelegramSearchProcessor implements OnModuleInit, OnModuleDestroy {
           queueName: QUEUES.TELEGRAM_SEARCH,
           jobName: job.name,
           bullJobId: job.id,
-          status: 'PARTIAL',
+          status: 'SKIPPED_ALREADY_RUNNING',
           startedAt,
           result: { mode, reason: 'mtproto_lock_busy_exhausted', retryCount }
         })
@@ -256,7 +348,7 @@ export class TelegramSearchProcessor implements OnModuleInit, OnModuleDestroy {
         queueName: QUEUES.TELEGRAM_SEARCH,
         jobName: job.name,
         bullJobId: job.id,
-        status: 'PARTIAL',
+        status: 'SKIPPED_ALREADY_RUNNING',
         startedAt,
         result: { mode, reason: 'mtproto_lock_busy', requeuedAs: newJobId }
       })
@@ -276,12 +368,20 @@ export class TelegramSearchProcessor implements OnModuleInit, OnModuleDestroy {
     if (mode === 'discovery' || mode === 'entity_search') {
       const stats = result as TelegramScoutRunStats
       const partialReasons = ['flood_wait', 'max_runtime', 'max_messages', 'max_pages']
-      return stats.stoppedReason && partialReasons.includes(stats.stoppedReason) ? 'PARTIAL' : 'SUCCESS'
+      // Never SUCCESS if the run was cut short, OR if any Telegram API call failed
+      // technically, OR if any AI classification call failed technically — a run
+      // where classification silently degraded to "not fully done" must not read
+      // as a clean pass (criteria: "нельзя ставить SUCCESS если... значительная
+      // часть AI-классификации не выполнилась").
+      const cutShort = stats.stoppedReason !== null && partialReasons.includes(stats.stoppedReason)
+      const hadErrors = stats.telegramApiErrors > 0 || stats.aiClassificationErrors > 0
+      return cutShort || hadErrors ? 'PARTIAL' : 'SUCCESS'
     }
 
     // watchlist / source_check
     const watchlistResult = result as WatchlistProcessResult
     if (watchlistResult.errors.length > 0) return 'PARTIAL'
+    if (watchlistResult.aiClassificationErrors > 0) return 'PARTIAL'
     if (watchlistResult.stoppedReason === 'flood_wait' || watchlistResult.stoppedReason === 'no_public_username') {
       return 'PARTIAL'
     }

@@ -126,7 +126,7 @@ describe('TelegramWatchlistService — multi-company cursor isolation (plan §2)
           throw new Error('simulated transient DB error')
         }
         persistCalls.push({ companyId: params.companyId, messageId })
-        return { id: `mention-${params.companyId}-${messageId}` }
+        return { id: `mention-${params.companyId}-${messageId}`, createdAt: new Date(0), updatedAt: new Date(0) }
       })
     }
 

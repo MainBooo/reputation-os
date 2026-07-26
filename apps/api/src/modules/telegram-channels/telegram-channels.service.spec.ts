@@ -27,12 +27,16 @@ function mockPrisma() {
     },
     source: { findFirst: jest.fn(), create: jest.fn() },
     companySourceTarget: { findFirst: jest.fn(), create: jest.fn(), update: jest.fn() },
-    jobLog: { create: jest.fn().mockResolvedValue({ id: 'log1' }), findFirst: jest.fn() }
+    jobLog: {
+      create: jest.fn().mockResolvedValue({ id: 'log1' }),
+      findFirst: jest.fn(),
+      findMany: jest.fn().mockResolvedValue([])
+    }
   } as any
 }
 
 function mockQueue() {
-  return { add: jest.fn().mockResolvedValue({ id: 'bull-1' }) }
+  return { add: jest.fn().mockResolvedValue({ id: 'bull-1' }), getRepeatableJobs: jest.fn().mockResolvedValue([]) }
 }
 
 describe('TelegramChannelsService — workspace isolation & billing gates', () => {
@@ -185,5 +189,86 @@ describe('TelegramChannelsService — workspace isolation & billing gates', () =
     const service = new TelegramChannelsService(prisma, entitlements as any, mockQueue() as any)
 
     await expect(service.remove('u1', 'c1', 'ctc1')).rejects.toThrow(NotFoundException)
+  })
+})
+
+describe('TelegramChannelsService — getScoutStatus / session health', () => {
+  it('reports ok:true when the latest run succeeded', async () => {
+    const prisma = mockPrisma()
+    prisma.jobLog.findMany.mockResolvedValue([{ jobStatus: 'SUCCESS', result: {}, createdAt: new Date('2026-07-25T00:00:00Z') }])
+    const entitlements = { getForWorkspace: jest.fn().mockResolvedValue(baseEntitlements()) }
+    const service = new TelegramChannelsService(prisma, entitlements as any, mockQueue() as any)
+
+    const status = await service.getScoutStatus('u1', 'c1')
+
+    expect(status.health).toEqual({ ok: true, errorCode: null, since: null, consecutiveFailures: 0 })
+  })
+
+  it('reports ok:false with the errorCode for a run of consecutive FAILED jobs', async () => {
+    const prisma = mockPrisma()
+    prisma.jobLog.findMany.mockResolvedValue([
+      { jobStatus: 'FAILED', result: { errorCode: 'NO_SESSION' }, createdAt: new Date('2026-07-25T00:02:00Z') },
+      { jobStatus: 'FAILED', result: { errorCode: 'NO_SESSION' }, createdAt: new Date('2026-07-25T00:00:00Z') },
+      { jobStatus: 'FAILED', result: { errorCode: 'NO_SESSION' }, createdAt: new Date('2026-07-24T00:00:00Z') }
+    ])
+    const entitlements = { getForWorkspace: jest.fn().mockResolvedValue(baseEntitlements()) }
+    const service = new TelegramChannelsService(prisma, entitlements as any, mockQueue() as any)
+
+    const status = await service.getScoutStatus('u1', 'c1')
+
+    expect(status.health).toEqual({
+      ok: false,
+      errorCode: 'NO_SESSION',
+      since: new Date('2026-07-24T00:00:00Z'),
+      consecutiveFailures: 3
+    })
+  })
+
+  // Regression: telegram-search.processor.ts records a dead/missing session as
+  // BLOCKED_TELEGRAM_CONNECTION, not FAILED (see JobStatus comment in schema.prisma).
+  // computeSessionHealth originally only matched 'FAILED', so this exact case — the
+  // one this health signal exists to surface — silently reported ok:true.
+  it('reports ok:false for consecutive BLOCKED_TELEGRAM_CONNECTION jobs, not just FAILED', async () => {
+    const prisma = mockPrisma()
+    prisma.jobLog.findMany.mockResolvedValue([
+      { jobStatus: 'BLOCKED_TELEGRAM_CONNECTION', result: { errorCode: 'NO_SESSION' }, createdAt: new Date('2026-07-25T00:02:00Z') },
+      { jobStatus: 'BLOCKED_TELEGRAM_CONNECTION', result: { errorCode: 'NO_SESSION' }, createdAt: new Date('2026-07-25T00:00:00Z') }
+    ])
+    const entitlements = { getForWorkspace: jest.fn().mockResolvedValue(baseEntitlements()) }
+    const service = new TelegramChannelsService(prisma, entitlements as any, mockQueue() as any)
+
+    const status = await service.getScoutStatus('u1', 'c1')
+
+    expect(status.health.ok).toBe(false)
+    expect(status.health.errorCode).toBe('NO_SESSION')
+    expect(status.health.consecutiveFailures).toBe(2)
+  })
+
+  it('stops the consecutive-failure count at the first differing errorCode', async () => {
+    const prisma = mockPrisma()
+    prisma.jobLog.findMany.mockResolvedValue([
+      { jobStatus: 'FAILED', result: { errorCode: 'NO_SESSION' }, createdAt: new Date('2026-07-25T00:00:00Z') },
+      { jobStatus: 'BLOCKED_TELEGRAM_CONNECTION', result: { errorCode: 'CONNECTION_TIMEOUT' }, createdAt: new Date('2026-07-24T00:00:00Z') }
+    ])
+    const entitlements = { getForWorkspace: jest.fn().mockResolvedValue(baseEntitlements()) }
+    const service = new TelegramChannelsService(prisma, entitlements as any, mockQueue() as any)
+
+    const status = await service.getScoutStatus('u1', 'c1')
+
+    expect(status.health.consecutiveFailures).toBe(1)
+  })
+
+  it('derives nextRunAt from the matching BullMQ repeatable job', async () => {
+    const prisma = mockPrisma()
+    const queue = mockQueue()
+    queue.getRepeatableJobs.mockResolvedValue([
+      { id: 'telegram-discovery:c1:cron', next: new Date('2026-07-26T00:00:00Z').getTime() }
+    ])
+    const entitlements = { getForWorkspace: jest.fn().mockResolvedValue(baseEntitlements()) }
+    const service = new TelegramChannelsService(prisma, entitlements as any, queue as any)
+
+    const status = await service.getScoutStatus('u1', 'c1')
+
+    expect(status.nextRunAt).toEqual(new Date('2026-07-26T00:00:00Z'))
   })
 })

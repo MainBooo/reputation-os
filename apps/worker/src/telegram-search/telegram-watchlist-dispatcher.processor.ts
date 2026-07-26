@@ -3,9 +3,8 @@ import { Job, Queue, Worker } from 'bullmq'
 import { PrismaService } from '../common/prisma/prisma.service'
 import { QUEUES } from '../queues/queue.names'
 import { JOBS } from '../queues/job.names'
-import { CRON_JOB_OPTIONS } from '../queues/job-options'
-import { WORKER_OPTIONS } from '../queues/job-options'
-import { watchlistDispatcherIntervalMin } from './telegram-scout/telegram-scout.config'
+import { CRON_JOB_OPTIONS, WORKER_OPTIONS } from '../queues/job-options'
+import { removeAllRepeatableJobs } from '../queues/repeatable-cron.util'
 
 const DISPATCH_BATCH_LIMIT = 100
 
@@ -98,16 +97,18 @@ export class TelegramWatchlistDispatcherProcessor implements OnModuleInit, OnMod
     return { dispatched, companiesDue: due.length }
   }
 
-  // Called once at worker boot (see scheduler.service.ts) to register the recurring tick.
-  async ensureCron(dispatcherQueue: Queue) {
-    await dispatcherQueue.add(
-      JOBS.TELEGRAM_WATCHLIST_DISPATCHER,
-      { autoCron: true },
-      {
-        ...CRON_JOB_OPTIONS,
-        repeat: { every: watchlistDispatcherIntervalMin() * 60_000 },
-        jobId: 'telegram-watchlist-dispatcher:global:tick'
-      }
-    )
+  /** Called once at worker boot (see scheduler.service.ts). The 5-15min standalone
+   *  tick is retired — every enabled channel is now checked once per day inside the
+   *  same telegram.discovery run (see TelegramScoutService phase 4), matching the
+   *  "один суточный проход" requirement instead of racing a separate cadence. This
+   *  actively removes any repeatable registration left over from the old design
+   *  (including the pre-e446aae one that was never cleaned up and kept duplicating
+   *  ticks) — the canonical state for this queue is now zero repeatables. */
+  async disableCron(dispatcherQueue: Queue): Promise<number> {
+    const removed = await removeAllRepeatableJobs(dispatcherQueue, JOBS.TELEGRAM_WATCHLIST_DISPATCHER)
+    if (removed > 0) {
+      this.logger.log(`Removed ${removed} stale telegram_watchlist_dispatcher repeatable registration(s)`)
+    }
+    return removed
   }
 }
