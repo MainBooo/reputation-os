@@ -8,7 +8,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(private readonly prisma: PrismaService) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
-      secretOrKey: process.env.JWT_SECRET || 'supersecret'
+      // No fallback here either — AuthModule already refuses to start if
+      // JWT_SECRET is unset, so this only ever runs with a real secret.
+      secretOrKey: process.env.JWT_SECRET as string
     })
   }
 

@@ -51,12 +51,18 @@ export default function LoginPage() {
     })()
 
     try {
-      const params = new URLSearchParams(window.location.search)
-      const yandexToken = params.get('accessToken')
-      const oauthError = params.get('error')
+      // accessToken travels in the URL fragment (#...), not a query param —
+      // it never leaves the browser in a request line, so it doesn't end up
+      // in server/proxy access logs or Referer headers. error=yandex_denied
+      // isn't sensitive, so it stays a regular query param.
+      const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''))
+      const yandexToken = hashParams.get('accessToken')
+      const oauthError = new URLSearchParams(window.location.search).get('error')
 
       if (yandexToken) {
         document.cookie = `accessToken=${encodeURIComponent(yandexToken)}; path=/; max-age=${60 * 60 * 24 * 7}; samesite=lax`
+        // Drop the token from the visible URL/history before navigating away.
+        window.history.replaceState(null, '', window.location.pathname)
         router.replace('/dashboard')
         router.refresh()
         return

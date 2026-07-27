@@ -8,6 +8,7 @@ import {
   WebSocketServer
 } from '@nestjs/websockets'
 import { JwtService } from '@nestjs/jwt'
+import { requireJwtSecret } from '../../common/config/require-jwt-secret'
 import { Server, Socket } from 'socket.io'
 import { ChatService } from './chat.service'
 
@@ -40,7 +41,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     try {
       const payload = this.jwtService.verify<{ sub: string }>(token, {
-        secret: process.env.JWT_SECRET || 'supersecret'
+        secret: requireJwtSecret()
       })
       client.data.userId = payload.sub
       client.join(`user:${payload.sub}`)
