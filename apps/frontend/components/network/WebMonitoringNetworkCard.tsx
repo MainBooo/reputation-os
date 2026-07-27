@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useMetrica } from 'next-yandex-metrica'
 import { Globe2 } from 'lucide-react'
@@ -17,10 +17,17 @@ import NetworkToggleSwitch from './NetworkToggleSwitch'
 
 const SEARCH_STATE_LABEL: Record<WebMonitoringStatus['searchState'], string> = {
   disabled: 'Выключен',
-  never_run: 'Ожидает первого запуска',
-  error: 'Обнаружены ошибки',
-  ok: 'Работает по расписанию'
+  never_run: '⏳ Идёт первичный поиск…',
+  error: '⚠️ Обнаружены ошибки',
+  ok: '✅ Мониторинг активен'
 }
+
+// После включения первый чек делает дисптетчер WEB (тик раз в 5 минут, см.
+// page-watch-dispatcher.processor.ts) — не мгновенно. Недолгий поллинг даёт
+// пользователю живую обратную связь (never_run → ok/error) без ручного
+// обновления страницы, вместо статичной надписи до следующего visit.
+const POLL_INTERVAL_MS = 4000
+const POLL_MAX_ATTEMPTS = 15
 
 export default function WebMonitoringNetworkCard({
   companyId,
@@ -36,9 +43,31 @@ export default function WebMonitoringNetworkCard({
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [showUpgrade, setShowUpgrade] = useState(false)
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   function load() {
     return getCompanyWebSourcesOverview(companyId).then((data: any) => setStatus(data.status))
+  }
+
+  function stopPolling() {
+    if (pollRef.current) {
+      clearInterval(pollRef.current)
+      pollRef.current = null
+    }
+  }
+
+  function pollUntilSettled() {
+    stopPolling()
+    let attempts = 0
+    pollRef.current = setInterval(async () => {
+      attempts += 1
+      const data: any = await getCompanyWebSourcesOverview(companyId).catch(() => null)
+      const nextStatus: WebMonitoringStatus | undefined = data?.status
+      if (nextStatus) setStatus(nextStatus)
+      if (!nextStatus || nextStatus.searchState !== 'never_run' || attempts >= POLL_MAX_ATTEMPTS) {
+        stopPolling()
+      }
+    }, POLL_INTERVAL_MS)
   }
 
   useEffect(() => {
@@ -46,6 +75,7 @@ export default function WebMonitoringNetworkCard({
     load().finally(() => !cancelled && setLoading(false))
     return () => {
       cancelled = true
+      stopPolling()
     }
   }, [companyId])
 
@@ -60,13 +90,17 @@ export default function WebMonitoringNetworkCard({
       return
     }
 
+    stopPolling()
     setBusy(true)
     try {
+      let turnedOn = false
+
       if (!status?.hasRootTarget) {
         // Never started before — bootstrap creates the root target, runs the
         // first scan, and schedules the company for the regular WEB dispatcher.
         await startCompanyWebSync(companyId)
         reachGoal('monitoring_enabled')
+        turnedOn = true
       } else {
         const next = !enabled
         await Promise.all(
@@ -75,8 +109,10 @@ export default function WebMonitoringNetworkCard({
           )
         )
         if (next) reachGoal('monitoring_enabled')
+        turnedOn = next
       }
       await load()
+      if (turnedOn) pollUntilSettled()
       router.refresh()
     } catch {
       // leave state unchanged on failure (e.g. plan limit) — surfaced via toast elsewhere

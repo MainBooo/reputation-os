@@ -4,6 +4,7 @@ import EmptyState from '@/components/ui/EmptyState'
 import Card from '@/components/ui/Card'
 import CompanyYandexCronToggle from '@/components/companies/CompanyYandexCronToggle'
 import CompanyEditPopup from '@/components/companies/CompanyEditPopup'
+import NetworkOnboardingBanner from '@/components/network/NetworkOnboardingBanner'
 import CompanySyncStatusCard from '@/components/companies/CompanySyncStatusCard'
 import CompanyManualSyncButton from '@/components/companies/CompanyManualSyncButton'
 import CompanyChatPanel from '@/components/chat/CompanyChatPanel'
@@ -134,6 +135,7 @@ export default async function CompanyPage({ params }: { params: { id: string } }
   return (
     <div className="space-y-4 pb-28">
       <CompanyEditPopup company={company} yandexUrl={primarySourceUrl} twoGisUrl={twoGisSourceUrl} />
+      <NetworkOnboardingBanner companyId={company.id} />
 
         <Card className="overflow-hidden border-cyan-400/15 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.16),transparent_34%),linear-gradient(135deg,rgba(15,23,42,0.92),rgba(2,6,23,0.96))] p-5 shadow-[0_0_48px_rgba(59,130,246,0.12)]">
           <div className="flex flex-col gap-5">

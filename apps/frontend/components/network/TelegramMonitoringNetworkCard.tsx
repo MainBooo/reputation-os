@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Send } from 'lucide-react'
 import { getCompanySourceTargets, updateCompanySourceTarget } from '@/lib/api/companies'
@@ -11,14 +11,21 @@ import NetworkMonitoringCard from './NetworkMonitoringCard'
 import NetworkToggleSwitch from './NetworkToggleSwitch'
 
 const JOB_STATUS_LABEL: Record<string, string> = {
-  SUCCESS: 'Работает по расписанию',
-  PARTIAL: 'Частичный результат',
-  FAILED: 'Ошибка поиска',
-  PENDING: 'Ожидание',
-  RUNNING: 'Выполняется',
-  SKIPPED_ALREADY_RUNNING: 'Уже выполняется',
-  BLOCKED_TELEGRAM_CONNECTION: 'Нет подключения к Telegram'
+  SUCCESS: '✅ Мониторинг активен',
+  PARTIAL: '⚠️ Частичный результат',
+  FAILED: '⚠️ Не удалось подключиться',
+  PENDING: '⏳ Ожидание в очереди',
+  RUNNING: '🔍 Идёт поиск каналов…',
+  SKIPPED_ALREADY_RUNNING: '🔍 Идёт поиск каналов…',
+  BLOCKED_TELEGRAM_CONNECTION: '⚠️ Не удалось подключиться'
 }
+
+// Discovery запускается сразу при включении, но реально выполняется в
+// воркере асинхронно — недолгий поллинг даёт видимый переход
+// PENDING/RUNNING → SUCCESS/FAILED без ручного обновления страницы.
+const POLL_INTERVAL_MS = 4000
+const POLL_MAX_ATTEMPTS = 15
+const TERMINAL_JOB_STATUSES = ['SUCCESS', 'PARTIAL', 'FAILED', 'BLOCKED_TELEGRAM_CONNECTION']
 
 export default function TelegramMonitoringNetworkCard({
   companyId,
@@ -35,6 +42,7 @@ export default function TelegramMonitoringNetworkCard({
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [showUpgrade, setShowUpgrade] = useState(false)
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   function load() {
     return Promise.all([getTelegramScoutStatus(companyId), getCompanySourceTargets(companyId)]).then(
@@ -48,8 +56,29 @@ export default function TelegramMonitoringNetworkCard({
           setTargetId(null)
           setEnabled(false)
         }
+        return scoutStatus
       }
     )
+  }
+
+  function stopPolling() {
+    if (pollRef.current) {
+      clearInterval(pollRef.current)
+      pollRef.current = null
+    }
+  }
+
+  function pollUntilSettled() {
+    stopPolling()
+    let attempts = 0
+    pollRef.current = setInterval(async () => {
+      attempts += 1
+      const scoutStatus = await load().catch(() => null)
+      const jobStatus = scoutStatus?.latestLog?.jobStatus
+      if (!scoutStatus || (jobStatus && TERMINAL_JOB_STATUSES.includes(jobStatus)) || attempts >= POLL_MAX_ATTEMPTS) {
+        stopPolling()
+      }
+    }, POLL_INTERVAL_MS)
   }
 
   useEffect(() => {
@@ -59,6 +88,7 @@ export default function TelegramMonitoringNetworkCard({
       .finally(() => !cancelled && setLoading(false))
     return () => {
       cancelled = true
+      stopPolling()
     }
   }, [companyId])
 
@@ -72,16 +102,22 @@ export default function TelegramMonitoringNetworkCard({
       return
     }
 
+    stopPolling()
     setBusy(true)
     try {
+      let turnedOn = false
+
       if (!targetId) {
         // Never started before — bootstraps the CompanySourceTarget and kicks off DISCOVERY.
         await startTelegramSync(companyId)
+        turnedOn = true
       } else {
         const next = !enabled
         await updateCompanySourceTarget(companyId, targetId, { syncMentionsEnabled: next, isActive: next })
+        turnedOn = next
       }
       await load()
+      if (turnedOn) pollUntilSettled()
       router.refresh()
     } catch {
       // leave state unchanged on failure (e.g. plan limit) — surfaced via toast elsewhere
@@ -97,7 +133,7 @@ export default function TelegramMonitoringNetworkCard({
       ? 'Выключен'
       : jobStatus
         ? JOB_STATUS_LABEL[jobStatus] || jobStatus
-        : 'Ожидает первого запуска'
+        : '⏳ Ожидает первого запуска'
 
   return (
     <>

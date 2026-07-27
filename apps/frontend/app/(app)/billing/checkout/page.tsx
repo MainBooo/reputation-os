@@ -66,10 +66,19 @@ function buildFeatureGroups(plan: BillingPlan): FeatureGroup[] {
 
   // Мониторинг
   const monitoring: FeatureItem[] = [
+    ...(plan.code === 'AGENCY' ? [{ label: 'Всё из тарифа «Бизнес»', highlight: true }] : []),
     { label: pluralCompanies(plan.limits.maxCompanies) },
     { label: sourcesLabel(plan.limits.maxSources) },
-    ...plan.limits.platforms.map((p) => ({ label: PLATFORM_LABELS[p] ?? p })),
+    // WEB и TELEGRAM вынесены в отдельные явные пункты ниже — не дублируем их
+    // как "Веб-поиск"/сырое "TELEGRAM" из общего списка платформ.
+    ...plan.limits.platforms.filter((p) => p !== 'WEB' && p !== 'TELEGRAM').map((p) => ({ label: PLATFORM_LABELS[p] ?? p })),
   ]
+  if (plan.limits.webMonitoringEnabled) {
+    monitoring.push({ label: 'WEB-мониторинг', highlight: true })
+  }
+  if (plan.limits.telegramMonitoringEnabled) {
+    monitoring.push({ label: 'Telegram-мониторинг', highlight: true })
+  }
   groups.push({ label: 'Мониторинг', items: monitoring })
 
   // AI
@@ -108,9 +117,6 @@ function buildFeatureGroups(plan: BillingPlan): FeatureGroup[] {
       highlight: plan.limits.advancedAnalytics,
     },
   ]
-  if (plan.limits.webMonitoringEnabled) {
-    extra.push({ label: 'Мониторинг веб-упоминаний', highlight: true })
-  }
   extra.push({ label: 'История отзывов и упоминаний' })
   if (plan.code === 'AGENCY') {
     extra.push({ label: 'Для агентств и сетевых компаний', highlight: true })
@@ -122,14 +128,16 @@ function buildFeatureGroups(plan: BillingPlan): FeatureGroup[] {
 
 function buildSummaryFeatures(plan: BillingPlan): string[] {
   const f: string[] = []
+  if (plan.code === 'AGENCY') f.push('Всё из тарифа «Бизнес»')
   f.push(
     `${pluralCompanies(plan.limits.maxCompanies)}, ${sourcesLabel(plan.limits.maxSources)}`,
   )
-  f.push(plan.limits.platforms.map((p) => PLATFORM_LABELS[p] ?? p).join(', '))
+  f.push(plan.limits.platforms.filter((p) => p !== 'WEB' && p !== 'TELEGRAM').map((p) => PLATFORM_LABELS[p] ?? p).join(', '))
   f.push(aiLabel(plan.limits.maxAiRepliesPerMonth))
+  if (plan.limits.webMonitoringEnabled) f.push('WEB-мониторинг')
+  if (plan.limits.telegramMonitoringEnabled) f.push('Telegram-мониторинг')
   if (plan.limits.pushNotificationsEnabled) f.push('Push-уведомления')
-  if (plan.limits.telegramNotifications) f.push('Telegram-уведомления')
-  if (plan.limits.webMonitoringEnabled) f.push('Мониторинг веб-упоминаний')
+  if (plan.limits.telegramNotifications) f.push('Telegram-уведомления (алерты об отзывах)')
   if (plan.limits.advancedAnalytics) f.push('Расширенная аналитика')
   if (plan.code === 'AGENCY') f.push('Для агентств и сетевых компаний')
   return f
