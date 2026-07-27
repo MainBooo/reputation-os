@@ -34,5 +34,9 @@ export const RATE_LIMITS = {
   billingWebhook: {
     limit: envNumber('RATE_LIMIT_BILLING_WEBHOOK_MAX', 60),
     ttl: envNumber('RATE_LIMIT_BILLING_WEBHOOK_TTL_MS', 60_000)
+  },
+  internalJobs: {
+    limit: envNumber('RATE_LIMIT_INTERNAL_JOBS_MAX', 30),
+    ttl: envNumber('RATE_LIMIT_INTERNAL_JOBS_TTL_MS', 60_000)
   }
 }
