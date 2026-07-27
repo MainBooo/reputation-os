@@ -1,3 +1,4 @@
+import { ForbiddenException } from '@nestjs/common'
 import { SyncService } from './sync.service'
 
 function makeQueue(getJobImpl: (jobId: string) => any = () => null): any {
@@ -19,8 +20,12 @@ function mockPrisma(overrides: { coreLogs?: any[]; telegramLog?: any } = {}) {
   } as any
 }
 
+function mockEntitlements(): any {
+  return { getForWorkspace: jest.fn() }
+}
+
 function buildService(prisma: any, telegramQueue = makeQueue()) {
-  return new SyncService(prisma, makeQueue(), makeQueue(), makeQueue(), makeQueue(), makeQueue(), telegramQueue)
+  return new SyncService(prisma, mockEntitlements(), makeQueue(), makeQueue(), makeQueue(), makeQueue(), makeQueue(), telegramQueue)
 }
 
 describe('SyncService.getSyncStatus — telegram_search may only degrade to PARTIAL, never FAILED', () => {
@@ -87,7 +92,7 @@ describe('SyncService.getSyncStatus — telegram_search may only degrade to PART
       coreLogs: [{ queueName: 'mentions_sync', jobStatus: 'PENDING', result: { bullJobId: 'bull-1' }, createdAt: new Date() }],
       telegramLog: { queueName: 'telegram_search', jobStatus: 'FAILED', result: {} }
     })
-    const service = new SyncService(prisma, makeQueue(), runningQueue, makeQueue(), makeQueue(), makeQueue(), makeQueue())
+    const service = new SyncService(prisma, mockEntitlements(), makeQueue(), runningQueue, makeQueue(), makeQueue(), makeQueue(), makeQueue())
 
     const result = await service.getSyncStatus('u1', 'c1')
     expect(result.status).toBe('RUNNING')
@@ -99,5 +104,75 @@ describe('SyncService.getSyncStatus — telegram_search may only degrade to PART
 
     const result = await service.getSyncStatus('u1', 'c1')
     expect((result as any).telegramSearch.effectiveStatus).toBe('PARTIAL')
+  })
+})
+
+describe('SyncService.startWebSync — billing gates', () => {
+  function buildWebSyncFixture(overrides: { webMonitoringEnabled?: boolean; maxSources?: number; sourceCount?: number } = {}) {
+    const prisma: any = mockPrisma()
+    prisma.source = {
+      findFirst: jest.fn().mockResolvedValue({ id: 'src-web', workspaceId: 'w1', platform: 'WEB' }),
+      create: jest.fn()
+    }
+    prisma.companySourceTarget = {
+      findFirst: jest.fn().mockResolvedValue(null), // no existing bootstrap target
+      count: jest.fn().mockResolvedValue(overrides.sourceCount ?? 0),
+      create: jest.fn().mockResolvedValue({ id: 'cst-web' })
+    }
+    prisma.jobLog.create = jest.fn().mockResolvedValue({ id: 'log-1' })
+
+    const entitlements = {
+      getForWorkspace: jest.fn().mockResolvedValue({
+        workspaceActive: true,
+        limits: {
+          webMonitoringEnabled: overrides.webMonitoringEnabled ?? true,
+          maxSources: overrides.maxSources ?? -1
+        }
+      })
+    }
+
+    const mentionsQueue = makeQueue()
+    const service = new SyncService(
+      prisma,
+      entitlements as any,
+      makeQueue(),
+      mentionsQueue,
+      makeQueue(),
+      makeQueue(),
+      makeQueue(),
+      makeQueue()
+    )
+    return { service, prisma, entitlements, mentionsQueue }
+  }
+
+  // Regression: startWebSync() used to have ZERO entitlement checks — a Start-tier
+  // workspace (webMonitoringEnabled=false) could call it directly and it would
+  // succeed, bootstrapping a WEB CompanySourceTarget and queuing sync jobs.
+  it('rejects with PLAN_LIMIT when webMonitoringEnabled is false', async () => {
+    const { service, prisma } = buildWebSyncFixture({ webMonitoringEnabled: false })
+
+    await expect(service.startWebSync('u1', 'c1')).rejects.toMatchObject({
+      response: { code: 'PLAN_LIMIT', feature: 'webMonitoringEnabled' }
+    })
+    expect(prisma.companySourceTarget.create).not.toHaveBeenCalled()
+  })
+
+  it('rejects with PLAN_LIMIT maxSources when the workspace is already at its source limit', async () => {
+    const { service, prisma } = buildWebSyncFixture({ webMonitoringEnabled: true, maxSources: 6, sourceCount: 6 })
+
+    await expect(service.startWebSync('u1', 'c1')).rejects.toMatchObject({
+      response: { code: 'PLAN_LIMIT', feature: 'maxSources', limit: 6 }
+    })
+    expect(prisma.companySourceTarget.create).not.toHaveBeenCalled()
+  })
+
+  it('allows startWebSync when webMonitoringEnabled is true and a source slot is free', async () => {
+    const { service, prisma, mentionsQueue } = buildWebSyncFixture({ webMonitoringEnabled: true, maxSources: 40, sourceCount: 10 })
+    mentionsQueue.add.mockResolvedValue({ id: 'bull-1' })
+
+    const result = await service.startWebSync('u1', 'c1')
+
+    expect(result.queued).toBe(true)
+    expect(prisma.companySourceTarget.create).toHaveBeenCalled()
   })
 })

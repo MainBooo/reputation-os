@@ -71,7 +71,7 @@ export interface WorkspaceEntitlements {
   limits: PlanLimits
   effective: PlanLimits
   overrides: Partial<Record<FeatureKey, unknown>>
-  usage: { companies: number; companiesCount: number; aiRepliesThisMonth: number }
+  usage: { companies: number; companiesCount: number; aiRepliesThisMonth: number; sourcesCount: number }
   workspaceActive: boolean
 }
 
@@ -109,7 +109,7 @@ export class EntitlementsService {
     monthStart.setUTCDate(1)
     monthStart.setUTCHours(0, 0, 0, 0)
 
-    const [subscription, overrides, companies, aiRepliesThisMonth, workspace] = await Promise.all([
+    const [subscription, overrides, companies, aiRepliesThisMonth, workspace, sourcesCount] = await Promise.all([
       this.prisma.subscription.findUnique({
         where: { workspaceId },
         include: { plan: true }
@@ -119,7 +119,17 @@ export class EntitlementsService {
       this.prisma.aIReplyDraft.count({
         where: { company: { workspaceId }, createdAt: { gte: monthStart } }
       }),
-      this.prisma.workspace.findUnique({ where: { id: workspaceId }, select: { isActive: true } })
+      this.prisma.workspace.findUnique({ where: { id: workspaceId }, select: { isActive: true } }),
+      // Тот же счётчик, что и в CompaniesService.assertSourceSlotAvailable: активные
+      // карточки Яндекс/2ГИС + WEB-страницы. TELEGRAM исключён — Telegram Scout не
+      // расходует maxSources (гейтится отдельно через telegramMonitoringEnabled).
+      this.prisma.companySourceTarget.count({
+        where: {
+          company: { workspaceId },
+          isActive: true,
+          source: { platform: { not: 'TELEGRAM' } }
+        }
+      })
     ])
 
     let planCode: PlanCode = PlanCode.FREE
@@ -168,7 +178,7 @@ export class EntitlementsService {
       limits,
       effective: limits,
       overrides: overrideMap,
-      usage: { companies, companiesCount: companies, aiRepliesThisMonth },
+      usage: { companies, companiesCount: companies, aiRepliesThisMonth, sourcesCount },
       workspaceActive: workspace?.isActive ?? true
     }
   }

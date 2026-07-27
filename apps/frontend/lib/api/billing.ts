@@ -38,6 +38,7 @@ export interface BillingEntitlements {
   usage: {
     companiesCount: number
     aiRepliesThisMonth: number
+    sourcesCount: number
   }
 }
 

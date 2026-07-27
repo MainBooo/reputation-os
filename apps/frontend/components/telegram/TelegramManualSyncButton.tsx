@@ -9,11 +9,13 @@ export default function TelegramManualSyncButton({ companyId }: { companyId: str
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
+  const [planLimit, setPlanLimit] = useState(false)
 
   async function onClick() {
     if (loading) return
     setLoading(true)
     setMessage(null)
+    setPlanLimit(false)
     try {
       await startTelegramSync(companyId)
       setMessage('Поиск запущен — результаты появятся через несколько минут.')
@@ -23,9 +25,10 @@ export default function TelegramManualSyncButton({ companyId }: { companyId: str
       // returns a non-string message body (see lib/api/client.ts) — matches the
       // existing PLAN_LIMIT convention used by CompaniesCreateForm.tsx.
       const isPlanLimit = String(error?.message || '').includes('PLAN_LIMIT')
+      setPlanLimit(isPlanLimit)
       setMessage(
         isPlanLimit
-          ? 'Telegram Scout недоступен на вашем тарифе.'
+          ? 'Поиск упоминаний в Telegram доступен с тарифа «Бизнес».'
           : 'Не удалось запустить поиск, попробуйте ещё раз.'
       )
     } finally {
@@ -39,6 +42,15 @@ export default function TelegramManualSyncButton({ companyId }: { companyId: str
         {loading ? 'Запуск…' : 'Запустить поиск'}
       </Button>
       {message ? <div className="text-xs text-zinc-400">{message}</div> : null}
+      {planLimit ? (
+        <button
+          type="button"
+          onClick={() => router.push('/billing/checkout')}
+          className="text-xs font-medium text-cyan-400 underline-offset-2 hover:underline"
+        >
+          Выбрать тариф
+        </button>
+      ) : null}
     </div>
   )
 }

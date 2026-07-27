@@ -140,6 +140,11 @@ export default function BillingCard() {
                   value={entitlements.usage.aiRepliesThisMonth}
                   max={entitlements.effective.maxAiRepliesPerMonth}
                 />
+                <UsageBar
+                  label="Подключённые карточки на площадках"
+                  value={entitlements.usage.sourcesCount}
+                  max={entitlements.effective.maxSources ?? 0}
+                />
               </div>
             )}
 
@@ -160,6 +165,10 @@ export default function BillingCard() {
                   <FeatureRow
                     label="Telegram-уведомления"
                     active={entitlements.effective.telegramNotifications}
+                  />
+                  <FeatureRow
+                    label="Поиск упоминаний в Telegram"
+                    active={Boolean(entitlements.effective.telegramMonitoringEnabled)}
                   />
                   <FeatureRow
                     label="Расширенная аналитика"

@@ -2,6 +2,7 @@ import EmptyState from '@/components/ui/EmptyState'
 import PageHeader from '@/components/ui/PageHeader'
 import TelegramScoutPanel from '@/components/telegram/TelegramScoutPanel'
 import TelegramChannelsManager from '@/components/telegram/TelegramChannelsManager'
+import FeatureGate from '@/components/billing/FeatureGate'
 import { getCompany } from '@/lib/api/companies'
 
 export const dynamic = 'force-dynamic'
@@ -25,8 +26,10 @@ export default async function CompanyTelegramPage({ params }: { params: { id: st
         subtitle="Telegram Scout ищет упоминания компании в публичных каналах, группах и супергруппах."
       />
 
-      <TelegramScoutPanel companyId={params.id} />
-      <TelegramChannelsManager companyId={params.id} />
+      <FeatureGate feature="telegramMonitoringEnabled">
+        <TelegramScoutPanel companyId={params.id} />
+        <TelegramChannelsManager companyId={params.id} />
+      </FeatureGate>
     </div>
   )
 }

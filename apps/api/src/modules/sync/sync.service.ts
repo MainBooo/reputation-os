@@ -2,11 +2,13 @@ import { ForbiddenException, Inject, Injectable, NotFoundException } from '@nest
 import { Queue } from 'bullmq'
 import { PrismaService } from '../../common/prisma/prisma.service'
 import { SYNC_JOB_OPTIONS } from '../../common/queues/job-options'
+import { EntitlementsService } from '../billing/entitlements.service'
 
 @Injectable()
 export class SyncService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly entitlements: EntitlementsService,
     @Inject('SYNC_QUEUE_SOURCE_DISCOVERY')
     private readonly sourceDiscoveryQueue: Queue,
     @Inject('SYNC_QUEUE_MENTIONS_SYNC')
@@ -139,8 +141,19 @@ export class SyncService {
   }
 
   async startWebSync(userId: string, companyId: string) {
-    await this.assertCompanyAccess(userId, companyId, 'write')
-    await this.ensureWebBootstrapTarget(companyId)
+    const company = await this.assertCompanyAccess(userId, companyId, 'write')
+
+    const ent = await this.entitlements.getForWorkspace(company.workspaceId)
+
+    if (!ent.workspaceActive) {
+      throw new ForbiddenException('Workspace is disabled')
+    }
+
+    if (!ent.limits.webMonitoringEnabled) {
+      throw new ForbiddenException({ code: 'PLAN_LIMIT', feature: 'webMonitoringEnabled' })
+    }
+
+    await this.ensureWebBootstrapTarget(companyId, ent.limits.maxSources)
 
     const requestedAt = new Date().toISOString()
 
@@ -340,7 +353,7 @@ export class SyncService {
       logs: [log]
     }
   }
-  private async ensureWebBootstrapTarget(companyId: string) {
+  private async ensureWebBootstrapTarget(companyId: string, maxSources: number) {
     const company = await this.prisma.company.findUnique({
       where: { id: companyId },
       select: {
@@ -394,6 +407,23 @@ export class SyncService {
     })
 
     if (existingTarget) return existingTarget
+
+    // Тот же лимит и то же исключение TELEGRAM из подсчёта, что и в
+    // CompaniesService.assertSourceSlotAvailable — WEB-таргет расходует maxSources
+    // наравне с карточками Яндекс/2ГИС.
+    const limit = Number(maxSources)
+    if (limit >= 0) {
+      const currentSourcesCount = await this.prisma.companySourceTarget.count({
+        where: {
+          company: { workspaceId: company.workspaceId },
+          isActive: true,
+          source: { platform: { not: 'TELEGRAM' } }
+        }
+      })
+      if (currentSourcesCount >= limit) {
+        throw new ForbiddenException({ code: 'PLAN_LIMIT', feature: 'maxSources', limit })
+      }
+    }
 
     return this.prisma.companySourceTarget.create({
       data: {

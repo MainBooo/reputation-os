@@ -313,7 +313,8 @@ function ComparisonTable({ plans }: { plans: BillingPlan[] }) {
         p.limits.maxAiRepliesPerMonth === -1 ? '∞' : String(p.limits.maxAiRepliesPerMonth),
     },
     { label: 'Push', getValue: (p) => (p.limits.pushNotificationsEnabled ? '✓' : '—') },
-    { label: 'Telegram', getValue: (p) => (p.limits.telegramNotifications ? '✓' : '—') },
+    { label: 'TG-уведомления', getValue: (p) => (p.limits.telegramNotifications ? '✓' : '—') },
+    { label: 'TG-поиск', getValue: (p) => (p.limits.telegramMonitoringEnabled ? '✓' : '—') },
     { label: 'Веб', getValue: (p) => (p.limits.webMonitoringEnabled ? '✓' : '—') },
     { label: 'Аналитика', getValue: (p) => (p.limits.advancedAnalytics ? '✓' : '—') },
     {

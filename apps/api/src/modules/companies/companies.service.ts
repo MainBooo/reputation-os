@@ -158,6 +158,32 @@ export class CompaniesService {
     return member
   }
 
+  // Централизованная проверка maxSources — вызывается перед КАЖДЫМ созданием
+  // CompanySourceTarget (ручное добавление, онбординг, редактирование компании).
+  // TELEGRAM исключён из подсчёта: Telegram Scout — функция уровня компании,
+  // гейтится отдельно через telegramMonitoringEnabled и не должен расходовать
+  // слот maxSources, предназначенный для карточек Яндекс/2ГИС и WEB-страниц.
+  private async hasSourceSlotAvailable(workspaceId: string, maxSources: number): Promise<boolean> {
+    const limit = Number(maxSources)
+    if (limit < 0) return true
+
+    const currentSourcesCount = await this.prisma.companySourceTarget.count({
+      where: {
+        company: { workspaceId },
+        isActive: true,
+        source: { platform: { not: 'TELEGRAM' } }
+      }
+    })
+
+    return currentSourcesCount < limit
+  }
+
+  private async assertSourceSlotAvailable(workspaceId: string, maxSources: number) {
+    if (!(await this.hasSourceSlotAvailable(workspaceId, maxSources))) {
+      throw new ForbiddenException({ code: 'PLAN_LIMIT', feature: 'maxSources', limit: Number(maxSources) })
+    }
+  }
+
   private async ensureTwoGisSource(workspaceId: string) {
     let twoGisSource = await this.prisma.source.findFirst({
       where: {
@@ -614,6 +640,8 @@ export class CompaniesService {
 
     if (normalizedYandexUrl && !allowedPlatforms.includes('YANDEX')) {
       this.logger.log(`[CompanyCreate] skip yandex init companyId=${company.id} reason=platform_not_allowed`)
+    } else if (normalizedYandexUrl && !(await this.hasSourceSlotAvailable(dto.workspaceId, limits.maxSources))) {
+      this.logger.log(`[CompanyCreate] skip yandex init companyId=${company.id} reason=source_limit_reached`)
     } else if (normalizedYandexUrl) {
       const yandexSource = await this.ensureYandexSource(dto.workspaceId)
 
@@ -643,6 +671,8 @@ export class CompaniesService {
 
     if (normalizedTwoGisUrl && !allowedPlatforms.includes('TWOGIS')) {
       this.logger.log(`[CompanyCreate] skip 2gis init companyId=${company.id} reason=platform_not_allowed`)
+    } else if (normalizedTwoGisUrl && !(await this.hasSourceSlotAvailable(dto.workspaceId, limits.maxSources))) {
+      this.logger.log(`[CompanyCreate] skip 2gis init companyId=${company.id} reason=source_limit_reached`)
     } else if (normalizedTwoGisUrl) {
       const twoGisSource = await this.ensureTwoGisSource(dto.workspaceId)
 
@@ -677,7 +707,9 @@ export class CompaniesService {
       const existingWebTarget = await this.prisma.companySourceTarget.findFirst({
         where: { companyId: company.id, sourceId: webSource.id, externalUrl: null }
       })
-      if (!existingWebTarget) {
+      if (!existingWebTarget && !(await this.hasSourceSlotAvailable(dto.workspaceId, limits.maxSources))) {
+        this.logger.log(`[CompanyCreate] skip web init companyId=${company.id} reason=source_limit_reached`)
+      } else if (!existingWebTarget) {
         await this.prisma.companySourceTarget.create({
           data: {
             companyId: company.id,
@@ -726,6 +758,12 @@ export class CompaniesService {
     }
 
     await this.assertWorkspaceAccess(userId, company.workspaceId, 'write')
+
+    // Нужны только когда меняются URL источников — иначе не тратим лишний запрос.
+    const ent =
+      dto.twoGisUrl !== undefined || dto.yandexUrl !== undefined
+        ? await this.entitlements.getForWorkspace(company.workspaceId)
+        : null
 
     const updatedCompany = await this.prisma.company.update({
       where: { id },
@@ -784,6 +822,8 @@ export class CompaniesService {
 
             this.logger.log(`[TwoGisInit] target updated companyId=${id} targetId=${existingTarget.id}`)
           } else {
+            await this.assertSourceSlotAvailable(company.workspaceId, ent!.limits.maxSources)
+
             const target = await this.prisma.companySourceTarget.create({
               data: {
                 companyId: id,
@@ -846,6 +886,8 @@ export class CompaniesService {
             `[YandexInit] target updated companyId=${id} targetId=${existingTarget.id} sourceId=${yandexSource.id} url="${normalizedYandexUrl}"`
           )
         } else {
+          await this.assertSourceSlotAvailable(company.workspaceId, ent!.limits.maxSources)
+
           const target = await this.prisma.companySourceTarget.create({
             data: {
               companyId: id,
@@ -1350,16 +1392,7 @@ export class CompaniesService {
       }
     }
 
-    // maxSources enforcement
-    const maxSources = Number(ent.limits.maxSources)
-    if (maxSources >= 0) {
-      const currentSourcesCount = await this.prisma.companySourceTarget.count({
-        where: { company: { workspaceId: company.workspaceId }, isActive: true }
-      })
-      if (currentSourcesCount >= maxSources) {
-        throw new ForbiddenException({ code: 'PLAN_LIMIT', feature: 'maxSources', limit: maxSources })
-      }
-    }
+    await this.assertSourceSlotAvailable(company.workspaceId, ent.limits.maxSources)
 
     let sourceId: string | null = dto.sourceId || null
 

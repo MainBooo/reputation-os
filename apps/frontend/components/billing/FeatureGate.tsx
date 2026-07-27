@@ -6,15 +6,23 @@ import { getMyEntitlements, type BillingEntitlements } from '@/lib/api/billing'
 
 export type FeatureKey =
   | 'telegramNotifications'
+  | 'telegramMonitoringEnabled'
   | 'advancedAnalytics'
   | 'maxCompanies'
   | 'maxAiRepliesPerMonth'
 
 const FEATURE_NAMES: Record<FeatureKey, string> = {
   telegramNotifications: 'Telegram-уведомления',
+  telegramMonitoringEnabled: 'Поиск упоминаний в Telegram',
   advancedAnalytics: 'Расширенная аналитика',
   maxCompanies: 'Управление несколькими компаниями',
   maxAiRepliesPerMonth: 'AI-ответы на отзывы',
+}
+
+// Точечные описания для апсейл-блока — используются вместо общей фразы,
+// когда у фичи есть понятный порог тарифа (см. DefaultUpsell).
+const FEATURE_DESCRIPTIONS: Partial<Record<FeatureKey, string>> = {
+  telegramMonitoringEnabled: 'Поиск упоминаний в Telegram доступен с тарифа «Бизнес».',
 }
 
 function hasFeature(ent: BillingEntitlements, feature: FeatureKey): boolean {
@@ -35,7 +43,7 @@ function DefaultUpsell({ feature }: { feature: FeatureKey }) {
             🔒 {FEATURE_NAMES[feature]}
           </div>
           <div className="mt-1 text-xs text-zinc-500">
-            Эта функция доступна на более высоком тарифе.
+            {FEATURE_DESCRIPTIONS[feature] ?? 'Эта функция доступна на более высоком тарифе.'}
           </div>
         </div>
         <button
