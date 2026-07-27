@@ -37,8 +37,19 @@ export class SystemHealthService {
       lastSync,
       worker,
       telegram: { status: 'unknown' as const, reason: 'No bot health probe available' },
-      push: { status: 'unknown' as const, reason: 'No probe endpoint configured' }
+      push: { status: 'unknown' as const, reason: 'No probe endpoint configured' },
+      ai: this.checkAiConfig()
     }
+  }
+
+  // Не делает реальный запрос к провайдеру (платно и медленно для health-check,
+  // который может опрашиваться часто) — только проверяет, что конфигурация
+  // вообще присутствует. Реальные сбои провайдера видны в логах AiReplyDraftsService.
+  private checkAiConfig() {
+    const configured = Boolean(process.env.YANDEX_GPT_API_KEY && process.env.YANDEX_GPT_FOLDER_ID)
+    return configured
+      ? { status: 'ok' as const }
+      : { status: 'error' as const, reason: 'AI: misconfigured — YANDEX_GPT_API_KEY/YANDEX_GPT_FOLDER_ID missing' }
   }
 
   private async checkDb() {
