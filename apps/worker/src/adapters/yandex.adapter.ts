@@ -1,6 +1,7 @@
 import { chromium } from 'playwright'
 import { mkdir, writeFile } from 'fs/promises'
 import { join } from 'path'
+import { assertSafeExternalUrl } from '../common/security/safe-url'
 
 type ExternalMention = {
   externalMentionId: string
@@ -214,6 +215,11 @@ export class YandexAdapter {
     try {
       const normalizedUrl = this.normalizeReviewsUrl(target.externalUrl)
 
+      // normalizeReviewsUrl передаёт вход как есть, если он не совпадает с
+      // ожидаемым паттерном yandex.ru/maps — без этой проверки Playwright
+      // (реальный браузер, более мощная SSRF-поверхность, чем обычный fetch)
+      // мог бы перейти на любой внутренний адрес.
+      await assertSafeExternalUrl(normalizedUrl)
 
       browser = await chromium.launch({
         headless: true,

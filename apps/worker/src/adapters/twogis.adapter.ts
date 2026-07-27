@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common'
 import { chromium } from 'playwright'
 import crypto from 'crypto'
+import { assertSafeExternalUrl } from '../common/security/safe-url'
 
 type ExternalMention = {
   externalMentionId: string
@@ -122,6 +123,11 @@ export class TwoGisAdapter {
 
     const normalizedUrl = normalizeReviewsUrl(target.externalUrl)
     const firmId = extractFirmId(normalizedUrl)
+
+    // normalizeReviewsUrl передаёт вход как есть, если он не совпадает с
+    // ожидаемым паттерном 2gis.ru — без этой проверки Playwright мог бы
+    // перейти на произвольный внутренний адрес (SSRF).
+    await assertSafeExternalUrl(normalizedUrl)
 
     const browser = await chromium.launch({
       headless: true,
