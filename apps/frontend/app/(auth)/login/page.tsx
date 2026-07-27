@@ -217,9 +217,16 @@ export default function LoginPage() {
                     Запомнить меня
                   </button>
 
-                  <button type="button" className="text-sm font-medium text-blue-300 transition hover:text-fuchsia-100">
-                    Забыли пароль?
-                  </button>
+                  {/* Самостоятельный сброс пароля пока не реализован (нет email-инфраструктуры) —
+                      честная ссылка в поддержку вместо кнопки, которая ничего не делает. */}
+                  <a
+                    href={process.env.NEXT_PUBLIC_SUPPORT_TELEGRAM_URL || 'https://t.me/reputationos_support'}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm font-medium text-blue-300 transition hover:text-fuchsia-100"
+                  >
+                    Забыли пароль? Написать в поддержку
+                  </a>
                 </div>
 
                 {error ? (
