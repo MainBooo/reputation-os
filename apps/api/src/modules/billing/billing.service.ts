@@ -17,6 +17,16 @@ export interface YookassaWebhookPayload {
   }
 }
 
+// Форма ответа GET /v3/payments/{id} из реального API ЮKassa — то немногое,
+// что нам нужно для верификации. Это единственный источник истины: полю
+// webhook.object.* не доверяем ни при каких обстоятельствах (см. handleWebhook).
+interface YookassaRemotePayment {
+  id: string
+  status: string
+  paid?: boolean
+  amount?: { value: string; currency: string }
+}
+
 @Injectable()
 export class BillingService {
   private readonly logger = new Logger(BillingService.name)
@@ -74,33 +84,114 @@ export class BillingService {
     return { paymentId: payment.id, confirmationUrl: providerPayment.confirmationUrl }
   }
 
+  // Webhook — это не более чем "подсказка перепроверить платёж X". Тело запроса
+  // (status/amount/metadata) НИКОГДА не используется напрямую для активации —
+  // оно приходит от неаутентифицированного HTTP-эндпоинта и легко подделывается
+  // (сам providerPaymentId виден пользователю в confirmationUrl после чекаута).
+  // Единственный источник истины — повторный server-to-server запрос к API
+  // ЮKassa нашими собственными credentials (verifyPaymentWithProvider).
   async handleWebhook(payload: YookassaWebhookPayload) {
-    this.logger.log(`Billing webhook received: ${payload?.event ?? 'unknown'}`)
-
     const event = payload?.event
-    const providerPaymentId = payload?.object?.id
+    this.logger.log(`Billing webhook received: ${event ?? 'unknown'}`)
 
+    if (event !== 'payment.succeeded' && event !== 'payment.canceled') {
+      return { ok: true, ignored: true }
+    }
+
+    const providerPaymentId = payload?.object?.id
     if (!providerPaymentId) throw new BadRequestException('object.id is required')
 
-    if (event === 'payment.succeeded') {
-      return this.handlePaymentSucceeded(payload, providerPaymentId)
-    }
-
-    if (event === 'payment.canceled') {
-      return this.handlePaymentCanceled(payload, providerPaymentId)
-    }
-
-    return { ok: true, ignored: true }
-  }
-
-  private async handlePaymentSucceeded(payload: YookassaWebhookPayload, providerPaymentId: string) {
     const payment = await this.prisma.payment.findUnique({ where: { providerPaymentId } })
-
     if (!payment) throw new NotFoundException('Payment not found')
-    if (payment.status === PaymentStatus.SUCCEEDED) {
-      this.logger.log(`payment.succeeded already processed: ${providerPaymentId}`)
+
+    if (event === 'payment.succeeded') {
+      if (payment.status === PaymentStatus.SUCCEEDED) {
+        this.logger.log(`payment.succeeded already processed: ${providerPaymentId}`)
+        return { ok: true, alreadyProcessed: true }
+      }
+      return this.confirmAndActivate(payment)
+    }
+
+    if (payment.status === PaymentStatus.CANCELED) {
+      this.logger.log(`payment.canceled already processed: ${providerPaymentId}`)
       return { ok: true, alreadyProcessed: true }
     }
+    return this.confirmAndCancel(payment)
+  }
+
+  // Запрашивает состояние платежа напрямую у ЮKassa. MOCK-провайдер (dev/test,
+  // не используется в проде — там BILLING_PROVIDER=yookassa) не имеет реального
+  // API для перепроверки, поэтому для него подтверждением служит сам факт
+  // локальной записи Payment — реальных денег там нет по определению.
+  private async verifyPaymentWithProvider(providerPaymentId: string): Promise<YookassaRemotePayment> {
+    if (this.provider.name !== 'YOOKASSA') {
+      return { id: providerPaymentId, status: 'succeeded', paid: true }
+    }
+
+    const shopId = process.env.YOOKASSA_SHOP_ID
+    const secretKey = process.env.YOOKASSA_SECRET_KEY
+
+    if (!shopId || !secretKey) {
+      this.logger.error('YooKassa credentials are not configured — cannot verify webhook payment')
+      throw new BadRequestException('Payment verification is not configured')
+    }
+
+    const credentials = Buffer.from(`${shopId}:${secretKey}`).toString('base64')
+
+    let response: Response
+    try {
+      response = await fetch(`https://api.yookassa.ru/v3/payments/${providerPaymentId}`, {
+        headers: { Authorization: `Basic ${credentials}` },
+        signal: AbortSignal.timeout(8000)
+      })
+    } catch (err) {
+      this.logger.error(`YooKassa payment verification request failed: ${(err as Error).message}`)
+      throw new BadRequestException('Payment verification request failed')
+    }
+
+    if (!response.ok) {
+      this.logger.warn(`YooKassa payment verification returned HTTP ${response.status} for ${providerPaymentId}`)
+      throw new BadRequestException('Payment verification failed')
+    }
+
+    const data = (await response.json()) as YookassaRemotePayment
+    if (!data?.id || data.id !== providerPaymentId) {
+      this.logger.warn(`YooKassa payment verification id mismatch for ${providerPaymentId}`)
+      throw new BadRequestException('Payment verification mismatch')
+    }
+
+    return data
+  }
+
+  private assertAmountMatches(payment: { amount: number; currency: string }, remote: YookassaRemotePayment) {
+    if (!remote.amount) return // MOCK provider / no amount reported — nothing to cross-check
+
+    const remoteValue = Number(remote.amount.value)
+    const expected = Number(payment.amount)
+
+    if (!Number.isFinite(remoteValue) || Math.abs(remoteValue - expected) > 0.01) {
+      this.logger.warn(`Payment amount mismatch: expected=${expected} remote=${remote.amount.value}`)
+      throw new BadRequestException('Payment amount mismatch')
+    }
+
+    if (remote.amount.currency && remote.amount.currency !== payment.currency) {
+      this.logger.warn(`Payment currency mismatch: expected=${payment.currency} remote=${remote.amount.currency}`)
+      throw new BadRequestException('Payment currency mismatch')
+    }
+  }
+
+  private async confirmAndActivate(payment: Awaited<ReturnType<typeof this.prisma.payment.findUnique>> & Record<string, any>) {
+    const providerPaymentId = payment.providerPaymentId as string
+    const remote = await this.verifyPaymentWithProvider(providerPaymentId)
+
+    if (remote.status !== 'succeeded' || remote.paid === false) {
+      this.logger.warn(
+        `Webhook claimed payment.succeeded but provider reports status=${remote.status} paid=${remote.paid} for ${providerPaymentId} — not activating`
+      )
+      throw new BadRequestException('Payment is not confirmed as succeeded by the provider')
+    }
+
+    this.assertAmountMatches(payment, remote)
 
     const plan = await this.prisma.plan.findUnique({ where: { code: payment.planCode } })
     if (!plan) throw new NotFoundException('Plan not found')
@@ -129,7 +220,8 @@ export class BillingService {
         data: {
           status: PaymentStatus.SUCCEEDED,
           paidAt: now,
-          rawPayload: payload as Prisma.InputJsonValue
+          // Сохраняем перепроверенный ответ провайдера, а не исходное (недоверенное) тело webhook.
+          rawPayload: remote as unknown as Prisma.InputJsonValue
         }
       }),
       this.prisma.subscription.upsert({
@@ -161,13 +253,15 @@ export class BillingService {
     return { ok: true }
   }
 
-  private async handlePaymentCanceled(payload: YookassaWebhookPayload, providerPaymentId: string) {
-    const payment = await this.prisma.payment.findUnique({ where: { providerPaymentId } })
+  private async confirmAndCancel(payment: Awaited<ReturnType<typeof this.prisma.payment.findUnique>> & Record<string, any>) {
+    const providerPaymentId = payment.providerPaymentId as string
+    const remote = await this.verifyPaymentWithProvider(providerPaymentId)
 
-    if (!payment) throw new NotFoundException('Payment not found')
-    if (payment.status === PaymentStatus.CANCELED) {
-      this.logger.log(`payment.canceled already processed: ${providerPaymentId}`)
-      return { ok: true, alreadyProcessed: true }
+    if (remote.status !== 'canceled') {
+      this.logger.warn(
+        `Webhook claimed payment.canceled but provider reports status=${remote.status} for ${providerPaymentId} — ignoring`
+      )
+      return { ok: true, ignored: true }
     }
 
     await this.prisma.payment.update({
@@ -175,7 +269,7 @@ export class BillingService {
       data: {
         status: PaymentStatus.CANCELED,
         canceledAt: new Date(),
-        rawPayload: payload as Prisma.InputJsonValue
+        rawPayload: remote as unknown as Prisma.InputJsonValue
       }
     })
 
@@ -203,41 +297,21 @@ export class BillingService {
 
     if (!pending.length) return { synced: 0 }
 
-    const shopId = process.env.YOOKASSA_SHOP_ID
-    const secretKey = process.env.YOOKASSA_SECRET_KEY
-
-    if (!shopId || !secretKey) return { synced: 0 }
-
-    const credentials = Buffer.from(`${shopId}:${secretKey}`).toString('base64')
     let synced = 0
 
     for (const payment of pending) {
       try {
-        const resp = await fetch(`https://api.yookassa.ru/v3/payments/${payment.providerPaymentId}`, {
-          headers: { Authorization: `Basic ${credentials}` },
-          signal: AbortSignal.timeout(8000)
-        })
+        const remote = await this.verifyPaymentWithProvider(payment.providerPaymentId!)
 
-        if (!resp.ok) continue
-
-        const data: any = await resp.json()
-        const remoteStatus: string = data?.status ?? ''
-
-        if (remoteStatus === 'succeeded') {
-          await this.handlePaymentSucceeded(
-            { event: 'payment.succeeded', object: { id: payment.providerPaymentId!, status: 'succeeded', metadata: {} } },
-            payment.providerPaymentId!
-          )
+        if (remote.status === 'succeeded' && remote.paid !== false) {
+          await this.confirmAndActivate(payment)
           synced++
-        } else if (remoteStatus === 'canceled') {
-          await this.handlePaymentCanceled(
-            { event: 'payment.canceled', object: { id: payment.providerPaymentId!, status: 'canceled', metadata: {} } },
-            payment.providerPaymentId!
-          )
+        } else if (remote.status === 'canceled') {
+          await this.confirmAndCancel(payment)
           synced++
         }
       } catch {
-        // сетевая ошибка — пропускаем, попробуем в следующий раз
+        // верификация недоступна/платёж ещё не готов — пропускаем, попробуем в следующий раз
       }
     }
 

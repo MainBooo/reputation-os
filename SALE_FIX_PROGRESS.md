@@ -4,7 +4,7 @@
 
 | ID | Проблема | Подтверждена | Статус | Изменённые файлы | Тест | Комментарий |
 |---|---|---:|---|---|---|---|
-| P-01 | Подделка webhook ЮKassa (payment.succeeded без проверки) | — | NOT_STARTED | — | — | BLOCKER |
+| P-01 | Подделка webhook ЮKassa (payment.succeeded без проверки) | Да, воспроизведена по коду (billing.controller.ts:71-75, billing.service.ts handleWebhook доверял payload.object.status) | FIXED | apps/api/src/modules/billing/billing.service.ts, billing.controller.ts, billing.service.spec.ts, common/rate-limit/rate-limit.config.ts | `pnpm --filter api test` — 14/14 billing тестов зелёные (6 старых + 8 новых, включая forged-succeeded/wrong-amount/wrong-currency/provider-down/timeout/metadata-ignored) | Webhook больше не активирует подписку по телу запроса — только providerPaymentId используется как ключ, реальный статус/сумма/валюта перепроверяются GET-запросом к api.yookassa.ru нашими credentials. MOCK-провайдер (dev, не в проде) не требует внешней верификации. Добавлен IP-based rate limit на /billing/yookassa/webhook |
 | P-02 | SSRF через `externalUrl` WEB-источника | — | NOT_STARTED | — | — | BLOCKER |
 | P-03 | AI-ответы не работают в проде (ENV только в worker) | — | NOT_STARTED | — | — | CRITICAL |
 | P-04 | Telegram Scout — единственный аккаунт на всех клиентов | — | NOT_STARTED | — | — | CRITICAL, roadmap-hardening без полной multi-account архитектуры |

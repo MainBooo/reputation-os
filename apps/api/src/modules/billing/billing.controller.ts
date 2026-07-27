@@ -9,7 +9,7 @@ import { BillingService, YookassaWebhookPayload } from './billing.service'
 import { CreateCheckoutDto } from './dto/create-checkout.dto'
 import { AppThrottlerGuard } from '../../common/rate-limit/app-throttler.guard'
 import { RATE_LIMITS } from '../../common/rate-limit/rate-limit.config'
-import { userTracker } from '../../common/rate-limit/rate-limit-trackers'
+import { userTracker, ipTracker } from '../../common/rate-limit/rate-limit-trackers'
 
 @Controller('billing')
 export class BillingController {
@@ -64,10 +64,16 @@ export class BillingController {
     return this.billing.syncPendingPayments(user.id)
   }
 
-  // ── YooKassa: webhook (no secret header — YooKassa uses IP allowlisting) ──
+  // ── YooKassa: webhook ───────────────────────────────────────────────────────
+  // Тело запроса НЕ является источником истины: BillingService.handleWebhook
+  // берёт из него только providerPaymentId и перепроверяет реальный статус
+  // платежа прямым server-to-server запросом к API ЮKassa нашими credentials —
+  // поэтому подделать payment.succeeded, зная свой providerPaymentId (виден в
+  // confirmationUrl), больше нельзя. Rate-limit — щадящий, чтобы не блокировать
+  // легитимные ретраи ЮKassa, но пресекать перебор providerPaymentId с адреса.
   // Idempotent: repeated events are safely ignored.
-  // Намеренно без AppThrottlerGuard — это server-to-server callback от ЮKassa
-  // (может ретраить события), а не публичный пользовательский эндпоинт.
+  @UseGuards(AppThrottlerGuard)
+  @Throttle({ default: { ...RATE_LIMITS.billingWebhook, getTracker: ipTracker } })
   @Post('yookassa/webhook')
   @HttpCode(200)
   handleYookassaWebhook(@Body() payload: YookassaWebhookPayload) {
