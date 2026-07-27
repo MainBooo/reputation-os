@@ -160,22 +160,11 @@ export class CompaniesService {
 
   // Централизованная проверка maxSources — вызывается перед КАЖДЫМ созданием
   // CompanySourceTarget (ручное добавление, онбординг, редактирование компании).
-  // TELEGRAM исключён из подсчёта: Telegram Scout — функция уровня компании,
-  // гейтится отдельно через telegramMonitoringEnabled и не должен расходовать
-  // слот maxSources, предназначенный для карточек Яндекс/2ГИС и WEB-страниц.
+  // Счётчик и правило исключения TELEGRAM живут в EntitlementsService — единая
+  // точка, используемая также SyncService, чтобы не дублировать один и тот же
+  // Prisma-запрос в трёх местах (было — рассинхронизировалось при правках).
   private async hasSourceSlotAvailable(workspaceId: string, maxSources: number): Promise<boolean> {
-    const limit = Number(maxSources)
-    if (limit < 0) return true
-
-    const currentSourcesCount = await this.prisma.companySourceTarget.count({
-      where: {
-        company: { workspaceId },
-        isActive: true,
-        source: { platform: { not: 'TELEGRAM' } }
-      }
-    })
-
-    return currentSourcesCount < limit
+    return this.entitlements.hasSourceSlotAvailable(workspaceId, maxSources)
   }
 
   private async assertSourceSlotAvailable(workspaceId: string, maxSources: number) {

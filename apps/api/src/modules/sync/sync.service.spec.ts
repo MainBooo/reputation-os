@@ -128,6 +128,14 @@ describe('SyncService.startWebSync — billing gates', () => {
           webMonitoringEnabled: overrides.webMonitoringEnabled ?? true,
           maxSources: overrides.maxSources ?? -1
         }
+      }),
+      // Real check now lives in EntitlementsService (dedup — see companies.service.ts /
+      // entitlements.service.ts); delegate to the same count mock this fixture already sets up.
+      hasSourceSlotAvailable: jest.fn(async (_workspaceId: string, maxSources: number) => {
+        const limit = Number(maxSources)
+        if (limit < 0) return true
+        const count = await prisma.companySourceTarget.count()
+        return count < limit
       })
     }
 

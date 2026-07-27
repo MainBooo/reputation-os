@@ -104,6 +104,27 @@ export class EntitlementsService {
     if (!member) throw new ForbiddenException('No access to workspace')
   }
 
+  // Единственное место, считающее источники против maxSources — раньше эта
+  // ровно одна и та же выборка (TELEGRAM исключён: Scout гейтится отдельно
+  // через telegramMonitoringEnabled и не расходует maxSources) была
+  // продублирована в CompaniesService, SyncService и здесь же по отдельности,
+  // с риском разъехаться при следующем изменении тарифных правил.
+  async countBillableSources(workspaceId: string): Promise<number> {
+    return this.prisma.companySourceTarget.count({
+      where: {
+        company: { workspaceId },
+        isActive: true,
+        source: { platform: { not: 'TELEGRAM' } }
+      }
+    })
+  }
+
+  async hasSourceSlotAvailable(workspaceId: string, maxSources: number): Promise<boolean> {
+    const limit = Number(maxSources)
+    if (limit < 0) return true
+    return (await this.countBillableSources(workspaceId)) < limit
+  }
+
   async getForWorkspace(workspaceId: string): Promise<WorkspaceEntitlements> {
     const monthStart = new Date()
     monthStart.setUTCDate(1)
@@ -120,16 +141,7 @@ export class EntitlementsService {
         where: { company: { workspaceId }, createdAt: { gte: monthStart } }
       }),
       this.prisma.workspace.findUnique({ where: { id: workspaceId }, select: { isActive: true } }),
-      // Тот же счётчик, что и в CompaniesService.assertSourceSlotAvailable: активные
-      // карточки Яндекс/2ГИС + WEB-страницы. TELEGRAM исключён — Telegram Scout не
-      // расходует maxSources (гейтится отдельно через telegramMonitoringEnabled).
-      this.prisma.companySourceTarget.count({
-        where: {
-          company: { workspaceId },
-          isActive: true,
-          source: { platform: { not: 'TELEGRAM' } }
-        }
-      })
+      this.countBillableSources(workspaceId)
     ])
 
     let planCode: PlanCode = PlanCode.FREE

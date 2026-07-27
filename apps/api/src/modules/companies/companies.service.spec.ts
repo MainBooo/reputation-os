@@ -28,6 +28,15 @@ const mockEntitlements = {
     workspaceActive: true,
     limits: { maxCompanies: -1, maxSources: -1, platforms: ['YANDEX', 'TWOGIS'], webMonitoringEnabled: false },
   }),
+  // Delegates to the same companySourceTarget.count mock the tests already
+  // configure per-scenario, now that the actual count query lives in
+  // EntitlementsService (see entitlements dedup — was triplicated before).
+  hasSourceSlotAvailable: jest.fn(async (_workspaceId: string, maxSources: number) => {
+    const limit = Number(maxSources)
+    if (limit < 0) return true
+    const count = await mockPrisma.companySourceTarget.count()
+    return count < limit
+  }),
 }
 
 describe('CompaniesService — workspace access control', () => {
@@ -193,7 +202,11 @@ describe('CompaniesService — maxSources enforcement', () => {
     expect(mockPrisma.companySourceTarget.create).not.toHaveBeenCalled()
   })
 
-  it('excludes TELEGRAM sources from the maxSources count', async () => {
+  // The TELEGRAM-exclusion rule itself now lives in EntitlementsService
+  // (see entitlements.service.spec.ts) — this only proves CompaniesService
+  // actually consults it before creating a source, rather than a stale
+  // duplicated copy of the same query.
+  it('delegates the maxSources check to EntitlementsService.hasSourceSlotAvailable', async () => {
     mockEntitlements.getForWorkspace.mockResolvedValue({
       workspaceActive: true,
       limits: { maxCompanies: -1, maxSources: 6, platforms: ['YANDEX'], webMonitoringEnabled: false },
@@ -210,11 +223,7 @@ describe('CompaniesService — maxSources enforcement', () => {
       yandexUrl: 'https://yandex.ru/maps/org/acme/123',
     } as any)
 
-    expect(mockPrisma.companySourceTarget.count).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({ source: { platform: { not: 'TELEGRAM' } } }),
-      }),
-    )
+    expect(mockEntitlements.hasSourceSlotAvailable).toHaveBeenCalledWith('ws-1', 6)
   })
 
   // Regression: update() (PATCH /companies/:id, e.g. attaching a Yandex/2GIS url to an

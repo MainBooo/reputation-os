@@ -408,21 +408,10 @@ export class SyncService {
 
     if (existingTarget) return existingTarget
 
-    // Тот же лимит и то же исключение TELEGRAM из подсчёта, что и в
-    // CompaniesService.assertSourceSlotAvailable — WEB-таргет расходует maxSources
-    // наравне с карточками Яндекс/2ГИС.
-    const limit = Number(maxSources)
-    if (limit >= 0) {
-      const currentSourcesCount = await this.prisma.companySourceTarget.count({
-        where: {
-          company: { workspaceId: company.workspaceId },
-          isActive: true,
-          source: { platform: { not: 'TELEGRAM' } }
-        }
-      })
-      if (currentSourcesCount >= limit) {
-        throw new ForbiddenException({ code: 'PLAN_LIMIT', feature: 'maxSources', limit })
-      }
+    // WEB-таргет расходует maxSources наравне с карточками Яндекс/2ГИС — тот же
+    // общий счётчик, что и в CompaniesService (см. EntitlementsService.hasSourceSlotAvailable).
+    if (!(await this.entitlements.hasSourceSlotAvailable(company.workspaceId, maxSources))) {
+      throw new ForbiddenException({ code: 'PLAN_LIMIT', feature: 'maxSources', limit: Number(maxSources) })
     }
 
     return this.prisma.companySourceTarget.create({
