@@ -16,15 +16,17 @@
 | P-09 | 5 из 7 типов уведомлений не реализованы, заявлены на фронте | — | NOT_STARTED | — | — | HIGH |
 | P-10 | Юр.документы на личный ИНН/почту | — | NOT_STARTED | — | — | MEDIUM |
 | P-11 | Инфраструктура переплетена с чужими проектами на VPS | — | NOT_STARTED | — | — | MEDIUM |
-| P-12 | Незашифрованные `.env`-бэкапы на диске | — | NOT_STARTED | — | — | MEDIUM |
+| P-12 | Незашифрованные `.env`-бэкапы на диске | Да, подтверждена (apps/worker/.env.backup-*, .env.pre-apiid-*, оба 0600 но незашифрованы) | FIXED | Удалены с диска (не были в git — `.env.*` уже в .gitignore), актуальный apps/worker/.env не тронут | Файлов нет — `ls apps/worker/.env*` показывает только `.env`/`.env.example` | Заодно: удалён `storage/yandex-debug/` (364MB debug-дампов, был в .gitignore, не в git), `apps/landing/*.bak.*` (5 файлов, тоже не в git), `cookies.txt` (пустой curl-jar) |
 | P-13 | JWT без refresh/revocation, hardcoded fallback-секрет | — | NOT_STARTED | — | — | MEDIUM |
 | P-14 | Аналитика считает IRRELEVANT-упоминания в KPI | — | NOT_STARTED | — | — | MEDIUM |
 | P-15 | Тройное дублирование entitlement-фильтра (`platform !== TELEGRAM`) | — | NOT_STARTED | — | — | MEDIUM |
-| P-16 | Мусор закоммичен в git (`7.6.0`, `bot-scaffold.tar`, `gen-token.js` x2) | — | NOT_STARTED | — | — | LOW |
+| P-16 | Мусор закоммичен в git (`7.6.0`, `bot-scaffold.tar`, `gen-token.js` x2) | Да, подтверждена | PARTIALLY_FIXED | `git rm 7.6.0 apps/bot-scaffold.tar apps/api/gen-token` (пустой 0-байтный файл-опечатка) | `git status` чист после коммита | `gen-token.js` (корень и apps/api) НЕ удалены осознанно — рабочие dev-утилиты, реально использованы в этой же сессии для live-теста AI-фикса (P-03) и internal-endpoint фикса (P-07); дублирование двух копий — минорная проблема, не мусор |
 | P-17 | Нет bulk-операций и полнотекстового поиска в Inbox | — | NOT_STARTED | — | — | LOW, roadmap |
 | P-18 | Restore backup не задокументирован/не протестирован | — | NOT_STARTED | — | — | LOW |
 | — | Password reset — кнопка без функционала | — | NOT_STARTED | — | — | Из раздела 5 аудита, не в таблице P-XX |
 | — | Приглашения без email-доставки | — | NOT_STARTED | — | — | Из раздела 5 аудита |
 | — | Незакоммиченная работа (network hub / entitlements) в рабочем дереве | — | NOT_STARTED | — | — | Базовое состояние, требует разбора перед стартом |
+
+| — | Прод-cron `*/30 * * * * prisma db seed` | Да, подтверждена (`crontab -l`) | FIXED | crontab (не git-файл) — снят, бэкап прежнего crontab сохранён в scratchpad сессии | `crontab -l` после изменения показывает только backup+healthcheck | Backup (03:15 ежедневно) и healthcheck (каждые 5 мин) НЕ тронуты |
 
 Статусы: NOT_STARTED / IN_PROGRESS / FIXED / PARTIALLY_FIXED / NOT_REPRODUCED / DEFERRED / REQUIRES_EXTERNAL_ACTION.
