@@ -1261,12 +1261,60 @@ export class CompaniesService {
       }
     })
 
+    // "Root" WEB target = the bootstrap CompanySourceTarget that the toggle
+    // operates on, created by either of two paths: companies.service.ts
+    // create() (no config at all, externalUrl null) or
+    // sync.service.ts ensureWebBootstrapTarget()/startWebSync (config.origin
+    // 'auto-bootstrap' + mode 'discovery', externalUrl = company.website —
+    // may be non-null). Discovered/promoted candidates use a different
+    // origin ('auto' / 'auto-bootstrap-backfill'), so checking config alone
+    // (not externalUrl) reliably tells root targets apart from those.
+    const rootTargets = webTargets.filter((target: any) => {
+      const config = target.config && typeof target.config === 'object' && !Array.isArray(target.config)
+        ? target.config as Record<string, any>
+        : {}
+      if (!config.origin) return true
+      return config.origin === 'auto-bootstrap' && config.mode === 'discovery'
+    })
+
+    const enabledOverall = rootTargets.some((t: any) => t.isActive !== false && t.syncMentionsEnabled !== false)
+
+    const watchedPages = await this.prisma.watchedPage.findMany({
+      where: { companyId },
+      select: { lastCheckedAt: true, consecutiveErrors: true, disabledReason: true }
+    })
+
+    const lastRunAt = watchedPages
+      .map((p) => p.lastCheckedAt)
+      .filter((d): d is Date => Boolean(d))
+      .sort((a, b) => b.getTime() - a.getTime())[0] || null
+
+    const hasErrors = watchedPages.some((p) => p.consecutiveErrors > 0 || Boolean(p.disabledReason))
+
+    const searchState = !enabledOverall
+      ? 'disabled'
+      : !lastRunAt
+        ? 'never_run'
+        : hasErrors
+          ? 'error'
+          : 'ok'
+
+    const totalMentionsFound = activeGroups.reduce((sum, g) => sum + Number(g.mentionsCount || 0), 0)
+
     return {
       summary: {
         activeGroupsCount: activeGroups.length,
         activeTargetsCount: activeTargets.length,
         discoveredCount: discovered.length,
         latestSignalsCount: latestSignals.length
+      },
+      status: {
+        enabled: enabledOverall,
+        hasRootTarget: rootTargets.length > 0,
+        rootTargetIds: rootTargets.map((t: any) => t.id),
+        lastRunAt,
+        totalMentionsFound,
+        searchState
       },
       activeGroups,
       discovered: discovered.slice(0, 50),

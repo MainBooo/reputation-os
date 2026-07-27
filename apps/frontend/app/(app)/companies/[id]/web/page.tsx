@@ -1,6 +1,7 @@
 import EmptyState from '@/components/ui/EmptyState'
 import PageHeader from '@/components/ui/PageHeader'
 import DiscoveryCenter from '@/components/web/DiscoveryCenter'
+import NetworkOverviewSection from '@/components/network/NetworkOverviewSection'
 import { getCompany, getCompanySourceTargets, getCompanyWebSourcesOverview } from '@/lib/api/companies'
 
 export const dynamic = 'force-dynamic'
@@ -29,8 +30,10 @@ export default async function CompanyWebPage({ params }: { params: { id: string 
     <div className="space-y-5 pb-28">
       <PageHeader
         title="Сеть"
-        subtitle="Управляйте внешними источниками мониторинга. Упоминания и сигналы попадают в Inbox."
+        subtitle="Управляйте дополнительными источниками мониторинга — WEB и Telegram. Упоминания и сигналы попадают в Inbox."
       />
+
+      <NetworkOverviewSection companyId={params.id} workspaceId={company.workspaceId} />
 
       <DiscoveryCenter companyId={params.id} workspaceId={company.workspaceId} initialTargets={targets} initialOverview={webOverview} />
     </div>

@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useMetrica } from 'next-yandex-metrica'
-import { Sparkles, Check, Star } from 'lucide-react'
+import { Sparkles, Check, Star, Gift } from 'lucide-react'
 import Card from '@/components/ui/Card'
 import {
   getBillingPlans,
@@ -133,6 +133,47 @@ function buildSummaryFeatures(plan: BillingPlan): string[] {
   if (plan.limits.advancedAnalytics) f.push('Расширенная аналитика')
   if (plan.code === 'AGENCY') f.push('Для агентств и сетевых компаний')
   return f
+}
+
+// ─── Free plan highlight ────────────────────────────────────────────────────
+// Реальные возможности FREE — те же данные (plan.limits), что и у платных
+// тарифов, просто отрисованы отдельным блоком, т.к. FREE не участвует в
+// выборе тарифа на этой странице (см. фильтр `priceMonthly > 0` в CheckoutInner).
+
+function FreePlanHighlight({ plan }: { plan: BillingPlan }) {
+  const groups = buildFeatureGroups(plan)
+
+  return (
+    <Card className="mb-5 border-emerald-300/15 p-5">
+      <div className="flex items-center gap-2">
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-emerald-300/25 bg-emerald-400/[0.08] text-emerald-300">
+          <Gift className="h-4 w-4" />
+        </div>
+        <div>
+          <div className="text-sm font-semibold text-white">Что входит в {plan.name}</div>
+          <div className="text-xs text-zinc-500">Бесплатно, без ограничения по времени</div>
+        </div>
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-4">
+        {groups.map((group) => (
+          <div key={group.label}>
+            <div className="mb-1 text-[9px] font-semibold uppercase tracking-widest text-zinc-600">
+              {group.label}
+            </div>
+            <ul className="space-y-1">
+              {group.items.map((f, i) => (
+                <li key={i} className="flex items-start gap-1.5 text-xs text-zinc-300">
+                  <Check className="mt-px h-3 w-3 shrink-0 text-emerald-400" />
+                  <span>{f.label}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </Card>
+  )
 }
 
 // ─── PlanCard ───────────────────────────────────────────────────────────────
@@ -334,7 +375,7 @@ function CheckoutInner() {
   const { entitlements } = useSubscription()
   const { reachGoal } = useMetrica()
 
-  const [plans, setPlans] = useState<BillingPlan[]>([])
+  const [allPlans, setAllPlans] = useState<BillingPlan[]>([])
   const [selectedCode, setSelectedCode] = useState(initialPlan)
   const [period, setPeriod] = useState<'monthly' | 'yearly'>('monthly')
   const [step, setStep] = useState<'select' | 'success' | 'error'>('select')
@@ -346,13 +387,18 @@ function CheckoutInner() {
     syncPendingPayments().catch(() => {})
     getBillingPlans()
       .then((data) => {
-        const paid = (Array.isArray(data) ? data : []).filter((p) => p.priceMonthly > 0)
-        setPlans(paid)
+        const all = Array.isArray(data) ? data : []
+        setAllPlans(all)
+        const paid = all.filter((p) => p.priceMonthly > 0)
         if (!initialPlan && paid[0]) setSelectedCode(paid[0].code)
       })
       .finally(() => setLoading(false))
   }, [initialPlan])
 
+  // Выбор тарифа на этой странице — только платные; FREE не продаётся, но её
+  // реальные лимиты показываются отдельным блоком ниже (FreePlanHighlight).
+  const plans = allPlans.filter((p) => p.priceMonthly > 0)
+  const freePlan = allPlans.find((p) => p.code === 'FREE')
   const selected = plans.find((p) => p.code === selectedCode)
 
   async function handleCheckout() {
@@ -459,6 +505,8 @@ function CheckoutInner() {
       <div className="mb-5 text-xs text-zinc-500">
         Безопасная оплата через ЮKassa · 7 дней бесплатного доступа к тарифу Бизнес при регистрации
       </div>
+
+      {freePlan && <FreePlanHighlight plan={freePlan} />}
 
       {/* Trial banner */}
       {isTrialActive && (

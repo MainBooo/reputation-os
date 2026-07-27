@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import clsx from 'clsx'
-import { BarChart3, Building2, Clock3, Globe2, Inbox } from 'lucide-react'
+import { BarChart3, Building2, Clock3, Globe2, Inbox, Send } from 'lucide-react'
 
 export default function CompanyTabs({ companyId }: { companyId: string }) {
   const pathname = usePathname()
@@ -12,6 +12,7 @@ export default function CompanyTabs({ companyId }: { companyId: string }) {
     { href: `/companies/${companyId}`, label: 'Обзор', icon: Building2 },
     { href: `/companies/${companyId}/inbox`, label: 'Inbox', icon: Inbox },
     { href: `/companies/${companyId}/web`, label: 'Сеть', icon: Globe2 },
+    { href: `/companies/${companyId}/telegram`, label: 'Telegram', icon: Send },
     { href: `/companies/${companyId}/analytics`, label: 'Аналитика', icon: BarChart3 },
     { href: `/companies/${companyId}/sync-history`, label: 'Синхр.', icon: Clock3 }
   ]
