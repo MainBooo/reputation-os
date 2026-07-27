@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { getMyEntitlements, type BillingEntitlements } from '@/lib/api/billing'
+import { useChatContext } from '@/lib/chat/ChatContext'
 
 export type FeatureKey =
   | 'telegramNotifications'
@@ -75,16 +76,22 @@ export default function FeatureGate({
     entitlementsProp ?? null,
   )
   const [loading, setLoading] = useState(entitlementsProp === undefined)
+  // Регрессия (тот же класс бага, что чинили в SubscriptionContext.tsx):
+  // без явного workspaceId бэкенд резолвит "старейшее" membership пользователя,
+  // а не тот workspace, что реально открыт в UI — на мульти-workspace аккаунте
+  // это могло показать/скрыть платную фичу не для того тарифа.
+  const { workspaceId } = useChatContext()
 
   useEffect(() => {
     if (entitlementsProp !== undefined) {
       setEntitlements(entitlementsProp)
       return
     }
-    getMyEntitlements()
+    setLoading(true)
+    getMyEntitlements(workspaceId || undefined)
       .then(setEntitlements)
       .finally(() => setLoading(false))
-  }, [entitlementsProp])
+  }, [entitlementsProp, workspaceId])
 
   if (loading) {
     return <div className="h-16 animate-pulse rounded-[1.35rem] bg-white/[0.04]" />

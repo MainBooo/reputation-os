@@ -27,7 +27,10 @@ async function clearClientState(page: Page) {
 }
 
 async function setAccessTokenCookie(page: Page, token: string) {
-  const url = new URL(page.context()._options.baseURL ?? 'http://127.0.0.1:4011')
+  // _options is Playwright's internal BrowserContext state, not part of the
+  // public typings — kept as a runtime-only cast rather than adding a new
+  // public API dependency just to read the configured baseURL back out.
+  const url = new URL((page.context() as any)._options.baseURL ?? 'http://127.0.0.1:4011')
   await page.context().addCookies([
     {
       name: 'accessToken',

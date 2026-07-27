@@ -996,9 +996,22 @@ export class CompaniesService {
 
     await this.assertWorkspaceAccess(userId, company.workspaceId, 'write')
 
-    return this.prisma.companyAlias.delete({
-      where: { id: aliasId }
+    // IDOR fix: `id` alone is globally unique, so a plain delete({where:{id}})
+    // would remove ANY alias by id regardless of which company it actually
+    // belongs to — a member of company A (workspace access check above only
+    // validates *that* company) could pass another workspace's alias id and
+    // delete it. deleteMany scopes the match to companyId too; affected===0
+    // means "not found or not yours", same NotFoundException either way so
+    // this doesn't leak whether the id exists elsewhere.
+    const { count } = await this.prisma.companyAlias.deleteMany({
+      where: { id: aliasId, companyId }
     })
+
+    if (count === 0) {
+      throw new NotFoundException('Alias not found')
+    }
+
+    return { id: aliasId }
   }
 
   async getSources(userId: string, companyId: string) {

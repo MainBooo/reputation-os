@@ -1,5 +1,5 @@
 import { Test } from '@nestjs/testing'
-import { ForbiddenException } from '@nestjs/common'
+import { ForbiddenException, NotFoundException } from '@nestjs/common'
 import { CompaniesService } from './companies.service'
 import { PrismaService } from '../../common/prisma/prisma.service'
 import { EntitlementsService } from '../billing/entitlements.service'
@@ -90,6 +90,58 @@ describe('CompaniesService — workspace access control', () => {
     const result = await service.create('uid-2', dto)
 
     expect(result).toMatchObject({ id: 'co-2' })
+  })
+})
+
+describe('CompaniesService — deleteAlias tenant scoping (IDOR regression)', () => {
+  let service: CompaniesService
+
+  beforeEach(async () => {
+    jest.clearAllMocks()
+    mockPrisma.user.findUnique.mockResolvedValue({ systemRole: 'USER', isActive: true })
+    mockPrisma.workspaceMember.findFirst.mockResolvedValue({ role: 'OWNER', workspaceId: 'ws-1' })
+    mockPrisma.company.findUnique.mockResolvedValue({ id: 'co-1', workspaceId: 'ws-1' })
+
+    const module = await Test.createTestingModule({
+      providers: [
+        CompaniesService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: EntitlementsService, useValue: mockEntitlements },
+        { provide: `QUEUE_${QUEUES.REVIEWS_SYNC}`, useValue: mockQueue },
+        { provide: `QUEUE_${QUEUES.RATING_REFRESH}`, useValue: mockQueue },
+        { provide: `QUEUE_${QUEUES.MENTIONS_SYNC}`, useValue: mockQueue },
+      ],
+    }).compile()
+    service = module.get(CompaniesService)
+  })
+
+  it('deletes the alias when it belongs to the requested company', async () => {
+    mockPrisma.companyAlias.deleteMany.mockResolvedValue({ count: 1 })
+
+    const result = await service.deleteAlias('uid-1', 'co-1', 'alias-1')
+
+    expect(mockPrisma.companyAlias.deleteMany).toHaveBeenCalledWith({
+      where: { id: 'alias-1', companyId: 'co-1' },
+    })
+    expect(result).toMatchObject({ id: 'alias-1' })
+  })
+
+  // Regression: deleteAlias used to call companyAlias.delete({where:{id: aliasId}})
+  // — id alone is globally unique, so passing the aliasId of a DIFFERENT
+  // company (in a different workspace the caller has no access to) still
+  // matched and deleted it, because only the *company* (co-1) was checked
+  // for workspace access, never whether the alias actually belongs to it.
+  it('throws NotFoundException instead of deleting an alias that belongs to a different company', async () => {
+    // deleteMany's own where clause (id + companyId) means a foreign alias
+    // simply matches zero rows — this is what the fix relies on.
+    mockPrisma.companyAlias.deleteMany.mockResolvedValue({ count: 0 })
+
+    await expect(service.deleteAlias('uid-1', 'co-1', 'alias-from-another-company')).rejects.toThrow(
+      NotFoundException,
+    )
+    expect(mockPrisma.companyAlias.deleteMany).toHaveBeenCalledWith({
+      where: { id: 'alias-from-another-company', companyId: 'co-1' },
+    })
   })
 })
 
