@@ -67,6 +67,10 @@ export interface WorkspaceEntitlements {
   priceMonthly: number
   subscriptionStatus: SubscriptionStatus | null
   currentPeriodEnd: Date | null
+  currentPeriodStart: Date | null
+  billingPeriod: string | null
+  scheduledPlanCode: PlanCode | null
+  scheduledAt: Date | null
   trialEndsAt: Date | null
   limits: PlanLimits
   effective: PlanLimits
@@ -129,16 +133,24 @@ export class EntitlementsService {
     const monthStart = new Date()
     monthStart.setUTCDate(1)
     monthStart.setUTCHours(0, 0, 0, 0)
+    const activeReservationSince = new Date(Date.now() - 2 * 60 * 1000)
 
     const [subscription, overrides, companies, aiRepliesThisMonth, workspace, sourcesCount] = await Promise.all([
       this.prisma.subscription.findUnique({
         where: { workspaceId },
-        include: { plan: true }
+        include: { plan: true, scheduledPlan: true }
       }),
       this.prisma.featureOverride.findMany({ where: { workspaceId } }),
       this.prisma.company.count({ where: { workspaceId } }),
       this.prisma.aIReplyDraft.count({
-        where: { company: { workspaceId }, createdAt: { gte: monthStart } }
+        where: {
+          company: { workspaceId },
+          createdAt: { gte: monthStart },
+          OR: [
+            { status: 'READY' },
+            { status: 'GENERATING', createdAt: { gte: activeReservationSince } }
+          ]
+        }
       }),
       this.prisma.workspace.findUnique({ where: { id: workspaceId }, select: { isActive: true } }),
       this.countBillableSources(workspaceId)
@@ -161,12 +173,17 @@ export class EntitlementsService {
           subscription.trialEndsAt > now))
 
     if (isSubActive) {
-      planCode = subscription!.plan.code
-      planName = subscription!.plan.name
-      priceMonthly = subscription!.plan.priceMonthly
+      const effectivePlan =
+        subscription!.scheduledPlan && subscription!.scheduledAt && subscription!.scheduledAt <= now
+          ? subscription!.scheduledPlan
+          : subscription!.plan
+
+      planCode = effectivePlan.code
+      planName = effectivePlan.name
+      priceMonthly = effectivePlan.priceMonthly
       // Merge: FREE_LIMITS (fallback) <- code defaults <- DB plan.limits
       const codeBase = CODE_DEFAULTS[planCode] ?? FREE_LIMITS
-      limits = { ...FREE_LIMITS, ...codeBase, ...(subscription!.plan.limits as Partial<PlanLimits>) }
+      limits = { ...FREE_LIMITS, ...codeBase, ...(effectivePlan.limits as Partial<PlanLimits>) }
     }
 
     const overrideMap: Partial<Record<FeatureKey, unknown>> = {}
@@ -186,6 +203,16 @@ export class EntitlementsService {
       priceMonthly,
       subscriptionStatus: subscription?.status ?? null,
       currentPeriodEnd: subscription?.currentPeriodEnd ?? null,
+      currentPeriodStart: subscription?.currentPeriodStart ?? null,
+      billingPeriod:
+        subscription?.scheduledPlan && subscription?.scheduledAt && subscription.scheduledAt <= now
+          ? subscription.scheduledBillingPeriod ?? subscription.billingPeriod
+          : subscription?.billingPeriod ?? null,
+      scheduledPlanCode:
+        subscription?.scheduledPlan && subscription?.scheduledAt && subscription.scheduledAt > now
+          ? subscription.scheduledPlan.code
+          : null,
+      scheduledAt: subscription?.scheduledAt ?? null,
       trialEndsAt: subscription?.trialEndsAt ?? null,
       limits,
       effective: limits,

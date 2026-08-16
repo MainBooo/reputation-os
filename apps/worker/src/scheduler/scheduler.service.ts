@@ -4,10 +4,11 @@ import { PrismaService } from '../common/prisma/prisma.service'
 import { QUEUES } from '../queues/queue.names'
 import { JOBS } from '../queues/job.names'
 import { CRON_JOB_OPTIONS } from '../queues/job-options'
-import { ensureSingleRepeatableJob } from '../queues/repeatable-cron.util'
+import { ensureSingleRepeatableJob, reconcileKnownRepeatableJobs } from '../queues/repeatable-cron.util'
 import { PageWatchDispatcherProcessor } from '../processors/page-watch-dispatcher.processor'
 import { DeepScanProcessor } from '../processors/deep-scan.processor'
 import { TelegramWatchlistDispatcherProcessor } from '../telegram-search/telegram-watchlist-dispatcher.processor'
+import { JobEligibilityService } from '../services/job-eligibility.service'
 
 const HEARTBEAT_KEY = 'worker:heartbeat'
 const HEARTBEAT_TTL_SECONDS = 120
@@ -34,7 +35,8 @@ export class SchedulerService implements OnModuleInit {
     @Inject(`QUEUE_${QUEUES.TELEGRAM_WATCHLIST_DISPATCHER}`) private readonly telegramWatchlistDispatcherQueue: Queue,
     private readonly pageWatchDispatcher: PageWatchDispatcherProcessor,
     private readonly deepScan: DeepScanProcessor,
-    private readonly telegramWatchlistDispatcher: TelegramWatchlistDispatcherProcessor
+    private readonly telegramWatchlistDispatcher: TelegramWatchlistDispatcherProcessor,
+    private readonly eligibility: JobEligibilityService
   ) {}
 
   private async writeHeartbeat() {
@@ -106,56 +108,72 @@ export class SchedulerService implements OnModuleInit {
     })
 
     const companies = await prismaAny.company.findMany({
-      where: { isActive: true }
+      where: { isActive: true, workspace: { isActive: true } }
     }).catch(() => [])
 
-    const reviewTargets = await prismaAny.companySourceTarget.findMany({
-      where: {
-        isActive: true,
-        syncReviewsEnabled: true,
-        company: { isActive: true },
-        source: {
-          platform: { in: ['YANDEX', 'TWOGIS'] },
-          isEnabled: true
-        }
-      },
-      include: {
-        company: true,
-        source: true
+    const reviewTargets: any[] = []
+    const webTargets: any[] = []
+    const discoveryCompanyIds = new Set<string>()
+    const ratingCompanyIds = new Set<string>()
+    const telegramCompanyIds = new Set<string>()
+
+    for (const company of companies) {
+      const [reviews, web, ratings, discovery, telegramAllowed] = await Promise.all([
+        this.eligibility.getEligibleTargets(company.id, 'reviews'),
+        this.eligibility.getEligibleTargets(company.id, 'mentions'),
+        this.eligibility.getEligibleTargets(company.id, 'ratings'),
+        this.eligibility.getEligibleDiscoverySources(company.id),
+        this.eligibility.canRunTelegramCompany(company.id)
+      ])
+      reviewTargets.push(...reviews)
+      webTargets.push(...web.filter((target: any) => target.source?.platform === 'WEB'))
+      if (discovery.sources.length) discoveryCompanyIds.add(company.id)
+      if (ratings.length) ratingCompanyIds.add(company.id)
+
+      if (telegramAllowed) {
+        const telegramTarget = await prismaAny.companySourceTarget.findFirst({
+          where: {
+            companyId: company.id,
+            isActive: true,
+            syncMentionsEnabled: true,
+            source: { platform: 'TELEGRAM', isEnabled: true }
+          },
+          select: { id: true }
+        }).catch(() => null)
+        if (telegramTarget) telegramCompanyIds.add(company.id)
       }
-    }).catch(() => [])
+    }
 
-    // Без фильтра по externalUrl: канонические поисковые сиды (web-bootstrap:<companyId>,
-    // sync.service) не имеют URL, если у компании не заполнен website — иначе для такой
-    // компании mentions-крон никогда не создастся.
-    const webTargets = await prismaAny.companySourceTarget.findMany({
-      where: {
-        isActive: true,
-        syncMentionsEnabled: true,
-        company: { isActive: true },
-        source: {
-          platform: 'WEB',
-          isEnabled: true
-        }
-      },
-      include: {
-        company: true,
-        source: true
-      }
-    }).catch(() => [])
+    const webTargetsByCompany = new Map<string, any[]>()
+    for (const target of webTargets) {
+      if (!target?.companyId) continue
+      const items = webTargetsByCompany.get(target.companyId) || []
+      items.push(target)
+      webTargetsByCompany.set(target.companyId, items)
+    }
 
-    // Only companies that explicitly opted in (POST .../start-telegram-sync creates
-    // this bootstrap target, mirroring the WEB pattern above) get a recurring
-    // DISCOVERY cron — Telegram Scout never runs for a company that hasn't asked for it.
-    const telegramTargets = await prismaAny.companySourceTarget.findMany({
-      where: {
-        isActive: true,
-        syncMentionsEnabled: true,
-        company: { isActive: true },
-        source: { platform: 'TELEGRAM', isEnabled: true }
-      },
-      select: { companyId: true }
-    }).catch(() => [])
+    const desiredReviews = new Map<string, number>()
+    for (const target of reviewTargets) {
+      if (target?.companyId) desiredReviews.set(this.getYandexReviewsRepeatJobId(target.companyId), this.getYandexReviewsRepeatOptions().every)
+    }
+    const desiredWeb = new Map<string, number>()
+    for (const [companyId, targets] of webTargetsByCompany.entries()) {
+      desiredWeb.set(
+        this.getWebMentionsRepeatJobId(companyId),
+        targets.map((target) => this.getWebTargetIntervalMs(target)).sort((a, b) => a - b)[0]
+      )
+    }
+    const desiredDiscovery = new Map<string, number>([...discoveryCompanyIds].map((id) => [`source-discovery:${id}`, 12 * 60 * 60 * 1000]))
+    const desiredRatings = new Map<string, number>([...ratingCompanyIds].map((id) => [`rating-refresh:${id}`, 24 * 60 * 60 * 1000]))
+    const desiredReconcile = new Map<string, number>(companies.map((company: any) => [`reconcile:${company.id}`, 24 * 60 * 60 * 1000]))
+
+    await Promise.all([
+      reconcileKnownRepeatableJobs(this.reviewsSyncQueue, JOBS.REVIEWS_SYNC, desiredReviews, 'reviews-sync:'),
+      reconcileKnownRepeatableJobs(this.mentionsSyncQueue, JOBS.MENTIONS_SYNC, desiredWeb, 'web-mentions-sync:'),
+      reconcileKnownRepeatableJobs(this.sourceDiscoveryQueue, JOBS.SOURCE_DISCOVERY, desiredDiscovery, 'source-discovery:'),
+      reconcileKnownRepeatableJobs(this.ratingRefreshQueue, JOBS.RATING_REFRESH, desiredRatings, 'rating-refresh:'),
+      reconcileKnownRepeatableJobs(this.reconcileQueue, JOBS.RECONCILE, desiredReconcile, 'reconcile:')
+    ]).catch((error) => this.logger.warn(`Repeatable reconciliation failed: ${error?.message || error}`))
 
     for (const company of companies) {
       if (!company?.id) {
@@ -163,32 +181,27 @@ export class SchedulerService implements OnModuleInit {
         continue
       }
 
-      await this.sourceDiscoveryQueue.add(
-        JOBS.SOURCE_DISCOVERY,
-        { companyId: company.id },
-        { ...CRON_JOB_OPTIONS, repeat: { every: 12 * 60 * 60 * 1000 }, jobId: `source-discovery:${company.id}` }
-      ).catch(() => null)
+      if (discoveryCompanyIds.has(company.id)) {
+        await this.sourceDiscoveryQueue.add(
+          JOBS.SOURCE_DISCOVERY,
+          { companyId: company.id },
+          { ...CRON_JOB_OPTIONS, repeat: { every: 12 * 60 * 60 * 1000 }, jobId: `source-discovery:${company.id}` }
+        ).catch(() => null)
+      }
 
-      await this.ratingRefreshQueue.add(
-        JOBS.RATING_REFRESH,
-        { companyId: company.id },
-        { ...CRON_JOB_OPTIONS, repeat: { every: 24 * 60 * 60 * 1000 }, jobId: `rating-refresh:${company.id}` }
-      ).catch(() => null)
+      if (ratingCompanyIds.has(company.id)) {
+        await this.ratingRefreshQueue.add(
+          JOBS.RATING_REFRESH,
+          { companyId: company.id },
+          { ...CRON_JOB_OPTIONS, repeat: { every: 24 * 60 * 60 * 1000 }, jobId: `rating-refresh:${company.id}` }
+        ).catch(() => null)
+      }
 
       await this.reconcileQueue.add(
         JOBS.RECONCILE,
         { companyId: company.id },
         { ...CRON_JOB_OPTIONS, repeat: { every: 24 * 60 * 60 * 1000 }, jobId: `reconcile:${company.id}` }
       ).catch(() => null)
-    }
-
-    const webTargetsByCompany = new Map<string, any[]>()
-
-    for (const target of webTargets) {
-      if (!target?.companyId) continue
-      const items = webTargetsByCompany.get(target.companyId) || []
-      items.push(target)
-      webTargetsByCompany.set(target.companyId, items)
     }
 
     for (const [companyId, targets] of webTargetsByCompany.entries()) {
@@ -240,7 +253,17 @@ export class SchedulerService implements OnModuleInit {
     // ticking forever alongside the new one (see repeatable-cron.util.ts for why —
     // this exact bug already happened once, for the watchlist dispatcher below).
     const discoveryIntervalMs = Math.max(1, Number(process.env.TELEGRAM_SCOUT_DISCOVERY_INTERVAL_HOURS) || 24) * 60 * 60 * 1000
-    const telegramCompanyIds = new Set<string>(telegramTargets.map((t: any) => t.companyId).filter(Boolean))
+    const desiredTelegram = new Map(
+      [...telegramCompanyIds].map((companyId) => [`telegram-discovery:${companyId}:cron`, discoveryIntervalMs])
+    )
+    await reconcileKnownRepeatableJobs(
+      this.telegramSearchQueue,
+      JOBS.TELEGRAM_DISCOVERY,
+      desiredTelegram,
+      'telegram-discovery:'
+    ).catch((error) => {
+      this.logger.warn(`Telegram repeatable reconciliation failed: ${error?.message || error}`)
+    })
 
     for (const companyId of telegramCompanyIds) {
       await ensureSingleRepeatableJob(
@@ -249,7 +272,8 @@ export class SchedulerService implements OnModuleInit {
         { mode: 'discovery', companyId },
         `telegram-discovery:${companyId}:cron`,
         discoveryIntervalMs,
-        CRON_JOB_OPTIONS
+        CRON_JOB_OPTIONS,
+        `telegram-discovery:${companyId}:`
       ).catch((error) => {
         this.logger.warn(`Failed to ensure telegram discovery cron companyId=${companyId}: ${error?.message || error}`)
       })

@@ -26,11 +26,14 @@ export class SyncService {
   private async assertCompanyAccess(userId: string, companyId: string, mode: 'read' | 'write' = 'read') {
     const company = await this.prisma.company.findUnique({
       where: { id: companyId },
-      select: { id: true, workspaceId: true }
+      select: { id: true, workspaceId: true, isActive: true }
     })
 
     if (!company) {
       throw new NotFoundException('Company not found')
+    }
+    if (mode === 'write' && !company.isActive) {
+      throw new ForbiddenException('Company is inactive')
     }
 
     const user = await this.prisma.user.findUnique({
@@ -59,7 +62,9 @@ export class SyncService {
   }
 
   async discoverSources(userId: string, companyId: string) {
-    await this.assertCompanyAccess(userId, companyId, 'write')
+    const company = await this.assertCompanyAccess(userId, companyId, 'write')
+    const ent = await this.entitlements.getForWorkspace(company.workspaceId)
+    if (!ent.workspaceActive) throw new ForbiddenException('Workspace is disabled')
 
     const job = await this.sourceDiscoveryQueue.add(
       'source.discovery',
@@ -98,7 +103,13 @@ export class SyncService {
   }
 
   async startSync(userId: string, companyId: string) {
-    await this.assertCompanyAccess(userId, companyId, 'write')
+    const company = await this.assertCompanyAccess(userId, companyId, 'write')
+    const ent = await this.entitlements.getForWorkspace(company.workspaceId)
+    if (!ent.workspaceActive) throw new ForbiddenException('Workspace is disabled')
+    const reviewPlatforms = ent.limits.platforms.filter((platform) => platform === 'YANDEX' || platform === 'TWOGIS')
+    if (!reviewPlatforms.length) {
+      throw new ForbiddenException({ code: 'PLAN_LIMIT', feature: 'platforms' })
+    }
 
     const requestedAt = new Date().toISOString()
 

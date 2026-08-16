@@ -1376,9 +1376,23 @@ export class CompaniesService {
 
     await this.assertWorkspaceAccess(userId, company.workspaceId, 'write')
 
-    const targetPlatform = dto.platform || (dto.sourceId
-      ? (await this.prisma.source.findUnique({ where: { id: dto.sourceId }, select: { platform: true } }))?.platform
-      : null)
+    if (company.isActive === false) throw new ForbiddenException('Company is inactive')
+
+    const selectedSource = dto.sourceId
+      ? await this.prisma.source.findUnique({
+          where: { id: dto.sourceId },
+          select: { id: true, platform: true, workspaceId: true, isEnabled: true }
+        })
+      : null
+    if (dto.sourceId && (!selectedSource || selectedSource.workspaceId !== company.workspaceId)) {
+      throw new NotFoundException('Source not found')
+    }
+    if (selectedSource && !selectedSource.isEnabled) throw new BadRequestException('Source is disabled')
+
+    const targetPlatform = dto.platform || selectedSource?.platform || null
+    if (targetPlatform === 'GOOGLE' || targetPlatform === 'TELEGRAM') {
+      throw new BadRequestException(`Source platform is not implemented for this endpoint: ${targetPlatform}`)
+    }
 
     const ent = await this.entitlements.getForWorkspace(company.workspaceId)
 
@@ -1487,6 +1501,8 @@ export class CompaniesService {
 
     await this.assertWorkspaceAccess(userId, company.workspaceId, 'write')
 
+    if (company.isActive === false) throw new ForbiddenException('Company is inactive')
+
     const target = await this.prisma.companySourceTarget.findUnique({
       where: { id: targetId },
       include: { source: true }
@@ -1501,6 +1517,21 @@ export class CompaniesService {
 
     if (!updateEnt.workspaceActive) {
       throw new ForbiddenException('Workspace is disabled')
+    }
+
+    if (dto.isActive === true && !target.source?.isEnabled) {
+      throw new BadRequestException('Source is disabled')
+    }
+
+    if (dto.isActive === true && target.isActive === false) {
+      await this.assertSourceSlotAvailable(company.workspaceId, updateEnt.limits.maxSources)
+    }
+
+    if (dto.isActive === true) {
+      const allowedPlatforms = Array.isArray(updateEnt.limits.platforms) ? updateEnt.limits.platforms : []
+      if (!allowedPlatforms.includes(target.source.platform)) {
+        throw new ForbiddenException({ code: 'PLAN_LIMIT', feature: 'platforms', platform: target.source.platform })
+      }
     }
 
     if (dto.isActive === true && target.source?.platform === 'WEB' && !updateEnt.limits.webMonitoringEnabled) {

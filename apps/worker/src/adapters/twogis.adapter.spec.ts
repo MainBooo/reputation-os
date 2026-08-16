@@ -1,6 +1,9 @@
 jest.mock('playwright', () => ({
   chromium: { launch: jest.fn() }
 }))
+jest.mock('../common/security/safe-url', () => ({
+  assertSafeExternalUrl: jest.fn().mockResolvedValue(undefined)
+}))
 
 import { chromium } from 'playwright'
 import { TwoGisAdapter } from './twogis.adapter'

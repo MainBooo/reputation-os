@@ -41,6 +41,10 @@ export class TelegramChannelsService {
       }
     }
 
+    if (access === 'write' && company.isActive === false) {
+      throw new ForbiddenException('Company is inactive')
+    }
+
     return company
   }
 
@@ -54,6 +58,8 @@ export class TelegramChannelsService {
     if (!entitlements.limits.telegramMonitoringEnabled || !entitlements.limits.platforms.includes('TELEGRAM' as any)) {
       throw new ForbiddenException({ code: 'PLAN_LIMIT', feature: 'telegramMonitoringEnabled' })
     }
+
+    return entitlements
   }
 
   async list(userId: string, companyId: string) {
@@ -314,6 +320,24 @@ export class TelegramChannelsService {
       where: { workspaceId: company.workspaceId, platform: 'TELEGRAM', type: 'SOCIAL_MENTION_FEED' }
     })
 
+    const externalPlaceId = `telegram-bootstrap:${company.id}`
+
+    const existing = source
+      ? await this.prisma.companySourceTarget.findFirst({
+          where: { companyId: company.id, sourceId: source.id, externalPlaceId }
+        })
+      : null
+
+    if (existing) {
+      if (!existing.isActive || !existing.syncMentionsEnabled) {
+        return this.prisma.companySourceTarget.update({
+          where: { id: existing.id },
+          data: { isActive: true, syncMentionsEnabled: true }
+        })
+      }
+      return existing
+    }
+
     if (!source) {
       source = await this.prisma.source.create({
         data: {
@@ -326,22 +350,6 @@ export class TelegramChannelsService {
           config: { origin: 'auto-bootstrap' }
         }
       })
-    }
-
-    const externalPlaceId = `telegram-bootstrap:${company.id}`
-
-    const existing = await this.prisma.companySourceTarget.findFirst({
-      where: { companyId: company.id, sourceId: source.id, externalPlaceId }
-    })
-
-    if (existing) {
-      if (!existing.isActive || !existing.syncMentionsEnabled) {
-        return this.prisma.companySourceTarget.update({
-          where: { id: existing.id },
-          data: { isActive: true, syncMentionsEnabled: true }
-        })
-      }
-      return existing
     }
 
     return this.prisma.companySourceTarget.create({

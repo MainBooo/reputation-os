@@ -178,7 +178,7 @@ export default function MentionRow({
     setCopied(false)
 
     try {
-      const draft = await generateReply(mention.id, preset)
+      const draft = await generateReply(mention.id, preset, crypto.randomUUID())
       setReplyText(draft?.draftText || '')
     } catch {
       setReplyError('Не удалось сгенерировать ответ')

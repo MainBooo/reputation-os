@@ -5,6 +5,13 @@ import { WebMentionAdapter } from './webmention.adapter'
 import { TwoGisAdapter } from './twogis.adapter'
 import { YandexAdapter } from './yandex.adapter'
 
+export class UnsupportedSourcePlatformError extends Error {
+  constructor(platform: string) {
+    super(`Source platform is not implemented: ${platform}`)
+    this.name = 'UnsupportedSourcePlatformError'
+  }
+}
+
 export class SourceAdapterFactory {
   static getAdapter(platform: Platform): SourceAdapter {
     switch (platform) {
@@ -16,8 +23,11 @@ export class SourceAdapterFactory {
         return new WebMentionAdapter()
       case 'CUSTOM':
         return new EmptyAdapter()
+      case 'GOOGLE':
+      case 'TELEGRAM':
+        throw new UnsupportedSourcePlatformError(platform)
       default:
-        return new EmptyAdapter()
+        throw new UnsupportedSourcePlatformError(String(platform))
     }
   }
 }

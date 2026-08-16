@@ -6,6 +6,7 @@ import { MentionService } from '../services/mention.service'
 import { JobLogService } from '../services/job-log.service'
 import { QUEUES } from '../queues/queue.names'
 import { WORKER_OPTIONS } from '../queues/job-options'
+import { JobEligibilityService } from '../services/job-eligibility.service'
 
 @Injectable()
 export class ReviewsSyncProcessor implements OnModuleInit, OnModuleDestroy {
@@ -16,7 +17,8 @@ export class ReviewsSyncProcessor implements OnModuleInit, OnModuleDestroy {
     @Inject(`QUEUE_${QUEUES.REVIEWS_SYNC}`) private readonly queue: Queue,
     private readonly prisma: PrismaService,
     private readonly mentionService: MentionService,
-    private readonly jobLogService: JobLogService
+    private readonly jobLogService: JobLogService,
+    private readonly eligibility: JobEligibilityService
   ) {}
 
   onModuleInit() {
@@ -34,16 +36,29 @@ export class ReviewsSyncProcessor implements OnModuleInit, OnModuleDestroy {
     const { companyId } = job.data
 
     try {
-      const targets = await this.prisma.companySourceTarget.findMany({
-        where: { companyId, syncReviewsEnabled: true },
-        include: { source: true }
-      })
+      const targets = await this.eligibility.getEligibleTargets(companyId, 'reviews')
+
+      if (!targets.length) {
+        await this.jobLogService.finish({
+          companyId,
+          queueName: QUEUES.REVIEWS_SYNC,
+          jobName: 'reviews.sync',
+          bullJobId: job.id,
+          status: 'CANCELLED',
+          result: { skipped: true, reason: 'not_eligible' }
+        }).catch(() => null)
+        return { companyId, skipped: true, reason: 'not_eligible' }
+      }
 
       let itemsDiscovered = 0
       let itemsCreated = 0
       let itemsUpdated = 0
+      let successfulTargets = 0
+      let failedTargets = 0
 
-      for (const target of targets) {
+      for (const queuedTarget of targets) {
+        const target = await this.eligibility.getEligibleTarget(companyId, queuedTarget.id, 'reviews')
+        if (!target) continue
         let mentions: any[] = []
 
         try {
@@ -79,6 +94,7 @@ export class ReviewsSyncProcessor implements OnModuleInit, OnModuleDestroy {
             })
             return null
           })
+          successfulTargets += 1
         } catch (targetError) {
           const targetMessage = targetError instanceof Error ? targetError.message : String(targetError)
 
@@ -89,6 +105,7 @@ export class ReviewsSyncProcessor implements OnModuleInit, OnModuleDestroy {
             error: targetMessage
           })
 
+          failedTargets += 1
           continue
         }
 
@@ -133,17 +150,22 @@ export class ReviewsSyncProcessor implements OnModuleInit, OnModuleDestroy {
         }
       }
 
+      if (failedTargets > 0 && successfulTargets === 0) {
+        throw new Error(`All ${failedTargets} review targets failed`)
+      }
+
       await this.jobLogService.finish({
         companyId,
         queueName: QUEUES.REVIEWS_SYNC,
         jobName: 'reviews.sync',
         bullJobId: job.id,
-        status: 'SUCCESS',
+        status: failedTargets > 0 ? 'PARTIAL' : 'SUCCESS',
         itemsDiscovered,
         itemsCreated,
         itemsUpdated,
         result: {
-          processedTargets: targets.length
+          processedTargets: successfulTargets,
+          failedTargets
         }
       }).catch(() => null)
 

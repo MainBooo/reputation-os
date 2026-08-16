@@ -9,6 +9,7 @@ import { PageWatchExtractor, ExtractedItem } from './page-watch-extractor'
 import { normalizeText } from '../common/utils/normalize.util'
 import { classifySentiment } from '../common/utils/sentiment.util'
 import { safeFetch } from '../common/security/safe-url'
+import { JobEligibilityService } from '../services/job-eligibility.service'
 
 const DOMAIN_LOCK_PREFIX = 'pw:domain:'
 const DOMAIN_LOCK_TTL_SEC = 10
@@ -26,7 +27,8 @@ export class PageWatchProcessor implements OnModuleInit, OnModuleDestroy {
   constructor(
     @Inject('BULLMQ_WORKER_CONNECTION_FACTORY') private readonly workerConnectionFactory: () => any,
     @Inject('BULLMQ_CONNECTION') private readonly redis: any,
-    private readonly prisma: PrismaService
+    private readonly prisma: PrismaService,
+    private readonly eligibility: JobEligibilityService
   ) {}
 
   async onModuleInit() {
@@ -142,14 +144,10 @@ export class PageWatchProcessor implements OnModuleInit, OnModuleDestroy {
 
   async handle(job: Job<{ watchedPageId: string }>) {
     const { watchedPageId } = job.data
-    const page = await this.prisma.watchedPage.findUnique({
-      where: { id: watchedPageId },
-      include: { sourceTarget: { include: { source: true } } }
-    })
+    const page = await this.eligibility.canProcessWatchedPage(watchedPageId)
 
-    if (!page || !page.enabled) {
-      console.log(`[PageWatch] skip disabled/missing page ${watchedPageId}`)
-      return
+    if (!page) {
+      return { watchedPageId, skipped: true, reason: 'not_eligible' }
     }
 
     // ── Domain rate limiting ────────────────────────────────────────────────

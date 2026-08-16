@@ -4,8 +4,9 @@ import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useMetrica } from 'next-yandex-metrica'
 import { CheckCircle2, Loader2, AlertCircle, RotateCcw } from 'lucide-react'
-import { getMyEntitlements, syncPendingPayments } from '@/lib/api/billing'
+import { getMyEntitlements, isSubscriptionActive, syncPendingPayments } from '@/lib/api/billing'
 import { useSubscription } from '@/lib/subscription/SubscriptionContext'
+import { useChatContext } from '@/lib/chat/ChatContext'
 
 const MAX_POLLS = 10
 const POLL_INTERVAL_MS = 3000
@@ -13,22 +14,21 @@ const POLL_INTERVAL_MS = 3000
 export default function PaymentResultPage() {
   const router = useRouter()
   const { refresh } = useSubscription()
+  const { workspaceId } = useChatContext()
   const { reachGoal } = useMetrica()
   const [status, setStatus] = useState<'checking' | 'success' | 'pending' | 'error'>('checking')
   const pollCount = useRef(0)
 
   useEffect(() => {
+    if (!workspaceId) return
     let cancelled = false
 
     async function poll() {
       try {
-        const ent = await getMyEntitlements()
+        const ent = await getMyEntitlements(workspaceId)
         if (cancelled) return
 
-        const isActive =
-          ent?.subscriptionStatus === 'ACTIVE' || ent?.subscriptionStatus === 'MANUAL'
-
-        if (isActive) {
+        if (isSubscriptionActive(ent)) {
           await refresh()
           reachGoal('payment_success')
           reachGoal('subscription_activated')
@@ -50,13 +50,13 @@ export default function PaymentResultPage() {
 
     // Сначала синхронизируем статус с ЮKassa (fallback если webhook не пришёл),
     // затем начинаем polling entitlements
-    syncPendingPayments().catch(() => {})
+    syncPendingPayments(workspaceId).catch(() => {})
     const timer = setTimeout(poll, 1500)
     return () => {
       cancelled = true
       clearTimeout(timer)
     }
-  }, [refresh])
+  }, [refresh, workspaceId, reachGoal])
 
   return (
     <div className="flex min-h-[70vh] items-center justify-center px-4">

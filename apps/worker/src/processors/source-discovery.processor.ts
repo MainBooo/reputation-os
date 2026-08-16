@@ -5,6 +5,7 @@ import { SourceAdapterFactory } from '../adapters/source-adapter.factory'
 import { WorkerLogger } from '../common/logging/logger'
 import { QUEUES } from '../queues/queue.names'
 import { WORKER_OPTIONS } from '../queues/job-options'
+import { JobEligibilityService } from '../services/job-eligibility.service'
 
 @Injectable()
 export class SourceDiscoveryProcessor implements OnModuleInit, OnModuleDestroy {
@@ -13,7 +14,8 @@ export class SourceDiscoveryProcessor implements OnModuleInit, OnModuleDestroy {
   constructor(
     @Inject('BULLMQ_CONNECTION') private readonly connection: any,
     @Inject(`QUEUE_${QUEUES.SOURCE_DISCOVERY}`) private readonly queue: Queue,
-    private readonly prisma: PrismaService
+    private readonly prisma: PrismaService,
+    private readonly eligibility: JobEligibilityService
   ) {}
 
   onModuleInit() {
@@ -29,10 +31,9 @@ export class SourceDiscoveryProcessor implements OnModuleInit, OnModuleDestroy {
 
   async handle(job: Job) {
     const { companyId } = job.data
-    const company = await this.prisma.company.findUnique({ where: { id: companyId } })
-    if (!company) return null
+    const { company, sources } = await this.eligibility.getEligibleDiscoverySources(companyId)
+    if (!company || !sources.length) return { companyId, skipped: true, reason: 'not_eligible' }
 
-    const sources = await this.prisma.source.findMany({ where: { workspaceId: company.workspaceId } })
     for (const source of sources) {
       const adapter = SourceAdapterFactory.getAdapter(source.platform)
       const targets = await adapter.discoverTargets(company)

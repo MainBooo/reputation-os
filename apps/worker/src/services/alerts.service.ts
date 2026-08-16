@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common'
 import * as webPush from 'web-push'
 import { PrismaService } from '../common/prisma/prisma.service'
 import { TelegramNotificationsService } from '../telegram/telegram-notifications.service'
+import { JobEligibilityService } from './job-eligibility.service'
 
 const ALLOWED_SENTIMENTS = ['NEGATIVE', 'POSITIVE', 'NEUTRAL'] as const
 const ALERT_MAX_PUBLISHED_AGE_MS = 48 * 60 * 60 * 1000
@@ -26,6 +27,7 @@ export class AlertsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly telegramNotifications: TelegramNotificationsService,
+    private readonly eligibility: JobEligibilityService,
   ) {
     const publicKey = process.env.WEB_PUSH_PUBLIC_KEY
     const privateKey = process.env.WEB_PUSH_PRIVATE_KEY
@@ -48,33 +50,7 @@ export class AlertsService {
   /** Возвращает true, если план workspace разрешает push-уведомления и подписка активна */
   private async isWorkspacePushEnabled(workspaceId: string, cache: Map<string, boolean>): Promise<boolean> {
     if (cache.has(workspaceId)) return cache.get(workspaceId)!
-    const prismaAny = this.prisma as any
-    const [workspace, sub] = await Promise.all([
-      prismaAny.workspace.findUnique({ where: { id: workspaceId }, select: { isActive: true } }),
-      prismaAny.subscription.findUnique({ where: { workspaceId }, include: { plan: true } })
-    ])
-
-    if (!workspace?.isActive) {
-      this.logger.debug(`Push skip: workspaceId=${workspaceId} reason=workspace.isActive=false`)
-      cache.set(workspaceId, false)
-      return false
-    }
-
-    const now = new Date()
-    const isSubActive =
-      sub &&
-      ((sub.status === 'ACTIVE' && sub.currentPeriodEnd != null && new Date(sub.currentPeriodEnd) > now) ||
-        sub.status === 'MANUAL' ||
-        (sub.status === 'TRIAL' && sub.trialEndsAt != null && new Date(sub.trialEndsAt) > now))
-
-    if (!isSubActive) {
-      this.logger.debug(`Push skip: workspaceId=${workspaceId} reason=subscription.status=${sub?.status ?? 'none'}`)
-      cache.set(workspaceId, false)
-      return false
-    }
-
-    const limits = (sub?.plan?.limits ?? {}) as Record<string, unknown>
-    const enabled = limits.pushNotificationsEnabled === true
+    const enabled = await this.eligibility.canWorkspaceFeature(workspaceId, 'pushNotificationsEnabled')
     cache.set(workspaceId, enabled)
     return enabled
   }
@@ -225,30 +201,7 @@ export class AlertsService {
     })
 
     for (const rule of rules) {
-      // Проверяем workspace.isActive, subscription.status и entitlements перед отправкой в Telegram
-      const [wsData, workspaceSub] = await Promise.all([
-        prismaAny.workspace.findUnique({ where: { id: rule.workspaceId }, select: { isActive: true } }),
-        prismaAny.subscription.findUnique({ where: { workspaceId: rule.workspaceId }, include: { plan: true } })
-      ])
-
-      if (!wsData?.isActive) {
-        this.logger.debug(`Telegram skip: workspaceId=${rule.workspaceId} reason=workspace.isActive=false`)
-        continue
-      }
-
-      const isSubActive =
-        workspaceSub &&
-        ((workspaceSub.status === 'ACTIVE' && workspaceSub.currentPeriodEnd != null && new Date(workspaceSub.currentPeriodEnd) > now) ||
-          workspaceSub.status === 'MANUAL' ||
-          (workspaceSub.status === 'TRIAL' && workspaceSub.trialEndsAt != null && new Date(workspaceSub.trialEndsAt) > now))
-
-      if (!isSubActive) {
-        this.logger.debug(`Telegram skip: workspaceId=${rule.workspaceId} reason=subscription.status=${workspaceSub?.status ?? 'none'}`)
-        continue
-      }
-
-      const wLimits = (workspaceSub?.plan?.limits ?? {}) as Record<string, unknown>
-      if (!wLimits.telegramNotifications) {
+      if (!await this.eligibility.canWorkspaceFeature(rule.workspaceId, 'telegramNotifications')) {
         this.logger.debug(`Telegram skip: workspaceId=${rule.workspaceId} reason=telegramNotifications=false`)
         continue
       }

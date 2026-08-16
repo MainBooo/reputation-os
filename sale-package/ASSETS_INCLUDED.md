@@ -8,7 +8,7 @@
 
 | Актив | Статус | Комментарий |
 |---|---|---|
-| Монорепо `reputation-os` (git-история) | Готово к передаче | Ветка `fix/sale-readiness-hardening`, HEAD `843f055`, 16 коммитов впереди `origin/main`, **не запушена в origin** — см. `OWNER_DECISIONS.md` о том, куда именно передавать историю |
+| Монорепо `reputation-os` (git-история) | Готово к ревью | Текущая ветка `fix/logic-audit-hardening` создана от `66cb0c3`; изменения logic hardening не push/merge в рамках аудита |
 | `apps/api` (NestJS REST API) | Готово | Auth, billing, companies, mentions, analytics, admin и др. |
 | `apps/frontend` (Next.js личный кабинет) | Готово | — |
 | `apps/worker` (BullMQ воркер) | Готово | Синк источников, Telegram Scout, AI-классификация, алерты |
@@ -23,6 +23,7 @@
 |---|---|
 | `REPUTATIONOS_SALE_AUDIT.md` | Готово — полный технический аудит от 27.07.2026 |
 | `REPUTATIONOS_SALE_FIX_REPORT.md` | Готово — отчёт об исправлениях |
+| `sale-package/LOGIC_AUDIT_FIX_REPORT.md` | Готово — финальный logic/security/billing hardening и validation |
 | `SALE_FIX_PROGRESS.md` | Готово — построчный трекинг статусов по каждой находке |
 | `docs/ARCHITECTURE.md`, `docs/DEPLOY.md` | Готово, частично устарели — см. `KNOWN_LIMITATIONS.md` |
 | `TELEGRAM_MONITORING.md` | Готово |

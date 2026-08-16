@@ -17,17 +17,29 @@ export class RatingService {
     rawPayload?: unknown
     metadata?: unknown
   }) {
-    return this.prisma.ratingSnapshot.create({
-      data: {
-        companyId: params.companyId,
-        sourceId: params.sourceId,
-        companySourceTargetId: params.companySourceTargetId || null,
-        platform: params.platform,
-        ratingValue: params.ratingValue,
-        reviewsCount: params.reviewsCount ?? null,
-        capturedAt: params.capturedAt,
-        rawPayload: params.rawPayload as any,
-        metadata: params.metadata as any
+    const day = params.capturedAt.toISOString().slice(0, 10)
+    const dedupeKey = `${params.companySourceTargetId || `${params.companyId}:${params.sourceId}`}:${day}`
+    const data = {
+      companyId: params.companyId,
+      sourceId: params.sourceId,
+      companySourceTargetId: params.companySourceTargetId || null,
+      platform: params.platform,
+      ratingValue: params.ratingValue,
+      reviewsCount: params.reviewsCount ?? null,
+      capturedAt: params.capturedAt,
+      dedupeKey,
+      rawPayload: params.rawPayload as any,
+      metadata: params.metadata as any
+    }
+    return this.prisma.ratingSnapshot.upsert({
+      where: { dedupeKey },
+      create: data,
+      update: {
+        ratingValue: data.ratingValue,
+        reviewsCount: data.reviewsCount,
+        capturedAt: data.capturedAt,
+        rawPayload: data.rawPayload,
+        metadata: data.metadata
       }
     })
   }

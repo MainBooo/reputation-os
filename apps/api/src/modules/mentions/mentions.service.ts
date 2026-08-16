@@ -5,6 +5,8 @@ import { AuditLogService } from '../admin/audit-log.service'
 import { ListCompanyMentionsDto } from './dto/list-company-mentions.dto'
 import { UpdateMentionStatusDto } from './dto/update-mention-status.dto'
 import { ResolveMentionReviewDto } from './dto/resolve-mention-review.dto'
+import { IRRELEVANT_BUCKET, RELEVANT_BUCKET } from './mention-visibility.filter'
+export { IRRELEVANT_BUCKET, RELEVANT_BUCKET } from './mention-visibility.filter'
 
 // A human reviewDecision always takes priority over the model's own messageClassification
 // when deciding which Inbox bucket a mention belongs to. These two fragments are exact
@@ -20,31 +22,6 @@ import { ResolveMentionReviewDto } from './dto/resolve-mention-review.dto'
 // explicit `{ field: null }` OR-branch. (Confirmed against production Postgres: `SELECT NOT
 // (NULL = 'IRRELEVANT')` returns NULL, and a first version of this fragment without the
 // null branch returned 0 rows for the entire company instead of the expected 638.)
-export const IRRELEVANT_BUCKET: Prisma.MentionWhereInput = {
-  OR: [
-    {
-      AND: [
-        { messageClassification: 'IRRELEVANT' },
-        { OR: [{ reviewDecision: null }, { NOT: { reviewDecision: 'RELEVANT' } }] }
-      ]
-    },
-    { reviewDecision: 'IRRELEVANT' }
-  ]
-}
-
-export const RELEVANT_BUCKET: Prisma.MentionWhereInput = {
-  AND: [
-    { OR: [{ reviewDecision: null }, { NOT: { reviewDecision: 'IRRELEVANT' } }] },
-    {
-      OR: [
-        { messageClassification: null },
-        { NOT: { messageClassification: 'IRRELEVANT' } },
-        { reviewDecision: 'RELEVANT' }
-      ]
-    }
-  ]
-}
-
 @Injectable()
 export class MentionsService {
   constructor(
@@ -98,7 +75,7 @@ export class MentionsService {
       ...(query.from || query.to ? {
         publishedAt: {
           ...(query.from ? { gte: new Date(query.from) } : {}),
-          ...(query.to ? { lte: new Date(query.to) } : {})
+          ...(query.to ? { lte: new Date(`${query.to.slice(0, 10)}T23:59:59.999Z`) } : {})
         }
       } : {}),
       ...(query.messageClassification ? { messageClassification: query.messageClassification } : {}),

@@ -1,44 +1,25 @@
-// ============================================================
-// PATCH: ecosystem.config.js — добавить в массив apps:
-// ============================================================
+# Deployment
 
-{
-  name: 'reputation-bot',
-  script: 'apps/bot/dist/main.js',
-  cwd: '/opt/reputation-os',
-  env_file: '/opt/reputation-os/apps/bot/.env',
-  env: {
-    NODE_ENV: 'production',
-  },
-  restart_delay: 5000,
-  max_restarts: 10,
-  watch: false,
-}
+Основной проверенный runbook находится в `sale-package/DEPLOYMENT_GUIDE.md`. Этот файл оставляет короткий безопасный production-порядок и больше не является старым Telegram-bot patch scaffold.
 
-// ============================================================
-// Команды деплоя:
-//
-// cd /opt/reputation-os
-//
-// # 1. Применить миграцию
-// npx prisma migrate deploy
-// npx prisma generate
-//
-// # 2. Создать .env для бота
-// cp apps/bot/.env.example apps/bot/.env
-// nano apps/bot/.env   # вписать TELEGRAM_BOT_TOKEN и TELEGRAM_BOT_USERNAME
-//
-// # 3. Добавить TELEGRAM_BOT_TOKEN в apps/api/.env и apps/worker/.env
-//
-// # 4. Добавить TELEGRAM_BOT_USERNAME в apps/api/.env
-//
-// # 5. Собрать бота
-// pnpm --filter reputation-bot build
-//
-// # 6. Запустить PM2
-// pm2 start ecosystem.config.js --only reputation-bot
-// pm2 save
-//
-// # 7. Перезапустить API и worker (новый модуль)
-// pm2 restart reputation-api reputation-worker
-// ============================================================
+```bash
+cd /opt/reputation-os
+pnpm install --frozen-lockfile
+pnpm prisma:generate
+pnpm prisma migrate deploy
+pnpm build
+```
+
+После успешной сборки перезапустите только процессы ReputationOS через фактический PM2-конфиг окружения и проверьте `/api/health`, worker heartbeat, Redis и статус интеграций в admin UI.
+
+Перед первым запуском:
+
+- создать production `.env` из `.env.example` и заменить каждый placeholder;
+- задать сильные `JWT_SECRET` и `INTERNAL_JOBS_SECRET`;
+- для реальных платежей задать `BILLING_PROVIDER=yookassa` и credentials ЮKassa;
+- применить только `prisma migrate deploy`, не `prisma db push`;
+- отдельно создать Telegram Bot API credentials и MTProto Scout session, если эти функции включаются;
+- ограничить PostgreSQL/Redis приватной сетью или localhost;
+- проверить backup и провести тестовый restore на отдельной БД.
+
+Не выполнять production seed по cron. Seed допустим только как осознанный bootstrap после чтения `prisma/seed.ts`.

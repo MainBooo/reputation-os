@@ -12,7 +12,7 @@ export default async function CompanyAnalyticsPage({ params, searchParams }: { p
     const query = searchParams?.from && searchParams?.to ? `?from=${searchParams.from}&to=${searchParams.to}` : ''
 
     overview = await getAnalyticsOverview(params.id, query)
-    sentiment = await getAnalyticsSentiment(params.id)
+    sentiment = await getAnalyticsSentiment(params.id, query)
     platforms = await getAnalyticsPlatforms(params.id, query)
   } catch {
     authRequired = true

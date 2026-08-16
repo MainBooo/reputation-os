@@ -1,4 +1,5 @@
 import {
+  ConflictException,
   ForbiddenException,
   Injectable,
   Logger,
@@ -58,15 +59,20 @@ export class AiReplyDraftsService {
     const rating = mention.ratingValue ? `${mention.ratingValue}/5` : 'нет оценки'
     const author = mention.author || 'гость'
     const content = mention.content || mention.title || 'Текст отсутствует.'
+    const companyDescription = String(mention.company?.description || '')
+      .replace(/[\u0000-\u001F\u007F]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 1000)
 
     return [
-      'Ты профессиональный reputation-менеджер премиального заведения.',
+      'Ты представитель компании и готовишь ответ клиенту от её имени.',
       'Пиши ответы максимально естественно, по-человечески и НЕ шаблонно.',
-      'Каждый ответ должен отличаться от предыдущих.',
       '',
       `Язык: ${languageCode}.`,
       `Стиль: ${tone}.`,
       `Компания: ${mention.company?.name || 'Компания'}.`,
+      ...(companyDescription ? [`Описание компании: ${companyDescription}.`] : []),
       `Площадка: ${mention.platform || mention.source?.platform || 'неизвестно'}.`,
       `Автор: ${author}.`,
       `Оценка: ${rating}.`,
@@ -151,9 +157,7 @@ export class AiReplyDraftsService {
     }
 
     if (!response.ok) {
-      const errorText = await response.text().catch(() => '')
-      // Провайдерский текст ошибки логируется целиком (для дебага), клиенту — только generic-сообщение.
-      this.logger.error(`YandexGPT request failed: HTTP ${response.status} ${errorText.slice(0, 300)}`)
+      this.logger.error(`YandexGPT request failed: HTTP ${response.status}`)
       throw new ServiceUnavailableException('AI provider returned an error. Please try again later.')
     }
 
@@ -190,39 +194,69 @@ export class AiReplyDraftsService {
     const { limits } = await this.entitlements.getForWorkspace(mention.company.workspaceId)
     const maxAiReplies = Number(limits.maxAiRepliesPerMonth)
 
-    if (maxAiReplies >= 0) {
-      const monthStart = new Date()
-      monthStart.setUTCDate(1)
-      monthStart.setUTCHours(0, 0, 0, 0)
+    const preset = dto.preset ?? mention.company.responsePreset ?? 'FORMAL'
+    const monthStart = new Date()
+    monthStart.setUTCDate(1)
+    monthStart.setUTCHours(0, 0, 0, 0)
+    const activeReservationSince = new Date(Date.now() - 2 * 60 * 1000)
 
-      const repliesThisMonth = await this.prisma.aIReplyDraft.count({
-        where: {
-          company: { workspaceId: mention.company.workspaceId },
-          createdAt: { gte: monthStart }
+    const reservation = await this.prisma.$transaction(async (tx) => {
+      // Serialize quota reservation per workspace. The provider call happens
+      // after this short transaction, never while a DB lock is held.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${mention.company.workspaceId}))`
+
+      if (dto.requestId) {
+        const existing = await tx.aIReplyDraft.findUnique({
+          where: { companyId_requestId: { companyId: mention.companyId, requestId: dto.requestId } }
+        })
+        if (existing?.status === 'READY') return existing
+        if (existing) throw new ConflictException('AI reply generation is already in progress')
+      }
+
+      if (maxAiReplies >= 0) {
+        const repliesThisMonth = await tx.aIReplyDraft.count({
+          where: {
+            company: { workspaceId: mention.company.workspaceId },
+            createdAt: { gte: monthStart },
+            OR: [
+              { status: 'READY' },
+              { status: 'GENERATING', createdAt: { gte: activeReservationSince } }
+            ]
+          }
+        })
+        if (repliesThisMonth >= maxAiReplies) {
+          throw new ForbiddenException({ code: 'PLAN_LIMIT', feature: 'maxAiRepliesPerMonth', limit: maxAiReplies })
+        }
+      }
+
+      return tx.aIReplyDraft.create({
+        data: {
+          companyId: mention.companyId,
+          mentionId: mention.id,
+          createdByUserId: userId,
+          languageCode: dto.languageCode || 'ru',
+          tone: dto.tone || 'professional',
+          promptVersion: 'yandexgpt-v3-preset',
+          draftText: '',
+          status: 'GENERATING',
+          requestId: dto.requestId,
+          modelName: process.env.YANDEX_GPT_MODEL || 'yandexgpt-lite',
+          metadata: { provider: 'yandexgpt', preset }
         }
       })
-
-      if (repliesThisMonth >= maxAiReplies) {
-        throw new ForbiddenException({ code: 'PLAN_LIMIT', feature: 'maxAiRepliesPerMonth', limit: maxAiReplies })
-      }
-    }
-
-    const preset = dto.preset ?? mention.company.responsePreset ?? 'FORMAL'
-    const draftText = await this.generateWithYandexGpt(mention, dto, preset)
-
-    return this.prisma.aIReplyDraft.create({
-      data: {
-        companyId: mention.companyId,
-        mentionId: mention.id,
-        createdByUserId: userId,
-        languageCode: dto.languageCode || 'ru',
-        tone: dto.tone || 'professional',
-        promptVersion: 'yandexgpt-v3-preset',
-        draftText,
-        status: 'READY',
-        modelName: process.env.YANDEX_GPT_MODEL || 'yandexgpt-lite',
-        metadata: { provider: 'yandexgpt', preset }
-      }
     })
+
+    if (reservation.status === 'READY') return reservation
+
+    try {
+      const draftText = await this.generateWithYandexGpt(mention, dto, preset)
+      return await this.prisma.aIReplyDraft.update({
+        where: { id: reservation.id },
+        data: { draftText, status: 'READY' }
+      })
+    } catch (error) {
+      await this.prisma.aIReplyDraft.delete({ where: { id: reservation.id } }).catch(() => null)
+      throw error
+    }
   }
 }

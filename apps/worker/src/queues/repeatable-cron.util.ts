@@ -19,17 +19,45 @@ export async function ensureSingleRepeatableJob(
   data: unknown,
   jobId: string,
   everyMs: number,
-  options: JobsOptions
+  options: JobsOptions,
+  scopePrefix?: string
 ): Promise<void> {
   const existing = await queue.getRepeatableJobs()
 
   for (const job of existing) {
     if (job.name !== jobName) continue
+    if (scopePrefix && !String(job.id || '').startsWith(scopePrefix) && !job.key.includes(scopePrefix)) continue
     if (job.id === jobId && Number(job.every) === everyMs) continue
     await queue.removeRepeatableByKey(job.key)
   }
 
   await queue.add(jobName, data, { ...options, repeat: { every: everyMs }, jobId })
+}
+
+/** Reconciles only repeatables owned by a known ReputationOS namespace. Jobs
+ * from another producer sharing Redis are never touched. */
+export async function reconcileKnownRepeatableJobs(
+  queue: Queue,
+  jobName: string,
+  desired: Map<string, number>,
+  knownIdPrefix: string
+): Promise<number> {
+  const existing = await queue.getRepeatableJobs()
+  let removed = 0
+
+  for (const job of existing) {
+    if (job.name !== jobName) continue
+    const id = String(job.id || '')
+    if (!id.startsWith(knownIdPrefix) && !job.key.includes(knownIdPrefix)) continue
+
+    const expectedEvery = desired.get(id)
+    if (expectedEvery !== undefined && Number(job.every) === expectedEvery) continue
+
+    await queue.removeRepeatableByKey(job.key)
+    removed += 1
+  }
+
+  return removed
 }
 
 /** Removes every repeatable registration for `jobName` on `queue` — used where a

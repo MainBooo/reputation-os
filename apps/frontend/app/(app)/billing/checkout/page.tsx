@@ -51,8 +51,8 @@ function pricePerDay(
   priceYearly: number | null | undefined,
   period: 'monthly' | 'yearly',
 ): string {
-  const daily =
-    period === 'yearly' && priceYearly ? priceYearly / 365 : priceMonthly / 30
+  if (period === 'yearly' && (!priceYearly || priceYearly <= 0)) return 'Годовая оплата недоступна'
+  const daily = period === 'yearly' ? Number(priceYearly) / 365 : priceMonthly / 30
   return `≈${Math.round(daily)} ₽ в день`
 }
 
@@ -200,9 +200,12 @@ function PlanCard({
   period: 'monthly' | 'yearly'
 }) {
   const isPopular = plan.code === 'PRO'
+  const yearlyUnavailable = period === 'yearly' && (!plan.priceYearly || plan.priceYearly <= 0)
 
   const priceLabel =
-    period === 'yearly' && plan.priceYearly
+    yearlyUnavailable
+      ? 'Годовая оплата недоступна'
+      : period === 'yearly' && plan.priceYearly
       ? `${plan.priceYearly.toLocaleString('ru-RU')} ₽/год`
       : `${plan.priceMonthly.toLocaleString('ru-RU')} ₽/мес`
 
@@ -229,7 +232,7 @@ function PlanCard({
   }
 
   return (
-    <button type="button" onClick={onSelect} className={cardClass}>
+    <button type="button" onClick={onSelect} disabled={yearlyUnavailable} className={`${cardClass} disabled:cursor-not-allowed disabled:opacity-50`}>
       {/* Popular badge strip */}
       {isPopular && (
         <div className="flex items-center justify-center gap-1.5 rounded-t-2xl bg-[linear-gradient(90deg,rgba(245,158,11,0.18),rgba(234,179,8,0.13))] py-1.5 text-[11px] font-semibold tracking-wide text-amber-300">
@@ -393,7 +396,7 @@ function CheckoutInner() {
   const [errorMsg, setErrorMsg] = useState('')
 
   useEffect(() => {
-    syncPendingPayments().catch(() => {})
+    if (entitlements?.workspaceId) syncPendingPayments(entitlements.workspaceId).catch(() => {})
     getBillingPlans()
       .then((data) => {
         const all = Array.isArray(data) ? data : []
@@ -402,7 +405,7 @@ function CheckoutInner() {
         if (!initialPlan && paid[0]) setSelectedCode(paid[0].code)
       })
       .finally(() => setLoading(false))
-  }, [initialPlan])
+  }, [initialPlan, entitlements?.workspaceId])
 
   // Выбор тарифа на этой странице — только платные; FREE не продаётся, но её
   // реальные лимиты показываются отдельным блоком ниже (FreePlanHighlight).
@@ -412,10 +415,15 @@ function CheckoutInner() {
 
   async function handleCheckout() {
     if (!selectedCode || processing) return
+    if (!entitlements?.workspaceId) {
+      setErrorMsg('Не удалось определить рабочее пространство для оплаты.')
+      setStep('error')
+      return
+    }
     setProcessing(true)
     setErrorMsg('')
     try {
-      const result = await createCheckout(selectedCode, period)
+      const result = await createCheckout(entitlements.workspaceId, selectedCode, period)
       reachGoal('checkout_started')
       if (result?.confirmationUrl?.startsWith('http')) {
         window.location.href = result.confirmationUrl
@@ -469,7 +477,9 @@ function CheckoutInner() {
   const summaryFeatures = selected ? buildSummaryFeatures(selected) : []
 
   const selectedPriceLabel =
-    period === 'yearly' && selected?.priceYearly
+    period === 'yearly' && selected && (!selected.priceYearly || selected.priceYearly <= 0)
+      ? 'Годовая оплата недоступна'
+      : period === 'yearly' && selected?.priceYearly
       ? `${selected.priceYearly.toLocaleString('ru-RU')} ₽/год`
       : selected
         ? `${selected.priceMonthly.toLocaleString('ru-RU')} ₽/мес`
@@ -506,7 +516,7 @@ function CheckoutInner() {
               period === 'yearly' ? 'bg-white/10 text-white' : 'text-zinc-500 hover:text-zinc-300'
             }`}
           >
-            Год <span className="text-emerald-400/80">−17%</span>
+            Год
           </button>
         </div>
       </div>
@@ -595,7 +605,7 @@ function CheckoutInner() {
         <button
           type="button"
           onClick={handleCheckout}
-          disabled={!selectedCode || processing}
+          disabled={!selectedCode || processing || (period === 'yearly' && (!selected?.priceYearly || selected.priceYearly <= 0))}
           className="h-12 w-full rounded-2xl border border-cyan-300/20 bg-[linear-gradient(135deg,rgba(34,211,238,0.34),rgba(79,70,229,0.34),rgba(168,85,247,0.28))] text-sm font-semibold text-white shadow-[0_20px_50px_rgba(34,211,238,0.16),inset_0_1px_0_rgba(255,255,255,0.18)] transition hover:border-cyan-200/35 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-45"
         >
           {processing ? 'Обработка...' : 'Оплатить'}

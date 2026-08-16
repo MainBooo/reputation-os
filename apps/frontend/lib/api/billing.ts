@@ -31,6 +31,10 @@ export interface BillingEntitlements {
   priceMonthly: number
   subscriptionStatus: string | null
   currentPeriodEnd: string | null
+  currentPeriodStart?: string | null
+  billingPeriod?: string | null
+  scheduledPlanCode?: string | null
+  scheduledAt?: string | null
   trialEndsAt?: string | null
   workspaceActive: boolean
   effective: PlanLimits
@@ -44,8 +48,11 @@ export interface BillingEntitlements {
 
 export function isSubscriptionActive(ent: BillingEntitlements | null): boolean {
   if (!ent) return false
+  if (ent.planCode === 'FREE') return false
   const s = ent.subscriptionStatus
-  return s === 'ACTIVE' || s === 'MANUAL' || s === 'TRIAL'
+  if (s === 'MANUAL') return true
+  if (s === 'TRIAL') return Boolean(ent.trialEndsAt && new Date(ent.trialEndsAt).getTime() > Date.now())
+  return s === 'ACTIVE' && Boolean(ent.currentPeriodEnd && new Date(ent.currentPeriodEnd).getTime() > Date.now())
 }
 
 export function getTrialDaysLeft(ent: BillingEntitlements | null): number | null {
@@ -98,16 +105,19 @@ export function getMyEntitlements(workspaceId?: string) {
 }
 
 /** POST /billing/yookassa/create-payment — создаёт платёж через ЮKassa, возвращает confirmationUrl */
-export function createCheckout(planCode: string, period: 'monthly' | 'yearly' = 'monthly') {
+export function createCheckout(workspaceId: string, planCode: string, period: 'monthly' | 'yearly' = 'monthly') {
   return apiFetch<CheckoutResult>('/billing/yookassa/create-payment', {
     method: 'POST',
-    body: JSON.stringify({ planCode, period }),
+    body: JSON.stringify({ workspaceId, planCode, period }),
   })
 }
 
 /** POST /billing/yookassa/sync — синхронизирует PENDING-платежи с ЮKassa (вызывать при открытии биллинга) */
-export function syncPendingPayments() {
-  return apiFetch<{ synced: number }>('/billing/yookassa/sync', { method: 'POST' })
+export function syncPendingPayments(workspaceId: string) {
+  return apiFetch<{ synced: number }>('/billing/yookassa/sync', {
+    method: 'POST',
+    body: JSON.stringify({ workspaceId }),
+  })
 }
 
 // ─── Admin ─────────────────────────────────────────────────────────────────

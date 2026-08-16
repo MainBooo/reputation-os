@@ -19,6 +19,7 @@ import {
 import { isTelegramScoutEnabled, lockMaxSelfRequeues, lockRetryDelayMs } from './telegram-scout/telegram-scout.config'
 import type { TelegramScoutMode, TelegramScoutRunStats } from './telegram-scout/telegram-scout.types'
 import type { WatchlistProcessResult } from './telegram-scout/telegram-watchlist.service'
+import { JobEligibilityService } from '../services/job-eligibility.service'
 
 interface TelegramSearchJobData {
   mode: TelegramScoutMode
@@ -53,7 +54,8 @@ export class TelegramSearchProcessor implements OnModuleInit, OnModuleDestroy {
     private readonly prisma: PrismaService,
     private readonly jobLogService: JobLogService,
     private readonly scoutService: TelegramScoutService,
-    private readonly watchlistService: TelegramWatchlistService
+    private readonly watchlistService: TelegramWatchlistService,
+    private readonly eligibility: JobEligibilityService
   ) {}
 
   async onModuleInit() {
@@ -79,6 +81,18 @@ export class TelegramSearchProcessor implements OnModuleInit, OnModuleDestroy {
     if (!isTelegramScoutEnabled()) {
       this.logger.log(`Telegram Scout disabled (TELEGRAM_SCOUT_ENABLED!=true) — skipping job ${job.id}`)
       return { skipped: true, reason: 'telegram_scout_disabled' }
+    }
+
+    if (job.data.companyId && !await this.eligibility.canRunTelegramCompany(job.data.companyId)) {
+      this.logger.log(`Skipping ineligible Telegram job ${job.id} company=${job.data.companyId}`)
+      return { skipped: true, reason: 'not_eligible' }
+    }
+    if (!job.data.companyId && job.data.telegramChannelId) {
+      const eligibleLinks = await this.eligibility.getEligibleTelegramLinkIds(job.data.telegramChannelId)
+      if (!eligibleLinks.length) {
+        this.logger.log(`Skipping ineligible Telegram channel job ${job.id}`)
+        return { skipped: true, reason: 'not_eligible' }
+      }
     }
 
     let client

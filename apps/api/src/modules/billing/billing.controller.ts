@@ -46,7 +46,7 @@ export class BillingController {
   @Throttle({ default: { ...RATE_LIMITS.billingCheckout, getTracker: userTracker } })
   @Post('checkout')
   createCheckout(@CurrentUser() user: AuthUser, @Body() dto: CreateCheckoutDto) {
-    return this.billing.createCheckout(user.id, dto.planCode)
+    return this.billing.createCheckout(user.id, dto.workspaceId, dto.planCode, dto.period ?? 'monthly')
   }
 
   // ── YooKassa: create payment (реальный чекаут, вызывается фронтендом) ──────
@@ -54,14 +54,20 @@ export class BillingController {
   @Throttle({ default: { ...RATE_LIMITS.billingCheckout, getTracker: userTracker } })
   @Post('yookassa/create-payment')
   createYookassaPayment(@CurrentUser() user: AuthUser, @Body() dto: CreateCheckoutDto) {
-    return this.billing.createCheckout(user.id, dto.planCode, dto.period ?? 'monthly')
+    return this.billing.createCheckout(user.id, dto.workspaceId, dto.planCode, dto.period ?? 'monthly')
   }
 
   // ── YooKassa: sync pending payments ────────────────────────────────────────
   @UseGuards(JwtAuthGuard)
   @Post('yookassa/sync')
-  syncPendingPayments(@CurrentUser() user: AuthUser) {
-    return this.billing.syncPendingPayments(user.id)
+  syncPendingPayments(@CurrentUser() user: AuthUser, @Body('workspaceId') workspaceId: string) {
+    return this.billing.syncPendingPayments(user.id, workspaceId)
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('cancel-at-period-end')
+  cancelAtPeriodEnd(@CurrentUser() user: AuthUser, @Body('workspaceId') workspaceId: string) {
+    return this.billing.cancelAtPeriodEnd(user.id, workspaceId)
   }
 
   // ── YooKassa: webhook ───────────────────────────────────────────────────────

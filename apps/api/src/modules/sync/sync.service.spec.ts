@@ -10,7 +10,7 @@ function mockPrisma(overrides: { coreLogs?: any[]; telegramLog?: any } = {}) {
   const telegramLog = overrides.telegramLog ?? null
 
   return {
-    company: { findUnique: jest.fn().mockResolvedValue({ id: 'c1', workspaceId: 'w1' }) },
+    company: { findUnique: jest.fn().mockResolvedValue({ id: 'c1', workspaceId: 'w1', isActive: true }) },
     user: { findUnique: jest.fn().mockResolvedValue({ systemRole: 'SUPER_ADMIN', isActive: true }) },
     workspaceMember: { findFirst: jest.fn().mockResolvedValue({ role: 'OWNER' }) },
     jobLog: {

@@ -212,7 +212,7 @@ function buildLastDays() {
 }
 
 function getMentionActivityDate(mention: any) {
-  return mention?.discoveredAt || mention?.createdAt || mention?.publishedAt || null
+  return mention?.publishedAt || null
 }
 
 function buildMentionTrend(mentions: any[]) {
@@ -231,86 +231,22 @@ function buildMentionTrend(mentions: any[]) {
   }
 
   const values = days.map((day) => map.get(day) || 0)
-  const smoothedValues = values.map((value, index) => {
-    const previous = values[index - 1] ?? value
-    const next = values[index + 1] ?? value
-    return Math.round((previous + value * 2 + next) / 4)
-  })
 
   return days.map((day, index) => ({
     date: day,
     label: formatShortDate(day),
-    value: smoothedValues[index],
+    value: values[index],
     rawValue: values[index]
   }))
 }
 
 function buildRatingTrend(mentions: any[], averageRating: number | null) {
-  const days = buildLastDays()
-  const grouped = new Map(days.map((day) => [day, [] as number[]]))
-
-  for (const mention of mentions) {
-    const platform = String(mention?.platform || '').toUpperCase()
-
-    if (!['YANDEX', 'TWOGIS'].includes(platform)) {
-      continue
-    }
-
-    const rating =
-      mention?.ratingValue !== null && mention?.ratingValue !== undefined
-        ? Number(mention.ratingValue)
-        : null
-
-    if (rating === null || !Number.isFinite(rating)) continue
-
-    const activityDateRaw =
-      mention?.discoveredAt || mention?.createdAt || mention?.publishedAt || null
-
-    const activityDate = activityDateRaw ? new Date(activityDateRaw) : null
-
-    if (!activityDate || Number.isNaN(activityDate.getTime())) continue
-
-    const key = activityDate.toISOString().slice(0, 10)
-
-    if (grouped.has(key)) {
-      grouped.get(key)?.push(rating)
-    }
-  }
-
-  let previousAverage = 4.1
-
-  const values = days.map((day) => {
-    const ratings = grouped.get(day) || []
-
-    if (!ratings.length) {
-      return previousAverage
-    }
-
-    const avg =
-      ratings.reduce((sum, value) => sum + value, 0) / ratings.length
-
-    previousAverage =
-      Number(((previousAverage * 0.82) + (avg * 0.18)).toFixed(2))
-
-    return previousAverage
-  })
-
-  return days.map((day, index) => {
-    const finalAverage =
-      averageRating !== null &&
-      Number.isFinite(averageRating) &&
-      index === days.length - 1
-        ? Number(averageRating.toFixed(2))
-        : values[index]
-
-    return {
-      date: day,
-      label: formatShortDate(day),
-      value: finalAverage,
-      rawValue: finalAverage
-    }
-  })
-    .filter((point): point is { date: string; label: string; value: number; rawValue: number } => point !== null)
+  void mentions
+  void averageRating
+  // Rating history must come from RatingSnapshot. The workspace dashboard does
+  // not load snapshots yet, so an honest empty state is safer than synthesising
+  // a line from review ingestion dates.
+  return [] as Array<{ date: string; label: string; value: number; rawValue: number }>
 }
 
 

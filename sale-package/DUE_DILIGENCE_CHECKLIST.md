@@ -14,11 +14,11 @@
 
 ## Тесты
 
-- [ ] `pnpm --filter api test` — на момент последнего прогона (28.07.2026) 110/110 тестов зелёные.
-- [ ] `pnpm --filter worker test` — 240/240 зелёные, включая сильное покрытие Telegram Scout (classifier, global-search, dedup, routing).
-- [ ] `pnpm --filter frontend test` — Playwright e2e, 1 файл на момент аудита, покрывает конкретный регрессионный баг логин-формы, не полный сквозной прогон.
+- [ ] `pnpm --filter api test` — 129/129 тестов зелёные на 16.08.2026.
+- [ ] `pnpm --filter worker test` — 254/254 зелёные, включая Telegram Scout, stale-job gates, queue reconciliation и dedup.
+- [ ] `pnpm --filter frontend test:e2e` — 12 auth-сценариев; нужны установленные Playwright Chromium/WebKit binaries. В sandbox logic-аудита browser download был заблокирован сетью до выполнения assertions.
 - [ ] `apps/bot`, `apps/landing` — тестов нет вообще.
-- [ ] Модули без собственных unit-тестов в api: admin, ai-reply-drafts, analytics, chat (частично закрыто новым `chat.service.spec.ts`), health, notifications, push, ratings, workspaces.
+- [ ] Собственные unit tests есть у billing, entitlements, companies, mentions, chat, AI reply, analytics и критических worker processors; admin/health/notifications/push/workspaces всё ещё покрыты слабее.
 - [ ] Команды воспроизводимы на стороне покупателя после `pnpm install` без дополнительных прав доступа к проду.
 
 ## Production
@@ -34,6 +34,7 @@
 
 - [ ] `REPUTATIONOS_SALE_AUDIT.md` — полный технический аудит от 27.07.2026 (8 независимых тематических проходов: auth/tenant, Telegram Scout, billing/entitlements, AI/аналитика/уведомления, security, качество кода, DevOps/white-label).
 - [ ] `REPUTATIONOS_SALE_FIX_REPORT.md` — отчёт о том, что и как исправлено, с подтверждением живыми тестами.
+- [ ] `sale-package/LOGIC_AUDIT_FIX_REPORT.md` — текущая billing/sync/analytics/tenant policy и результаты validation.
 - [ ] `SALE_FIX_PROGRESS.md` — построчный статус по каждой найденной проблеме (FIXED/PARTIALLY_FIXED/DEFERRED/NOT_REPRODUCED).
 - [ ] Оба BLOCKER (подделка webhook ЮKassa, SSRF в WEB-мониторинге) закрыты и покрыты юнит-тестами (14 и 33 теста соответственно) плюс живой regression-тест против запущенного прода.
 - [ ] Рекомендуется (не выполнялось в рамках этого пакета): прогнать secret-scanner (`gitleaks`/`trufflehog`) по полной git-истории, а не только по текущему diff.
@@ -50,7 +51,7 @@
 ## Права доступа
 
 - [ ] Кто именно владеет доменами, ЮKassa-кабинетом, Yandex Cloud аккаунтом, GitHub-репозиторием, SSH-доступом к серверу — ни один из этих пунктов не подтверждён этим документом как «готов к передаче», см. `OWNER_DECISIONS.md` и `ASSETS_INCLUDED.md`.
-- [ ] Роли в системе (`OWNER`/`ADMIN`/`MEMBER`, `SUPER_ADMIN`) — RBAC-guard на уровне контроллера, перечитывает роль из БД на каждый запрос (не кэшируется в токене).
+- [ ] Billing: только workspace `OWNER`; `ADMIN`/`MEMBER` получают 403. Остальные workspace write-права зависят от конкретного модуля; `SUPER_ADMIN` защищён отдельным guard.
 
 ## Расходы
 
@@ -70,7 +71,7 @@
 ## История Git
 
 - [ ] `git log --oneline` — полная история коммитов, содержательные сообщения.
-- [ ] Текущая рабочая ветка `fix/sale-readiness-hardening`, HEAD `843f055`, **16 коммитов впереди `origin/main`, не запушена**. `git status` — рабочее дерево чистое.
+- [ ] Текущая ветка logic-аудита — `fix/logic-audit-hardening`, base/commit before `66cb0c3`; итоговый commit и чистоту дерева сверять с `LOGIC_AUDIT_FIX_REPORT.md`.
 - [ ] 25 Prisma-миграций с осмысленными именами — видно, что схема дорабатывалась по фидбеку прода, а не спроектирована один раз.
 - [ ] Мусорные файлы (`7.6.0`, `apps/bot-scaffold.tar`, дублирующиеся `gen-token.js`) — большая часть удалена из git в цикле исправлений 27–28.07.2026, часть dev-утилит (`gen-token.js`) оставлена осознанно как рабочий инструмент.
 

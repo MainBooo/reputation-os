@@ -73,7 +73,7 @@
 - `:6380` — используется API (энтитлменты, вспомогательные очереди).
 - `:6379` — нативный Redis для worker (BullMQ-очереди), **также используется другими, не относящимися к ReputationOS процессами на этом VPS** — при разделении инфраструктуры потребуется отдельный инстанс.
 
-BullMQ-очереди (worker): sync источников (Яндекс Карты/2ГИС/WEB), Telegram Scout (discovery + watchlist), AI-классификация/sentiment, alerts (Telegram + Web Push), scheduler для повторяющихся cron-джобов. Redis работает без аутентификации (bind на localhost) — известное ограничение, см. `KNOWN_LIMITATIONS.md`.
+BullMQ-очереди (worker): sync источников (Яндекс Карты/2ГИС/WEB), Telegram Scout (daily discovery + watchlist в одном прогоне), AI-классификация/sentiment, alerts (Telegram + Web Push), scheduler для repeatable jobs. Каждый внешний sync повторно проверяет актуальный entitlement, workspace/company/source/target state и sync flag; scheduler удаляет obsolete jobs только в известных ReputationOS namespaces. Redis работает без аутентификации (bind на localhost) — известное ограничение, см. `KNOWN_LIMITATIONS.md`.
 
 ## Внешние интеграции
 

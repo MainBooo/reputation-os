@@ -450,6 +450,7 @@ model RatingSnapshot {
   capturedAt            DateTime
   rawPayload            Json?
   metadata              Json?
+  dedupeKey             String?  @unique
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 
@@ -476,6 +477,7 @@ model AIReplyDraft {
   status          String   @default("READY")
   modelName       String?
   metadata        Json?
+  requestId       String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -487,6 +489,7 @@ model AIReplyDraft {
   @@index([mentionId])
   @@index([createdByUserId])
   @@index([companyId, createdAt(sort: Desc)])
+  @@unique([companyId, requestId])
 }
 
 model NotificationRule {
@@ -628,15 +631,21 @@ model Plan {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  subscriptions Subscription[]
+  subscriptions          Subscription[] @relation("CurrentSubscriptionPlan")
+  scheduledSubscriptions Subscription[] @relation("ScheduledSubscriptionPlan")
 }
 
 model Subscription {
   id                String             @id @default(cuid())
   workspaceId       String             @unique
   planId            String
+  scheduledPlanId   String?
   status            SubscriptionStatus @default(ACTIVE)
+  billingPeriod     String             @default("monthly")
+  currentPeriodStart DateTime?
   currentPeriodEnd  DateTime?
+  scheduledBillingPeriod String?
+  scheduledAt       DateTime?
   cancelAtPeriodEnd Boolean            @default(false)
   provider          BillingProvider    @default(MOCK)
   trialEndsAt       DateTime?
@@ -646,13 +655,15 @@ model Subscription {
   updatedAt         DateTime           @updatedAt
 
   workspace      Workspace                 @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  plan           Plan                      @relation(fields: [planId], references: [id])
+  plan           Plan                      @relation("CurrentSubscriptionPlan", fields: [planId], references: [id])
+  scheduledPlan  Plan?                     @relation("ScheduledSubscriptionPlan", fields: [scheduledPlanId], references: [id])
   updatedByAdmin User?                     @relation("SubscriptionManagedBy", fields: [updatedByAdminId], references: [id], onDelete: SetNull)
   Company        Company[]
   reminderLogs   SubscriptionReminderLog[]
 
   @@index([status, currentPeriodEnd])
   @@index([status, trialEndsAt])
+  @@index([scheduledAt])
 }
 
 model SubscriptionReminderLog {
@@ -681,6 +692,7 @@ model Payment {
   status            PaymentStatus   @default(PENDING)
   provider          BillingProvider @default(MOCK)
   providerPaymentId String?         @unique
+  checkoutKey       String?         @unique
   confirmationUrl   String?
   rawPayload        Json?
   paidAt            DateTime?

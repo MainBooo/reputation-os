@@ -1,7 +1,11 @@
 import { PlanCode } from '@prisma/client'
-import { IsEnum, IsIn, IsOptional } from 'class-validator'
+import { IsEnum, IsIn, IsNotEmpty, IsOptional, IsString } from 'class-validator'
 
 export class CreateCheckoutDto {
+  @IsString()
+  @IsNotEmpty()
+  workspaceId!: string
+
   @IsEnum(PlanCode)
   planCode!: PlanCode
 

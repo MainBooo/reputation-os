@@ -20,8 +20,13 @@ export class AnalyticsController {
   }
 
   @Get('sentiment')
-  sentiment(@CurrentUser() user: AuthUser, @Param('id') companyId: string) {
-    return this.analyticsService.sentiment(user.id, companyId)
+  sentiment(
+    @CurrentUser() user: AuthUser,
+    @Param('id') companyId: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string
+  ) {
+    return this.analyticsService.sentiment(user.id, companyId, from, to)
   }
 
   @Get('platforms')

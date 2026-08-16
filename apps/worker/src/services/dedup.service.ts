@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common'
-import { MentionType, MessageClassification, MessageUrgency, Platform, Sentiment } from '@prisma/client'
+import { MentionType, MessageClassification, MessageUrgency, Platform, Prisma, Sentiment } from '@prisma/client'
 import { PrismaService } from '../common/prisma/prisma.service'
 import { buildMentionHash } from '../common/utils/hash.util'
 import { normalizeText } from '../common/utils/normalize.util'
@@ -68,10 +68,6 @@ export class DedupService {
     classifiedAt?: Date | null
   }) {
     const nextRating = params.ratingValue ?? existing.ratingValue ?? null
-    const nextPublishedAt = existing.publishedAt && params.ratingValue == null
-      ? existing.publishedAt
-      : params.publishedAt
-
     return {
       title: params.title || existing.title || null,
       content: params.content || existing.content || '',
@@ -79,7 +75,7 @@ export class DedupService {
       author: params.author || existing.author || null,
       authorExternalId: params.authorExternalId || existing.authorExternalId || null,
       url: params.url || existing.url || null,
-      publishedAt: nextPublishedAt,
+      publishedAt: params.publishedAt,
       ratingValue: nextRating,
       sentiment: this.classifyMentionSentiment(params.normalizedContent || existing.normalizedContent || '', nextRating),
       rawPayload: params.rawPayload as any,
@@ -193,38 +189,61 @@ export class DedupService {
       })
     }
 
-    return this.prisma.mention.create({
-      data: {
-        companyId: params.companyId,
-        sourceId: params.sourceId,
-        platform: params.platform,
-        type: params.type,
-        externalMentionId: params.externalMentionId || null,
-        url: params.url || null,
-        title: params.title || null,
-        content: params.content,
-        normalizedContent,
-        author: params.author || null,
-        authorExternalId: params.authorExternalId || null,
-        publishedAt: params.publishedAt,
-        ratingValue: params.ratingValue ?? null,
-        sentiment: this.classifyMentionSentiment(normalizedContent, params.ratingValue),
-        status: 'NEW',
-        hash,
-        rawPayload: params.rawPayload as any,
-        metadata: params.metadata as any,
-        matchedQuery: params.matchedQuery ?? null,
-        relevanceScore: params.relevanceScore ?? null,
-        messageClassification: params.messageClassification ?? null,
-        messageClassConfidence: params.messageClassConfidence ?? null,
-        messageUrgency: params.messageUrgency ?? null,
-        messageClassReason: params.messageClassReason ?? null,
-        messageClassModel: params.messageClassModel ?? null,
-        isInboxVisible: params.isInboxVisible ?? true,
-        needsManualReview: params.needsManualReview ?? false,
-        classifiedAt: params.classifiedAt ?? null,
-          companySourceTargetId: params.companySourceTargetId || null
-      }
-    })
+    const createData: Prisma.MentionUncheckedCreateInput = {
+      companyId: params.companyId,
+      sourceId: params.sourceId,
+      platform: params.platform,
+      type: params.type,
+      externalMentionId: params.externalMentionId || null,
+      url: params.url || null,
+      title: params.title || null,
+      content: params.content,
+      normalizedContent,
+      author: params.author || null,
+      authorExternalId: params.authorExternalId || null,
+      publishedAt: params.publishedAt,
+      ratingValue: params.ratingValue ?? null,
+      sentiment: this.classifyMentionSentiment(normalizedContent, params.ratingValue),
+      status: 'NEW',
+      hash,
+      rawPayload: params.rawPayload as any,
+      metadata: params.metadata as any,
+      matchedQuery: params.matchedQuery ?? null,
+      relevanceScore: params.relevanceScore ?? null,
+      messageClassification: params.messageClassification ?? null,
+      messageClassConfidence: params.messageClassConfidence ?? null,
+      messageUrgency: params.messageUrgency ?? null,
+      messageClassReason: params.messageClassReason ?? null,
+      messageClassModel: params.messageClassModel ?? null,
+      isInboxVisible: params.isInboxVisible ?? true,
+      needsManualReview: params.needsManualReview ?? false,
+      classifiedAt: params.classifiedAt ?? null,
+      companySourceTargetId: params.companySourceTargetId || null
+    }
+
+    try {
+      return await this.prisma.mention.create({ data: createData })
+    } catch (error) {
+      // Two workers can both miss the read checks. Database unique constraints
+      // are authoritative; the loser re-reads and applies the same update rather
+      // than failing the whole retry after the other worker already persisted it.
+      if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') throw error
+      const concurrent = await this.prisma.mention.findFirst({
+        where: {
+          companyId: params.companyId,
+          OR: [
+            ...(params.externalMentionId
+              ? [{ platform: params.platform, externalMentionId: params.externalMentionId }]
+              : []),
+            { hash }
+          ]
+        }
+      })
+      if (!concurrent) throw error
+      return this.prisma.mention.update({
+        where: { id: concurrent.id },
+        data: this.mergeMentionData(concurrent, { ...params, normalizedContent })
+      })
+    }
   }
 }

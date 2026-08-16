@@ -66,7 +66,7 @@ function sentimentClasses(sentiment?: string) {
   return 'border-cyan-400/18 bg-cyan-500/[0.045] text-cyan-200'
 }
 
-function Card({ label, value, icon, tone = 'cyan', delta = '↑ 0%' }: any) {
+function Card({ label, value, icon, tone = 'cyan', delta = '—' }: any) {
   const styles: Record<string, string> = {
     cyan: 'border-cyan-300/15 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.13),transparent_62%),rgba(7,17,31,0.82)]',
     rose: 'border-rose-400/20 bg-[radial-gradient(circle_at_top_left,rgba(244,63,94,0.14),transparent_62%),rgba(7,17,31,0.82)]',
@@ -89,6 +89,21 @@ function Card({ label, value, icon, tone = 'cyan', delta = '↑ 0%' }: any) {
       <div className="mt-3 text-xs text-zinc-500">за выбранный период</div>
     </div>
   )
+}
+
+function deltaLabel(value: unknown) {
+  if (value === null || value === undefined || !Number.isFinite(Number(value))) return '—'
+  const number = Number(value)
+  if (number === 0) return '→ 0%'
+  return number > 0 ? `↑ ${number}%` : `↓ ${Math.abs(number)}%`
+}
+
+function reputationLabel(rating: number) {
+  if (!rating) return null
+  if (rating >= 4.5) return 'Отличная репутация'
+  if (rating >= 4) return 'Хорошая репутация'
+  if (rating >= 3) return 'Требует внимания'
+  return 'Критическая зона'
 }
 
 export default function AnalyticsDashboard({ overview, sentiment, platforms }: Props) {
@@ -137,15 +152,8 @@ export default function AnalyticsDashboard({ overview, sentiment, platforms }: P
   const trend = overview?.trend?.length ? overview.trend : []
   const latest = Array.isArray(overview?.latest) ? overview.latest.slice(0, 6) : []
 
-  const reputationTrend = overview?.reputationTrend?.length
-    ? overview.reputationTrend.map((item: any, index: number) => ({
-        ...item,
-        rating: Number(Math.max(1, Math.min(5, Number(item.rating || rating || 0) + (index % 3 === 0 ? -0.035 : index % 3 === 1 ? 0.025 : 0.045))).toFixed(2))
-      }))
-    : trend.map((item: any, index: number) => ({
-        ...item,
-        rating: rating ? Number(Math.max(1, Math.min(5, rating - 0.12 + index * 0.028 + (index % 3 === 0 ? -0.035 : index % 3 === 1 ? 0.025 : 0.045))).toFixed(2)) : 0
-      }))
+  const reputationTrend = Array.isArray(overview?.reputationTrend) ? overview.reputationTrend : []
+  const statusLabel = reputationLabel(rating)
 
   const platformRows = ['YANDEX', 'WEB', 'TWOGIS', 'CUSTOM'].map((key) => {
     const found = platforms?.items?.find((item: any) => item.platform === key)
@@ -218,12 +226,12 @@ export default function AnalyticsDashboard({ overview, sentiment, platforms }: P
             <div className="text-5xl font-semibold tracking-tight text-white sm:text-6xl">{rating ? rating.toFixed(1) : '—'}</div>
             <Star className="h-10 w-10 text-cyan-300" />
           </div>
-          <div className="mt-5 text-sm font-medium text-cyan-300">Хорошая репутация</div>
+          <div className="mt-5 text-sm font-medium text-cyan-300">{statusLabel || 'Недостаточно данных'}</div>
           <div className="mt-5 text-sm leading-6 text-zinc-400">Рассчитано по отзывам и упоминаниям за выбранный период.</div>
         </div>
 
         <div className="min-h-[175px]">
-          <ResponsiveContainer width="100%" height={175}>
+          {reputationTrend.length > 0 ? <ResponsiveContainer width="100%" height={175}>
             <AreaChart data={reputationTrend}>
               <CartesianGrid stroke="rgba(255,255,255,0.04)" vertical={false} />
               <XAxis dataKey="label" tick={{ fill: '#94a3b8', fontSize: 12 }} axisLine={false} tickLine={false} />
@@ -231,7 +239,7 @@ export default function AnalyticsDashboard({ overview, sentiment, platforms }: P
               <Tooltip contentStyle={{ background: '#07111f', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 14 }} />
               <Area type="linear" dataKey="rating" stroke="#22d3ee" strokeWidth={3.2} fill="#22d3ee22" dot={false} activeDot={{ r: 5, stroke: '#a5f3fc', strokeWidth: 2, fill: '#22d3ee' }} />
             </AreaChart>
-          </ResponsiveContainer>
+          </ResponsiveContainer> : <div className="flex h-[175px] items-center justify-center text-sm text-zinc-500">Недостаточно данных рейтинга</div>}
         </div>
 
           <div className="hidden items-center justify-center lg:flex">
@@ -262,10 +270,10 @@ export default function AnalyticsDashboard({ overview, sentiment, platforms }: P
       </section>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Card icon={<MessageSquare className="h-5 w-5" />} label="Всего упоминаний" value={total} tone="cyan" delta={overview?.deltas?.total >= 0 ? `↑ ${overview?.deltas?.total || 0}%` : `↓ ${Math.abs(overview?.deltas?.total || 0)}%`} />
-        <Card icon={<ThumbsDown className="h-5 w-5" />} label="Негативные упоминания" value={negative} tone="rose" delta={overview?.deltas?.negative >= 0 ? `↑ ${overview?.deltas?.negative || 0}%` : `↓ ${Math.abs(overview?.deltas?.negative || 0)}%`} />
-        <Card icon={<Smile className="h-5 w-5" />} label="Позитивные упоминания" value={positive} tone="emerald" delta={overview?.deltas?.positive >= 0 ? `↑ ${overview?.deltas?.positive || 0}%` : `↓ ${Math.abs(overview?.deltas?.positive || 0)}%`} />
-        <Card icon={<MessageSquare className="h-5 w-5" />} label="Всего отзывов" value={reviews} tone="slate" delta="→ 0%" />
+        <Card icon={<MessageSquare className="h-5 w-5" />} label="Всего упоминаний" value={total} tone="cyan" delta={deltaLabel(overview?.deltas?.total)} />
+        <Card icon={<ThumbsDown className="h-5 w-5" />} label="Негативные упоминания" value={negative} tone="rose" delta={deltaLabel(overview?.deltas?.negative)} />
+        <Card icon={<Smile className="h-5 w-5" />} label="Позитивные упоминания" value={positive} tone="emerald" delta={deltaLabel(overview?.deltas?.positive)} />
+        <Card icon={<MessageSquare className="h-5 w-5" />} label="Всего отзывов" value={reviews} tone="slate" delta="—" />
       </div>
 
       <section className="rounded-[24px] border border-white/10 bg-[#07111f]/80 p-5">

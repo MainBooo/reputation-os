@@ -7,7 +7,11 @@ import { EntitlementsService } from '../billing/entitlements.service'
 const mockPrisma = {
   mention: { findUnique: jest.fn() },
   workspaceMember: { findFirst: jest.fn() },
-  aIReplyDraft: { count: jest.fn(), create: jest.fn() }
+  aIReplyDraft: {
+    count: jest.fn(), findUnique: jest.fn(), create: jest.fn(), update: jest.fn(), delete: jest.fn()
+  },
+  $executeRaw: jest.fn(),
+  $transaction: jest.fn()
 }
 
 const mockEntitlements = {
@@ -44,6 +48,12 @@ describe('AiReplyDraftsService — generate', () => {
     mockPrisma.mention.findUnique.mockResolvedValue(baseMention)
     mockPrisma.workspaceMember.findFirst.mockResolvedValue({ id: 'wm-1', userId: 'u-1', workspaceId: 'ws-1' })
     mockPrisma.aIReplyDraft.count.mockResolvedValue(0)
+    mockPrisma.aIReplyDraft.findUnique.mockResolvedValue(null)
+    mockPrisma.aIReplyDraft.create.mockResolvedValue({ id: 'draft-1', status: 'GENERATING', draftText: '' })
+    mockPrisma.aIReplyDraft.update.mockResolvedValue({ id: 'draft-1', status: 'READY', draftText: 'Спасибо за отзыв, разберёмся с задержкой.' })
+    mockPrisma.aIReplyDraft.delete.mockResolvedValue({})
+    mockPrisma.$executeRaw.mockResolvedValue(1)
+    mockPrisma.$transaction.mockImplementation(async (callback: any) => callback(mockPrisma))
     mockEntitlements.getForWorkspace.mockResolvedValue({ limits: { maxAiRepliesPerMonth: -1 } })
 
     const module = await Test.createTestingModule({
@@ -68,12 +78,10 @@ describe('AiReplyDraftsService — generate', () => {
       status: 200,
       json: async () => yandexGptResponse('Спасибо за отзыв, разберёмся с задержкой.')
     })
-    mockPrisma.aIReplyDraft.create.mockResolvedValue({ id: 'draft-1', draftText: 'Спасибо за отзыв, разберёмся с задержкой.' })
-
     const result = await service.generate('u-1', 'mention-1', {})
 
     expect(fetchMock).toHaveBeenCalledTimes(1)
-    expect(mockPrisma.aIReplyDraft.create).toHaveBeenCalledWith(
+    expect(mockPrisma.aIReplyDraft.update).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({ draftText: 'Спасибо за отзыв, разберёмся с задержкой.' })
       })
@@ -87,7 +95,7 @@ describe('AiReplyDraftsService — generate', () => {
 
     await expect(service.generate('u-1', 'mention-1', {})).rejects.toThrow(ServiceUnavailableException)
     expect(fetchMock).not.toHaveBeenCalled()
-    expect(mockPrisma.aIReplyDraft.create).not.toHaveBeenCalled()
+    expect(mockPrisma.aIReplyDraft.delete).toHaveBeenCalledWith({ where: { id: 'draft-1' } })
   })
 
   it('throws ServiceUnavailableException (not a raw error) when the provider request times out', async () => {
@@ -98,7 +106,7 @@ describe('AiReplyDraftsService — generate', () => {
     fetchMock.mockRejectedValue(timeoutError)
 
     await expect(service.generate('u-1', 'mention-1', {})).rejects.toThrow(ServiceUnavailableException)
-    expect(mockPrisma.aIReplyDraft.create).not.toHaveBeenCalled()
+    expect(mockPrisma.aIReplyDraft.delete).toHaveBeenCalledWith({ where: { id: 'draft-1' } })
   })
 
   it('throws ServiceUnavailableException when the provider returns a malformed (non-JSON) response', async () => {
@@ -113,7 +121,7 @@ describe('AiReplyDraftsService — generate', () => {
     })
 
     await expect(service.generate('u-1', 'mention-1', {})).rejects.toThrow(ServiceUnavailableException)
-    expect(mockPrisma.aIReplyDraft.create).not.toHaveBeenCalled()
+    expect(mockPrisma.aIReplyDraft.delete).toHaveBeenCalledWith({ where: { id: 'draft-1' } })
   })
 
   it('throws ServiceUnavailableException when the provider returns an empty reply', async () => {
@@ -146,5 +154,32 @@ describe('AiReplyDraftsService — generate', () => {
 
     await expect(service.generate('u-1', 'mention-1', {})).rejects.toThrow(ForbiddenException)
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('returns the existing completed draft for the same idempotency requestId', async () => {
+    const existing = { id: 'draft-existing', status: 'READY', draftText: 'Готовый ответ' }
+    mockPrisma.aIReplyDraft.findUnique.mockResolvedValue(existing)
+    mockEntitlements.getForWorkspace.mockResolvedValue({ limits: { maxAiRepliesPerMonth: 5 } })
+
+    await expect(service.generate('u-1', 'mention-1', { requestId: 'request-1' })).resolves.toEqual(existing)
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(mockPrisma.aIReplyDraft.create).not.toHaveBeenCalled()
+  })
+
+  it('reserves quota under a workspace advisory lock before calling the provider', async () => {
+    process.env.YANDEX_GPT_API_KEY = 'test-key'
+    process.env.YANDEX_GPT_FOLDER_ID = 'test-folder'
+    mockEntitlements.getForWorkspace.mockResolvedValue({ limits: { maxAiRepliesPerMonth: 5 } })
+    fetchMock.mockResolvedValue({ ok: true, status: 200, json: async () => yandexGptResponse('Ответ') })
+
+    await service.generate('u-1', 'mention-1', { requestId: 'request-2' })
+
+    expect(mockPrisma.$executeRaw).toHaveBeenCalled()
+    expect(mockPrisma.aIReplyDraft.count).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ company: { workspaceId: 'ws-1' } }) })
+    )
+    expect(mockPrisma.aIReplyDraft.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ status: 'GENERATING', requestId: 'request-2' }) })
+    )
   })
 })

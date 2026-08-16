@@ -4,19 +4,10 @@ import { PrismaService } from '../common/prisma/prisma.service'
 import { QUEUES } from '../queues/queue.names'
 import { JOBS } from '../queues/job.names'
 import { CRON_JOB_OPTIONS } from '../queues/job-options'
+import { JobEligibilityService } from '../services/job-eligibility.service'
 
 const AUTO_ORIGINS = ['auto', 'auto-bootstrap', 'auto-bootstrap-backfill']
 const DEEP_SCAN_CHECK_INTERVAL_MIN = 7 * 24 * 60 // 7 дней — отличает DeepScan-происхождение от ручных 1440
-
-// Дефолты по плану — держать в синхроне с apps/api/src/modules/billing/entitlements.service.ts
-// (CODE_DEFAULTS) и billing.constants.ts (FREE_LIMITS). Нужны только 2 поля из полного PlanLimits.
-const FREE_WEB_LIMITS = { webMonitoringEnabled: false, maxWebPages: 0 }
-const PLAN_WEB_LIMITS: Record<string, { webMonitoringEnabled: boolean; maxWebPages: number }> = {
-  FREE: FREE_WEB_LIMITS,
-  START: { webMonitoringEnabled: false, maxWebPages: 0 },
-  PRO: { webMonitoringEnabled: true, maxWebPages: 50 },
-  AGENCY: { webMonitoringEnabled: true, maxWebPages: 200 }
-}
 
 // DeepScan: раз в неделю промоутит уже найденные WebMentionAdapter'ом (mentions-sync,
 // scope=WEB) необработанные источники в постоянный мониторинг WatchedPage — не ищет
@@ -28,7 +19,8 @@ export class DeepScanProcessor implements OnModuleInit, OnModuleDestroy {
 
   constructor(
     @Inject('BULLMQ_CONNECTION') private readonly connection: any,
-    private readonly prisma: PrismaService
+    private readonly prisma: PrismaService,
+    private readonly eligibility: JobEligibilityService
   ) {}
 
   async onModuleInit() {
@@ -54,45 +46,13 @@ export class DeepScanProcessor implements OnModuleInit, OnModuleDestroy {
     return AUTO_ORIGINS.includes(cfg.origin)
   }
 
-  // Мини-версия entitlements.service.ts::getForWorkspace, только webMonitoringEnabled/maxWebPages.
-  private async getEffectiveWebLimits(workspaceId: string) {
-    const [subscription, overrides] = await Promise.all([
-      (this.prisma as any).subscription.findUnique({ where: { workspaceId }, include: { plan: true } }),
-      (this.prisma as any).featureOverride.findMany({ where: { workspaceId, featureKey: { in: ['webMonitoringEnabled', 'maxWebPages'] } } })
-    ])
-
-    const now = new Date()
-    const isSubActive =
-      subscription &&
-      ((subscription.status === 'ACTIVE' && subscription.currentPeriodEnd != null && subscription.currentPeriodEnd > now) ||
-        subscription.status === 'MANUAL' ||
-        (subscription.status === 'TRIAL' && subscription.trialEndsAt != null && subscription.trialEndsAt > now))
-
-    let limits = { ...FREE_WEB_LIMITS }
-    if (isSubActive) {
-      const codeDefaults = PLAN_WEB_LIMITS[subscription.plan.code] ?? FREE_WEB_LIMITS
-      const dbLimits = subscription.plan.limits as Record<string, any> | null
-      limits = {
-        webMonitoringEnabled: dbLimits?.webMonitoringEnabled ?? codeDefaults.webMonitoringEnabled,
-        maxWebPages: dbLimits?.maxWebPages ?? codeDefaults.maxWebPages
-      }
-    }
-
-    for (const override of overrides) {
-      if (override.featureKey === 'webMonitoringEnabled') limits.webMonitoringEnabled = override.value as boolean
-      if (override.featureKey === 'maxWebPages') limits.maxWebPages = override.value as number
-    }
-
-    return limits
-  }
-
   async handle(_job: Job) {
     const candidates = await (this.prisma as any).companySourceTarget.findMany({
       where: {
         isActive: false,
         externalUrl: { not: null },
-        company: { isActive: true },
-        source: { platform: 'WEB' }
+        company: { isActive: true, workspace: { isActive: true } },
+        source: { platform: 'WEB', isEnabled: true }
       },
       select: { id: true, companyId: true, externalUrl: true, config: true, company: { select: { workspaceId: true } } }
     })
@@ -110,7 +70,7 @@ export class DeepScanProcessor implements OnModuleInit, OnModuleDestroy {
     let planLimited = 0
 
     for (const [workspaceId, targets] of byWorkspace.entries()) {
-      const limits = await this.getEffectiveWebLimits(workspaceId)
+      const limits = await this.eligibility.getEffectiveWebLimits(workspaceId)
 
       if (!limits.webMonitoringEnabled || limits.maxWebPages === 0) {
         planLimited += targets.length
@@ -125,13 +85,29 @@ export class DeepScanProcessor implements OnModuleInit, OnModuleDestroy {
         headroom = Math.max(0, limits.maxWebPages - currentActive)
       }
 
+      let sourceHeadroom = limits.maxSources
+      if (sourceHeadroom !== -1) {
+        const currentSources = await (this.prisma as any).companySourceTarget.count({
+          where: {
+            isActive: true,
+            company: { workspaceId, isActive: true },
+            source: { isEnabled: true, platform: { not: 'TELEGRAM' } }
+          }
+        })
+        sourceHeadroom = Math.max(0, limits.maxSources - currentSources)
+      }
+
       for (const target of targets) {
+        if (!await this.eligibility.canRunWebCompany(workspaceId, target.companyId)) {
+          planLimited++
+          continue
+        }
         if (!this.isPromotable(target.config)) {
           skipped++
           continue
         }
 
-        if (headroom !== -1 && headroom <= 0) {
+        if ((headroom !== -1 && headroom <= 0) || (sourceHeadroom !== -1 && sourceHeadroom <= 0)) {
           planLimited++
           continue
         }
@@ -172,6 +148,7 @@ export class DeepScanProcessor implements OnModuleInit, OnModuleDestroy {
 
         promoted++
         if (headroom !== -1) headroom--
+        if (sourceHeadroom !== -1) sourceHeadroom--
       }
     }
 

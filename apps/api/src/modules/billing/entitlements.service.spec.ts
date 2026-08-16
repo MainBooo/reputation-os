@@ -51,3 +51,29 @@ describe('EntitlementsService — countBillableSources / hasSourceSlotAvailable'
     await expect(service.hasSourceSlotAvailable('ws-1', 6)).resolves.toBe(true)
   })
 })
+
+describe('EntitlementsService — scheduled plan boundary', () => {
+  it('uses the scheduled plan limits after scheduledAt, not the old paid plan limits', async () => {
+    const prisma: any = {
+      subscription: { findUnique: jest.fn().mockResolvedValue({
+        status: 'ACTIVE', currentPeriodEnd: new Date(Date.now() + 10 * 86_400_000),
+        currentPeriodStart: new Date(), billingPeriod: 'monthly', scheduledBillingPeriod: 'monthly',
+        scheduledAt: new Date(Date.now() - 1000), trialEndsAt: null,
+        plan: { code: 'PRO', name: 'PRO', priceMonthly: 1890, limits: { webMonitoringEnabled: true, maxCompanies: 10 } },
+        scheduledPlan: { code: 'START', name: 'START', priceMonthly: 890, limits: { webMonitoringEnabled: false, maxCompanies: 3 } }
+      }) },
+      featureOverride: { findMany: jest.fn().mockResolvedValue([]) },
+      company: { count: jest.fn().mockResolvedValue(4) },
+      aIReplyDraft: { count: jest.fn().mockResolvedValue(0) },
+      workspace: { findUnique: jest.fn().mockResolvedValue({ isActive: true }) },
+      companySourceTarget: { count: jest.fn().mockResolvedValue(4) }
+    }
+    const service = new EntitlementsService(prisma)
+
+    const result = await service.getForWorkspace('workspace-1')
+
+    expect(result.planCode).toBe('START')
+    expect(result.limits.webMonitoringEnabled).toBe(false)
+    expect(result.limits.maxCompanies).toBe(3)
+  })
+})

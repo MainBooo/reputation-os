@@ -6,6 +6,7 @@ import { MentionService } from '../services/mention.service'
 import { JobLogService } from '../services/job-log.service'
 import { QUEUES } from '../queues/queue.names'
 import { WORKER_OPTIONS } from '../queues/job-options'
+import { JobEligibilityService } from '../services/job-eligibility.service'
 
 @Injectable()
 export class MentionsSyncProcessor implements OnModuleInit, OnModuleDestroy {
@@ -41,7 +42,8 @@ export class MentionsSyncProcessor implements OnModuleInit, OnModuleDestroy {
     @Inject(`QUEUE_${QUEUES.MENTIONS_SYNC}`) private readonly queue: Queue,
     private readonly prisma: PrismaService,
     private readonly mentionService: MentionService,
-    private readonly jobLogService: JobLogService
+    private readonly jobLogService: JobLogService,
+    private readonly eligibility: JobEligibilityService
   ) {
     this.workerConnection = workerConnectionFactory()
   }
@@ -84,10 +86,19 @@ export class MentionsSyncProcessor implements OnModuleInit, OnModuleDestroy {
         }
       })
 
-      const targets = await this.prisma.companySourceTarget.findMany({
-        where: { companyId, syncMentionsEnabled: true },
-        include: { source: true }
-      })
+      const targets = await this.eligibility.getEligibleTargets(companyId, 'mentions')
+
+      if (!company || !targets.length) {
+        await this.jobLogService.finish({
+          companyId,
+          queueName: QUEUES.MENTIONS_SYNC,
+          jobName: 'mentions.sync',
+          bullJobId: job.id,
+          status: 'CANCELLED',
+          result: { skipped: true, reason: 'not_eligible' }
+        }).catch(() => null)
+        return { companyId, skipped: true, reason: 'not_eligible' }
+      }
 
       let itemsDiscovered = 0
       let itemsCreated = 0
@@ -99,7 +110,9 @@ export class MentionsSyncProcessor implements OnModuleInit, OnModuleDestroy {
       // повторные вызовы Yandex Search API в рамках одного прогона.
       const executedSearchQueries = new Set<string>()
 
-      for (const target of targets) {
+      for (const queuedTarget of targets) {
+        const target = await this.eligibility.getEligibleTarget(companyId, queuedTarget.id, 'mentions')
+        if (!target) continue
         if (!['WEB', 'CUSTOM'].includes(target.source.platform)) continue
 
         const adapter = SourceAdapterFactory.getAdapter(target.source.platform)

@@ -237,7 +237,7 @@ export default function DashboardCharts({
           </div>
 
           <div className="mt-3 rounded-2xl border border-white/10 bg-white/[0.03] px-3.5 py-2.5 text-xs leading-5 text-slate-400">
-            График показывает новые упоминания по дням. Линия сглажена для читаемости, в подсказке отображается фактическое количество.
+            График показывает фактическое количество новых упоминаний по дате публикации.
           </div>
         </Card>
 
@@ -352,7 +352,7 @@ export default function DashboardCharts({
           <div className="flex items-start justify-between gap-3">
             <div>
               <div className="text-xl font-semibold tracking-[-0.03em] text-white">Динамика рейтинга</div>
-              <div className="mt-2 text-sm text-slate-400">По отзывам с оценками</div>
+              <div className="mt-2 text-sm text-slate-400">По сохранённым снимкам рейтинга</div>
             </div>
 
             <div className="text-right">
@@ -364,7 +364,7 @@ export default function DashboardCharts({
           </div>
 
           <div className="mt-4 h-[180px] min-h-[180px] min-w-0 sm:h-[220px] sm:min-h-[220px]">
-            <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
+            {ratingTrend.length > 0 ? <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
               <AreaChart data={ratingTrend} margin={{ top: 12, right: 12, bottom: 4, left: 0 }}>
                 <defs>
                   <linearGradient id="ratingGradient" x1="0" y1="0" x2="0" y2="1">
@@ -411,7 +411,7 @@ export default function DashboardCharts({
                   isAnimationActive={false}
                 />
               </AreaChart>
-            </ResponsiveContainer>
+            </ResponsiveContainer> : <div className="flex h-full items-center justify-center text-sm text-slate-500">Недостаточно данных рейтинга</div>}
           </div>
         </Card>
       </div>

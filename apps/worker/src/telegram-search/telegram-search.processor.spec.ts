@@ -37,6 +37,10 @@ describe('TelegramSearchProcessor.handle', () => {
     jobLogService = { finish: jest.fn().mockResolvedValue(undefined) }
     scoutService = { runDiscovery: jest.fn(), runEntitySearch: jest.fn() }
     watchlistService = { processChannel: jest.fn() }
+    const eligibility = {
+      canRunTelegramCompany: jest.fn().mockResolvedValue(true),
+      getEligibleTelegramLinkIds: jest.fn().mockResolvedValue(['link-1'])
+    }
 
     mockedGetClient.mockResolvedValue({ fakeClient: true })
 
@@ -47,7 +51,8 @@ describe('TelegramSearchProcessor.handle', () => {
       prisma,
       jobLogService,
       scoutService,
-      watchlistService
+      watchlistService,
+      eligibility as any
     )
   })
 

@@ -25,9 +25,18 @@ export class ReconcileProcessor implements OnModuleInit, OnModuleDestroy {
     if (this.worker) await this.worker.close()
   }
 
-  async handle(_job: Job) {
+  async handle(job: Job<{ companyId?: string }>) {
+    const companyId = job.data?.companyId
+    if (!companyId) return { skipped: true, reason: 'company_id_missing' }
+    const company = await (this.prisma as any).company.findUnique({
+      where: { id: companyId },
+      select: { isActive: true, workspace: { select: { isActive: true } } }
+    })
+    if (!company?.isActive || !company.workspace?.isActive) {
+      return { skipped: true, reason: 'company_inactive' }
+    }
     const duplicates = await this.prisma.mention.findMany({
-      where: { duplicateOfId: null },
+      where: { companyId, duplicateOfId: null },
       orderBy: { createdAt: 'asc' }
     })
 

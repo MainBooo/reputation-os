@@ -94,12 +94,16 @@ Scout (`POST /companies/:id/start-telegram-sync`, `CompanySourceTarget` с
 
 ### WATCHLIST
 
-Регулярно (диспетчер тикает каждые `TELEGRAM_WATCHLIST_DISPATCHER_INTERVAL_MIN`
-минут) проверяет уже известные включённые каналы/группы инкрементально, по
+Проверяет уже известные включённые каналы/группы инкрементально внутри того же
+ежедневного DISCOVERY-прогона компании, по
 `CompanyTelegramChannel.lastMessageId`. Один физический канал читается **один раз
 за цикл**, даже если на него подписаны несколько компаний — курсор каждой
 компании продвигается независимо, ошибка одной компании не теряет сообщения для
 другой (см. тест `telegram-watchlist.service.spec.ts`).
+
+Старый отдельный dispatcher каждые 5–15 минут намеренно отключён. При старте
+worker scheduler удаляет его stale repeatable registrations; переменная
+`TELEGRAM_WATCHLIST_DISPATCHER_INTERVAL_MIN` больше не управляет runtime.
 
 ### SOURCE_CHECK
 

@@ -224,7 +224,7 @@ export class SubscriptionReminderProcessor implements OnModuleInit, OnModuleDest
 
   private async sendPushToUser(userId: string, target: ReminderTarget, message: string, channels: string[]) {
     const pushSubs = await this.prisma.webPushSubscription.findMany({
-      where: { userId, isActive: true }
+      where: { userId, workspaceId: target.workspaceId, isActive: true }
     })
 
     const title = target.isTrial ? 'Пробный период заканчивается' : 'Подписка заканчивается'

@@ -6,6 +6,7 @@ import { RatingService } from '../services/rating.service'
 import { JobLogService } from '../services/job-log.service'
 import { QUEUES } from '../queues/queue.names'
 import { WORKER_OPTIONS } from '../queues/job-options'
+import { JobEligibilityService } from '../services/job-eligibility.service'
 
 @Injectable()
 export class RatingRefreshProcessor implements OnModuleInit, OnModuleDestroy {
@@ -16,7 +17,8 @@ export class RatingRefreshProcessor implements OnModuleInit, OnModuleDestroy {
     @Inject(`QUEUE_${QUEUES.RATING_REFRESH}`) private readonly queue: Queue,
     private readonly prisma: PrismaService,
     private readonly ratingService: RatingService,
-    private readonly jobLogService: JobLogService
+    private readonly jobLogService: JobLogService,
+    private readonly eligibility: JobEligibilityService
   ) {}
 
   onModuleInit() {
@@ -34,16 +36,27 @@ export class RatingRefreshProcessor implements OnModuleInit, OnModuleDestroy {
     const { companyId } = job.data
 
     try {
-      const targets = await this.prisma.companySourceTarget.findMany({
-        where: { companyId, syncRatingsEnabled: true },
-        include: { source: true }
-      })
+      const targets = await this.eligibility.getEligibleTargets(companyId, 'ratings')
+
+      if (!targets.length) {
+        await this.jobLogService.finish({
+          companyId,
+          queueName: QUEUES.RATING_REFRESH,
+          jobName: 'rating.refresh',
+          bullJobId: job.id,
+          status: 'CANCELLED',
+          result: { skipped: true, reason: 'not_eligible' }
+        }).catch(() => null)
+        return { companyId, skipped: true, reason: 'not_eligible' }
+      }
 
       let itemsDiscovered = 0
       let itemsCreated = 0
       let itemsDeduped = 0
 
-      for (const target of targets) {
+      for (const queuedTarget of targets) {
+        const target = await this.eligibility.getEligibleTarget(companyId, queuedTarget.id, 'ratings')
+        if (!target) continue
         const adapter = SourceAdapterFactory.getAdapter(target.source.platform)
         const snapshot = await adapter.fetchRatingSnapshot(target)
 

@@ -1,61 +1,46 @@
-# Telegram Bot — Scaffold для ReputationOS
+# ReputationOS
 
-## Файлы в этом архиве
+ReputationOS — multi-tenant платформа мониторинга репутации: отзывы Яндекс Карт и 2ГИС, WEB-страницы, Telegram Scout, Inbox, аналитика, AI-черновики ответов, уведомления и биллинг ЮKassa.
 
-```
-prisma/
-  SCHEMA_PATCH.txt                            — что добавить в schema.prisma
-  migrations/20240614000000_add_telegram_bot/
-    migration.sql                             — SQL для ручного применения (fallback)
+## Структура
 
-apps/bot/
-  package.json
-  tsconfig.json
-  nest-cli.json
-  .env.example
-  src/
-    main.ts                                   — long polling bootstrap
-    app.module.ts
-    bot.module.ts                             — TelegrafModule.forRootAsync
-    common/
-      prisma/{prisma.service.ts, prisma.module.ts}
-      guards/{telegram-auth.guard.ts, workspace-role.guard.ts, plan-feature.guard.ts}
-      decorators/tg-user.decorator.ts
-      utils/date.util.ts
-    modules/
-      auth/{auth.module.ts, auth.service.ts, auth.update.ts}
-      companies/{companies.module.ts, companies.service.ts, companies.update.ts}
-      settings/{settings.module.ts, settings.service.ts, settings.update.ts}
+- `apps/api` — NestJS REST API, auth, workspace ACL, billing, companies, mentions, analytics.
+- `apps/worker` — BullMQ processors, scheduler, source adapters, WEB monitoring, Telegram Scout.
+- `apps/frontend` — Next.js кабинет.
+- `apps/landing` — Next.js лендинг.
+- `apps/bot` — отдельный Telegram-бот уведомлений; это не MTProto Scout.
+- `prisma` — schema, production migrations и seed.
+- `sale-package` — buyer/deployment/due-diligence документы.
 
-apps/api/src/telegram/
-  telegram.controller.ts                      — POST/DELETE/GET /api/telegram/*
-  telegram.service.ts
-  telegram.module.ts                          — добавить в app.module.ts
+## Локальный запуск
 
-apps/worker/src/telegram/
-  telegram-notifications.service.ts          — HTTP-клиент к Telegram Bot API
-  telegram-notifications.module.ts
-  WORKER_PATCH.txt                           — как встроить в notifications.processor
+Требуются Node.js, pnpm, PostgreSQL и Redis. Скопируйте `.env.example` в локальный `.env`, замените все placeholder-значения и не коммитьте секреты.
 
-apps/frontend/src/components/settings/
-  TelegramConnectSection.tsx                 — React-компонент для страницы профиля
-
-DEPLOY.md                                    — порядок деплоя
+```bash
+pnpm install --frozen-lockfile
+pnpm prisma:generate
+pnpm prisma migrate deploy
+pnpm dev
 ```
 
-## Чеклист интеграции
+## Проверка
 
-- [ ] Добавить поля в `schema.prisma` (см. `prisma/SCHEMA_PATCH.txt`)
-- [ ] `npx prisma migrate dev --name add_telegram_bot`
-- [ ] `npx prisma generate`
-- [ ] Скопировать `apps/bot/` → в монорепо
-- [ ] Скопировать `apps/api/src/telegram/` → в монорепо, добавить `TelegramApiModule` в `app.module.ts`
-- [ ] Скопировать `apps/worker/src/telegram/` → в монорепо, применить `WORKER_PATCH.txt`
-- [ ] Добавить `TelegramConnectSection` в страницу профиля
-- [ ] Создать `apps/bot/.env` с `TELEGRAM_BOT_TOKEN` и `TELEGRAM_BOT_USERNAME`
-- [ ] Добавить `TELEGRAM_BOT_TOKEN` + `TELEGRAM_BOT_USERNAME` в `apps/api/.env`
-- [ ] Добавить `TELEGRAM_BOT_TOKEN` в `apps/worker/.env`
-- [ ] `pnpm --filter reputation-bot build`
-- [ ] Добавить `reputation-bot` в `ecosystem.config.js` (см. `DEPLOY.md`)
-- [ ] `pm2 start ecosystem.config.js --only reputation-bot && pm2 save`
-- [ ] `pm2 restart reputation-api reputation-worker`
+```bash
+pnpm --filter api test
+pnpm --filter worker test
+pnpm --filter frontend test:e2e
+pnpm build
+```
+
+ESLint scripts в части приложений исторически существуют без совместимого root-конфига; актуальный статус всех validation-команд фиксируется в `sale-package/LOGIC_AUDIT_FIX_REPORT.md`.
+
+## Важные runtime-правила
+
+- Backend/worker — источник истины для entitlement и tenant isolation; frontend gates не являются защитой.
+- Billing управляет только `OWNER`, checkout всегда принимает явный `workspaceId`.
+- Worker перечитывает entitlement и active/sync flags перед каждым внешним запросом; stale BullMQ payload не даёт права на sync.
+- Аналитика периодов использует `Mention.publishedAt`; записи без `publishedAt` не входят в периодные KPI.
+- Rating trend строится только по `RatingSnapshot`, без синтетических значений.
+- Пользовательские URL проходят SSRF-проверку, включая DNS и redirect chain.
+
+Подробный production deployment: `sale-package/DEPLOYMENT_GUIDE.md`. Фактическая модель Telegram: `TELEGRAM_MONITORING.md`.

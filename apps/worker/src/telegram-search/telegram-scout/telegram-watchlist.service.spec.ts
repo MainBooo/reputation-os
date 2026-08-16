@@ -138,7 +138,8 @@ describe('TelegramWatchlistService — multi-company cursor isolation (plan §2)
       }))
     }
 
-    service = new TelegramWatchlistService(prisma, channelSearch, relevance, messageClassifier, dedup, scoutSource)
+    const eligibility = { getEligibleTelegramLinkIds: jest.fn().mockResolvedValue(['ctc-a', 'ctc-b']) }
+    service = new TelegramWatchlistService(prisma, channelSearch, relevance, messageClassifier, dedup, scoutSource, eligibility as any)
   })
 
   it('advances the successful company past a message that fails for another company, without losing or duplicating it', async () => {

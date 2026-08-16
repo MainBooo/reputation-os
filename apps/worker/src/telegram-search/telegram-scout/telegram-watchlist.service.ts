@@ -16,6 +16,7 @@ import { searchResultsLimit } from './telegram-retry.util'
 import { messageClassifierHideThreshold, messageClassifierReviewThreshold, watchlistMaxMessagesPerChannel } from './telegram-scout.config'
 import type { TelegramMtprotoLockHandle } from '../mtproto-lock'
 import type { TelegramRawMessage } from './telegram-scout.types'
+import { JobEligibilityService } from '../../services/job-eligibility.service'
 
 export class TelegramUsernameInvalidError extends Error {
   constructor(public readonly username: string) {
@@ -89,7 +90,8 @@ export class TelegramWatchlistService {
     private readonly relevance: TelegramRelevanceService,
     private readonly messageClassifier: TelegramMessageClassifierService,
     private readonly dedup: DedupService,
-    private readonly scoutSource: TelegramScoutSourceService
+    private readonly scoutSource: TelegramScoutSourceService,
+    private readonly eligibility: JobEligibilityService
   ) {}
 
   async processChannel(
@@ -120,8 +122,9 @@ export class TelegramWatchlistService {
       }
     }
 
+    const eligibleLinkIds = await this.eligibility.getEligibleTelegramLinkIds(telegramChannelId)
     const links = await this.prisma.companyTelegramChannel.findMany({
-      where: { telegramChannelId, enabled: true },
+      where: { telegramChannelId, enabled: true, id: { in: eligibleLinkIds } },
       include: { company: { include: { aliases: true } } }
     })
 

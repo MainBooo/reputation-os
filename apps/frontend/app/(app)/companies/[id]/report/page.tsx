@@ -4,6 +4,7 @@ import Card from '@/components/ui/Card'
 import EmptyState from '@/components/ui/EmptyState'
 import { getCompany, getCompanySyncStatus } from '@/lib/api/companies'
 import { getCompanyMentions } from '@/lib/api/mentions'
+import { getAnalyticsOverview } from '@/lib/api/analytics'
 import ReportPrintButton from '@/components/companies/ReportPrintButton'
 
 function formatDate(value?: string | Date | null) {
@@ -49,29 +50,29 @@ function truncate(value?: string | null, limit = 180) {
 
 export default async function CompanyReportPage({ params }: { params: { id: string } }) {
   let company: any = null
-  let mentionsResponse: any = { data: [], meta: { total: 0, averageRating: null, ratedCount: 0 } }
-  let latestResponse: any = { data: [], meta: { total: 0 } }
-  let negativeResponse: any = { data: [], meta: { total: 0 } }
+  let overview: any = null
+  let examplesResponse: any = { data: [], meta: { total: 0 } }
   let syncStatus: any = null
   let authRequired = false
 
-  const sevenDaysAgo = new Date()
-  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
-  const from = sevenDaysAgo.toISOString().slice(0, 10)
+  const periodEnd = new Date()
+  const periodStart = new Date(periodEnd)
+  periodStart.setUTCDate(periodStart.getUTCDate() - 29)
+  const from = periodStart.toISOString().slice(0, 10)
+  const to = periodEnd.toISOString().slice(0, 10)
+  const periodQuery = `?from=${from}&to=${to}`
 
   try {
-    const [companyData, mentionsData, latestData, negativeData, syncData] = await Promise.all([
+    const [companyData, overviewData, examplesData, syncData] = await Promise.all([
       getCompany(params.id),
-      getCompanyMentions(params.id, '?page=1&limit=100'),
-      getCompanyMentions(params.id, '?page=1&limit=8'),
-      getCompanyMentions(params.id, `?page=1&limit=20&sentiment=NEGATIVE&from=${from}`),
+      getAnalyticsOverview(params.id, periodQuery),
+      getCompanyMentions(params.id, `?page=1&limit=8&from=${from}&to=${to}`),
       getCompanySyncStatus(params.id)
     ])
 
     company = companyData
-    mentionsResponse = mentionsData
-    latestResponse = latestData
-    negativeResponse = negativeData
+    overview = overviewData
+    examplesResponse = examplesData
     syncStatus = syncData
   } catch {
     authRequired = true
@@ -86,30 +87,21 @@ export default async function CompanyReportPage({ params }: { params: { id: stri
     )
   }
 
-  const mentions = Array.isArray(mentionsResponse?.data) ? mentionsResponse.data : []
-  const latest = Array.isArray(latestResponse?.data) ? latestResponse.data : []
-  const negative = Array.isArray(negativeResponse?.data) ? negativeResponse.data : []
-
-  const total = Number(mentionsResponse?.meta?.total || mentions.length || 0)
-  const averageRating = mentionsResponse?.meta?.averageRating
-  const ratedCount = Number(mentionsResponse?.meta?.ratedCount || 0)
-
-  const positiveCount = mentions.filter((item: any) => sentimentOf(item) === 'POSITIVE').length
-  const neutralCount = mentions.filter((item: any) => sentimentOf(item) === 'NEUTRAL').length
-  const negativeCount = mentions.filter((item: any) => sentimentOf(item) === 'NEGATIVE').length
-
-  const platforms = mentions.reduce((acc: Record<string, number>, mention: any) => {
-    const key = mention?.platform || 'UNKNOWN'
-    acc[key] = (acc[key] || 0) + 1
-    return acc
-  }, {})
+  const latest = Array.isArray(examplesResponse?.data) ? examplesResponse.data : []
+  const total = Number(overview?.mentionsCount || 0)
+  const averageRating = overview?.rating
+  const ratedCount = Number(overview?.reviewsCount || 0)
+  const positiveCount = Number(overview?.positiveCount || 0)
+  const neutralCount = Number(overview?.neutralCount || 0)
+  const negativeCount = Number(overview?.negativeCount || 0)
+  const platforms = Array.isArray(overview?.platformDistribution) ? overview.platformDistribution : []
 
   const latestLog = Array.isArray(syncStatus?.logs) ? syncStatus.logs[0] : null
 
   const summary =
-    negative.length > 0
-      ? `За последние 7 дней обнаружены негативные сигналы. Рекомендуется проверить последние отзывы и закрыть проблемные обращения в течение 24 часов.`
-      : `Критичных негативных сигналов за последние 7 дней не обнаружено. Репутационный фон выглядит стабильным.`
+    negativeCount > 0
+      ? `За выбранные 30 дней обнаружены негативные сигналы. Рекомендуется проверить последние отзывы и закрыть проблемные обращения в течение 24 часов.`
+      : `Критичных негативных сигналов за выбранные 30 дней не обнаружено. Репутационный фон выглядит стабильным.`
 
   return (
     <div className="space-y-5 pb-8 print:bg-white print:text-black">
@@ -128,7 +120,7 @@ export default async function CompanyReportPage({ params }: { params: { id: stri
           <div>
             <div className="text-xs font-semibold uppercase tracking-[0.28em] text-cyan-300 print:text-slate-500">ReputationOS report</div>
             <h1 className="mt-3 text-3xl font-semibold tracking-[-0.04em] text-white print:text-black">{company?.name || 'Компания'}</h1>
-            <p className="mt-2 text-sm text-zinc-400 print:text-slate-600">Период анализа: последние 7–30 дней · сформировано {formatDate(new Date())}</p>
+            <p className="mt-2 text-sm text-zinc-400 print:text-slate-600">Период анализа: {formatDate(periodStart)} — {formatDate(periodEnd)} · сформировано {formatDate(new Date())}</p>
           </div>
 
           <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-3xl border border-cyan-400/25 bg-cyan-500/10 text-2xl font-semibold text-cyan-100 print:border-slate-200 print:bg-slate-50 print:text-slate-800">
@@ -147,17 +139,17 @@ export default async function CompanyReportPage({ params }: { params: { id: stri
           <div className="mt-1 text-sm text-zinc-400 print:text-slate-600">упоминаний</div>
         </Card>
         <Card className="p-4 print:border-slate-200 print:bg-white">
-          <div className="text-2xl font-semibold text-red-100 print:text-black">{negative.length}</div>
-          <div className="mt-1 text-sm text-zinc-400 print:text-slate-600">негатив за 7 дней</div>
+          <div className="text-2xl font-semibold text-red-100 print:text-black">{negativeCount}</div>
+          <div className="mt-1 text-sm text-zinc-400 print:text-slate-600">негатив за 30 дней</div>
         </Card>
         <Card className="p-4 print:border-slate-200 print:bg-white">
           <div className="text-2xl font-semibold text-emerald-100 print:text-black">{ratedCount}</div>
-          <div className="mt-1 text-sm text-zinc-400 print:text-slate-600">отзывов с оценкой</div>
+          <div className="mt-1 text-sm text-zinc-400 print:text-slate-600">отзывов</div>
         </Card>
       </div>
 
       <Card className="p-5 print:border-slate-200 print:bg-white">
-        <div className="text-xl font-semibold text-white print:text-black">AI summary</div>
+        <div className="text-xl font-semibold text-white print:text-black">Автоматическое резюме</div>
         <p className="mt-3 text-sm leading-6 text-zinc-300 print:text-slate-700">{summary}</p>
       </Card>
 
@@ -174,10 +166,10 @@ export default async function CompanyReportPage({ params }: { params: { id: stri
         <Card className="p-5 print:border-slate-200 print:bg-white">
           <div className="text-lg font-semibold text-white print:text-black">Источники</div>
           <div className="mt-4 space-y-3 text-sm text-zinc-300 print:text-slate-700">
-            {Object.entries(platforms).length > 0 ? Object.entries(platforms).map(([platform, count]) => (
-              <div key={platform} className="flex justify-between">
-                <span>{platformLabel(platform)}</span>
-                <b>{String(count)}</b>
+            {platforms.length > 0 ? platforms.map((item: any) => (
+              <div key={item.platform} className="flex justify-between">
+                <span>{platformLabel(item.platform)}</span>
+                <b>{String(item.count)}</b>
               </div>
             )) : <div>Нет данных по источникам.</div>}
           </div>

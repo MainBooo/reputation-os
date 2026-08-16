@@ -30,6 +30,7 @@ import { TelegramMessageClassifierService } from './telegram-search/telegram-sco
 import { TelegramScoutSourceService } from './telegram-search/telegram-scout/telegram-scout-source.service'
 import { TelegramWatchlistService } from './telegram-search/telegram-scout/telegram-watchlist.service'
 import { TelegramScoutService } from './telegram-search/telegram-scout/telegram-scout.service'
+import { JobEligibilityService } from './services/job-eligibility.service'
 
 @Module({
   imports: [ConfigModule.forRoot({ isGlobal: true, envFilePath: ['apps/worker/.env', '.env'] }), PrismaModule, BullmqModule, TelegramNotificationsModule],
@@ -39,6 +40,7 @@ import { TelegramScoutService } from './telegram-search/telegram-scout/telegram-
     MentionService,
     RatingService,
     JobLogService,
+    JobEligibilityService,
     AlertsService,
     SourceDiscoveryProcessor,
     ReviewsSyncProcessor,

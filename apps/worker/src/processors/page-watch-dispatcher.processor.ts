@@ -4,6 +4,7 @@ import { PrismaService } from '../common/prisma/prisma.service'
 import { QUEUES } from '../queues/queue.names'
 import { JOBS } from '../queues/job.names'
 import { CRON_JOB_OPTIONS } from '../queues/job-options'
+import { JobEligibilityService } from '../services/job-eligibility.service'
 
 // Redis key prefix for domain-level rate limiting
 const DOMAIN_LOCK_PREFIX = 'pw:domain:'
@@ -18,7 +19,8 @@ export class PageWatchDispatcherProcessor implements OnModuleInit, OnModuleDestr
     @Inject('BULLMQ_WORKER_CONNECTION_FACTORY') private readonly workerConnectionFactory: () => any,
     @Inject('BULLMQ_CONNECTION') private readonly redis: any,
     @Inject(`QUEUE_${QUEUES.PAGE_WATCH}`) private readonly pageWatchQueue: Queue,
-    private readonly prisma: PrismaService
+    private readonly prisma: PrismaService,
+    private readonly eligibility: JobEligibilityService
   ) {}
 
   async onModuleInit() {
@@ -59,6 +61,7 @@ export class PageWatchDispatcherProcessor implements OnModuleInit, OnModuleDestr
     let throttled = 0
 
     for (const page of pages) {
+      if (!await this.eligibility.canProcessWatchedPage(page.id)) continue
       // Check domain rate limit — skip if another job for this domain is in flight
       const lockKey = `${DOMAIN_LOCK_PREFIX}${page.domain}`
       const locked = await this.redis.exists(lockKey)

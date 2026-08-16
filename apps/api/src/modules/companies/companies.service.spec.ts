@@ -13,6 +13,7 @@ const mockPrisma = {
   company: { count: jest.fn(), create: jest.fn(), findUnique: jest.fn(), update: jest.fn() },
   source: {
     findFirst: jest.fn(),
+    findUnique: jest.fn(),
     create: jest.fn().mockResolvedValue({ id: 'src-1', platform: 'WEB', workspaceId: 'ws-1' }),
   },
   companySourceTarget: {
@@ -99,6 +100,64 @@ describe('CompaniesService — workspace access control', () => {
     const result = await service.create('uid-2', dto)
 
     expect(result).toMatchObject({ id: 'co-2' })
+  })
+})
+
+describe('CompaniesService — source target tenant and platform boundaries', () => {
+  let service: CompaniesService
+
+  beforeEach(async () => {
+    jest.clearAllMocks()
+    mockPrisma.user.findUnique.mockResolvedValue({ systemRole: 'USER', isActive: true })
+    mockPrisma.workspaceMember.findFirst.mockResolvedValue({ role: 'OWNER', workspaceId: 'ws-1' })
+    mockPrisma.company.findUnique.mockResolvedValue({ id: 'co-1', workspaceId: 'ws-1', isActive: true })
+    mockEntitlements.getForWorkspace.mockResolvedValue({
+      workspaceActive: true,
+      limits: { maxSources: 10, platforms: ['YANDEX', 'TWOGIS', 'WEB', 'CUSTOM'], webMonitoringEnabled: true }
+    })
+    mockEntitlements.hasSourceSlotAvailable.mockResolvedValue(true)
+
+    const module = await Test.createTestingModule({
+      providers: [
+        CompaniesService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: EntitlementsService, useValue: mockEntitlements },
+        { provide: `QUEUE_${QUEUES.REVIEWS_SYNC}`, useValue: mockQueue },
+        { provide: `QUEUE_${QUEUES.RATING_REFRESH}`, useValue: mockQueue },
+        { provide: `QUEUE_${QUEUES.MENTIONS_SYNC}`, useValue: mockQueue }
+      ]
+    }).compile()
+    service = module.get(CompaniesService)
+  })
+
+  afterAll(() => {
+    mockEntitlements.hasSourceSlotAvailable.mockImplementation(async (_workspaceId: string, maxSources: number) => {
+      const limit = Number(maxSources)
+      if (limit < 0) return true
+      return (await mockPrisma.companySourceTarget.count()) < limit
+    })
+  })
+
+  it('rejects a sourceId owned by another workspace', async () => {
+    mockPrisma.source.findUnique.mockResolvedValue({
+      id: 'source-b', workspaceId: 'ws-2', platform: 'YANDEX', isEnabled: true
+    })
+
+    await expect(service.createSourceTarget('user-1', 'co-1', { sourceId: 'source-b' })).rejects.toThrow(
+      NotFoundException
+    )
+    expect(mockPrisma.companySourceTarget.create).not.toHaveBeenCalled()
+  })
+
+  it('rejects GOOGLE explicitly instead of creating a silent no-op target', async () => {
+    mockPrisma.source.findUnique.mockResolvedValue({
+      id: 'source-google', workspaceId: 'ws-1', platform: 'GOOGLE', isEnabled: true
+    })
+
+    await expect(service.createSourceTarget('user-1', 'co-1', { sourceId: 'source-google' })).rejects.toThrow(
+      'Source platform is not implemented'
+    )
+    expect(mockPrisma.companySourceTarget.create).not.toHaveBeenCalled()
   })
 })
 

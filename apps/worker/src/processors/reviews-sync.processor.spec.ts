@@ -36,8 +36,27 @@ describe('ReviewsSyncProcessor.handle — lastSyncedAt update semantics', () => 
     }
     mentionService = { persistExternalMention: jest.fn().mockResolvedValue({}) }
     jobLogService = { finish: jest.fn().mockResolvedValue({}) }
+    const eligibility = {
+      getEligibleTargets: jest.fn().mockImplementation(() => prisma.companySourceTarget.findMany()),
+      getEligibleTarget: jest.fn().mockImplementation(async (_companyId: string, targetId: string) => {
+        const targets = await prisma.companySourceTarget.findMany()
+        return targets.find((target: any) => target.id === targetId) || null
+      })
+    }
 
-    processor = new ReviewsSyncProcessor({} as any, {} as any, prisma, mentionService, jobLogService)
+    processor = new ReviewsSyncProcessor({} as any, {} as any, prisma, mentionService, jobLogService, eligibility as any)
+  })
+
+  it('safely exits a stale job before creating an adapter or making an external request', async () => {
+    prisma.companySourceTarget.findMany.mockResolvedValue([])
+
+    await expect(processor.handle(makeJob())).resolves.toMatchObject({ skipped: true, reason: 'not_eligible' })
+
+    expect(SourceAdapterFactory.getAdapter).not.toHaveBeenCalled()
+    expect(mentionService.persistExternalMention).not.toHaveBeenCalled()
+    expect(jobLogService.finish).toHaveBeenCalledWith(
+      expect.objectContaining({ bullJobId: 'job-1', status: 'CANCELLED', result: { skipped: true, reason: 'not_eligible' } })
+    )
   })
 
   it('updates lastSyncedAt for the correct target after a successful fetch (including zero mentions found)', async () => {
@@ -62,7 +81,7 @@ describe('ReviewsSyncProcessor.handle — lastSyncedAt update semantics', () => 
     ;(SourceAdapterFactory.getAdapter as jest.Mock).mockReturnValue(adapter)
     const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
 
-    await processor.handle(makeJob())
+    await expect(processor.handle(makeJob())).rejects.toThrow('All 1 review targets failed')
 
     expect(prisma.companySourceTarget.update).not.toHaveBeenCalled()
     expect(warnSpy).toHaveBeenCalledWith('[REVIEWS] Target failed', expect.objectContaining({ targetId: 't1' }))

@@ -7,17 +7,18 @@ export function getAnalyticsOverview(id: string, query = '') {
     neutralCount: 0,
     negativeCount: 0,
     reviewsCount: 0,
-    rating: 0,
-    positiveShare: 0,
+    rating: null,
+    positiveShare: null,
     trend: [],
     reputationTrend: [],
     latest: [],
-    deltas: { total: 0, positive: 0, negative: 0 }
+    platformDistribution: [],
+    deltas: { total: null, positive: null, negative: null, rating: null }
   })
 }
 
-export function getAnalyticsSentiment(id: string) {
-  return apiFetch(`/companies/${id}/analytics/sentiment`, undefined, [])
+export function getAnalyticsSentiment(id: string, query = '') {
+  return apiFetch(`/companies/${id}/analytics/sentiment${query}`, undefined, [])
 }
 
 export function getAnalyticsPlatforms(id: string, query = '') {

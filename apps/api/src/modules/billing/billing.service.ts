@@ -1,11 +1,27 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common'
-import { BillingProvider, PaymentStatus, PlanCode, Prisma, SubscriptionStatus } from '@prisma/client'
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  Logger,
+  NotFoundException
+} from '@nestjs/common'
+import { BillingProvider, PaymentStatus, PlanCode, Prisma, SubscriptionStatus, WorkspaceRole } from '@prisma/client'
 import { PrismaService } from '../../common/prisma/prisma.service'
-import { EntitlementsService } from './entitlements.service'
 import { PaymentProvider, createPaymentProvider } from './billing.providers'
 
 const PERIOD_DAYS_MONTHLY = 30
 const PERIOD_DAYS_YEARLY = 365
+const PLAN_RANK: Record<PlanCode, number> = {
+  FREE: 0,
+  START: 1,
+  STARTER: 1,
+  PRO: 2,
+  BUSINESS: 2,
+  AGENCY: 3,
+  ENTERPRISE: 4,
+  CUSTOM: 4
+}
 
 export interface YookassaWebhookPayload {
   type?: string
@@ -32,46 +48,109 @@ export class BillingService {
   private readonly logger = new Logger(BillingService.name)
   private readonly provider: PaymentProvider = createPaymentProvider()
 
-  constructor(
-    private readonly prisma: PrismaService,
-    private readonly entitlements: EntitlementsService
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
-  async createCheckout(userId: string, planCode: PlanCode, period: 'monthly' | 'yearly' = 'monthly') {
-    const workspaceId = await this.entitlements.resolveWorkspaceId(userId)
+  private async assertBillingOwner(userId: string, workspaceId: string) {
+    if (!workspaceId) throw new BadRequestException('workspaceId is required')
+
+    const workspace = await this.prisma.workspace.findUnique({
+      where: { id: workspaceId },
+      select: { id: true, isActive: true }
+    })
+    if (!workspace) throw new NotFoundException('Workspace not found')
+    if (!workspace.isActive) throw new ForbiddenException('Workspace is disabled')
+
+    const member = await this.prisma.workspaceMember.findFirst({
+      where: { userId, workspaceId },
+      select: { role: true }
+    })
+    if (!member) throw new ForbiddenException('No access to workspace')
+    if (member.role !== WorkspaceRole.OWNER) {
+      throw new ForbiddenException('Only workspace OWNER can manage billing')
+    }
+
+    return workspace
+  }
+
+  private getPeriodMs(period: string) {
+    const days = period === 'yearly' ? PERIOD_DAYS_YEARLY : PERIOD_DAYS_MONTHLY
+    return days * 24 * 60 * 60 * 1000
+  }
+
+  private getCheckoutAmount(plan: { priceMonthly: number; priceYearly: number | null }, period: 'monthly' | 'yearly') {
+    if (period === 'yearly') {
+      if (plan.priceYearly == null || plan.priceYearly <= 0) {
+        throw new BadRequestException('Yearly billing is not available for this plan')
+      }
+      return plan.priceYearly
+    }
+
+    if (plan.priceMonthly <= 0) throw new BadRequestException('Plan is free, no checkout required')
+    return plan.priceMonthly
+  }
+
+  async createCheckout(
+    userId: string,
+    workspaceId: string,
+    planCode: PlanCode,
+    period: 'monthly' | 'yearly' = 'monthly'
+  ) {
+    await this.assertBillingOwner(userId, workspaceId)
 
     const plan = await this.prisma.plan.findUnique({ where: { code: planCode } })
 
     if (!plan || !plan.isActive) throw new NotFoundException('Plan not found')
-    if (plan.priceMonthly <= 0) throw new BadRequestException('Plan is free, no checkout required')
+    const amount = this.getCheckoutAmount(plan, period)
 
-    const amount = period === 'yearly' && (plan as any).priceYearly
-      ? (plan as any).priceYearly
-      : plan.priceMonthly
-
-    const payment = await this.prisma.payment.create({
-      data: {
-        workspaceId,
-        userId,
-        planCode,
-        amount,
-        billingPeriod: period,
-        provider: this.provider.name === 'YOOKASSA' ? BillingProvider.YOOKASSA : BillingProvider.MOCK
-      } as any
+    const scheduled = await this.prisma.subscription.findUnique({
+      where: { workspaceId },
+      select: { scheduledAt: true, scheduledPlanId: true }
     })
+    if (scheduled?.scheduledPlanId && scheduled.scheduledAt && scheduled.scheduledAt > new Date()) {
+      throw new ConflictException('A plan change is already scheduled for this workspace')
+    }
+
+    let payment
+    try {
+      payment = await this.prisma.payment.create({
+        data: {
+          workspaceId,
+          userId,
+          planCode,
+          amount,
+          billingPeriod: period,
+          checkoutKey: `workspace:${workspaceId}`,
+          provider: this.provider.name === 'YOOKASSA' ? BillingProvider.YOOKASSA : BillingProvider.MOCK
+        }
+      })
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new ConflictException('A checkout is already pending for this workspace')
+      }
+      throw error
+    }
 
     const returnUrl =
       process.env.YOOKASSA_RETURN_URL ||
       `${process.env.FRONTEND_URL || 'https://reputation.generationweb.ru'}/billing/payment-result`
 
     const periodLabel = period === 'yearly' ? 'годовая' : 'месячная'
-    const providerPayment = await this.provider.createPayment({
-      paymentId: payment.id,
-      amount,
-      description: `Подписка ${plan.name} (${periodLabel}) — ReputationOS`,
-      metadata: { paymentId: payment.id, workspaceId, planCode },
-      returnUrl
-    })
+    let providerPayment
+    try {
+      providerPayment = await this.provider.createPayment({
+        paymentId: payment.id,
+        amount,
+        description: `Подписка ${plan.name} (${periodLabel}) — ReputationOS`,
+        metadata: { paymentId: payment.id, workspaceId, planCode, billingPeriod: period },
+        returnUrl
+      })
+    } catch (error) {
+      await this.prisma.payment.update({
+        where: { id: payment.id },
+        data: { status: PaymentStatus.CANCELED, canceledAt: new Date(), checkoutKey: null }
+      }).catch(() => null)
+      throw new BadRequestException('Unable to create payment')
+    }
 
     await this.prisma.payment.update({
       where: { id: payment.id },
@@ -164,7 +243,12 @@ export class BillingService {
   }
 
   private assertAmountMatches(payment: { amount: number; currency: string }, remote: YookassaRemotePayment) {
-    if (!remote.amount) return // MOCK provider / no amount reported — nothing to cross-check
+    if (!remote.amount) {
+      if (this.provider.name === 'YOOKASSA') {
+        throw new BadRequestException('Payment amount is missing from provider response')
+      }
+      return
+    }
 
     const remoteValue = Number(remote.amount.value)
     const expected = Number(payment.amount)
@@ -197,60 +281,125 @@ export class BillingService {
     if (!plan) throw new NotFoundException('Plan not found')
 
     const now = new Date()
-    const periodDays = (payment as any).billingPeriod === 'yearly' ? PERIOD_DAYS_YEARLY : PERIOD_DAYS_MONTHLY
-    const periodMs = periodDays * 24 * 60 * 60 * 1000
+    const billingPeriod = payment.billingPeriod === 'yearly' ? 'yearly' : 'monthly'
+    const periodMs = this.getPeriodMs(billingPeriod)
 
-    // Если подписка уже активна — продлеваем от текущего конца периода, иначе от now
-    const existingSub = await this.prisma.subscription.findUnique({
-      where: { workspaceId: payment.workspaceId },
-      select: { currentPeriodEnd: true, status: true }
-    })
+    const outcome = await this.prisma.$transaction(async (tx) => {
+      const freshPayment = await tx.payment.findUnique({ where: { id: payment.id } })
+      if (!freshPayment) throw new NotFoundException('Payment not found')
+      if (freshPayment.status === PaymentStatus.SUCCEEDED) return { alreadyProcessed: true }
+      if (freshPayment.status !== PaymentStatus.PENDING) {
+        throw new BadRequestException('Payment is not pending')
+      }
 
-    const isCurrentlyActive =
-      existingSub?.status === SubscriptionStatus.ACTIVE &&
-      existingSub.currentPeriodEnd != null &&
-      existingSub.currentPeriodEnd > now
-
-    const baseDate = isCurrentlyActive ? existingSub!.currentPeriodEnd! : now
-    const currentPeriodEnd = new Date(baseDate.getTime() + periodMs)
-
-    await this.prisma.$transaction([
-      this.prisma.payment.update({
-        where: { id: payment.id },
+      const claimed = await tx.payment.updateMany({
+        where: { id: payment.id, status: PaymentStatus.PENDING },
         data: {
           status: PaymentStatus.SUCCEEDED,
           paidAt: now,
-          // Сохраняем перепроверенный ответ провайдера, а не исходное (недоверенное) тело webhook.
+          checkoutKey: null,
           rawPayload: remote as unknown as Prisma.InputJsonValue
         }
-      }),
-      this.prisma.subscription.upsert({
+      })
+      if (claimed.count !== 1) return { alreadyProcessed: true }
+
+      const existing = await tx.subscription.findUnique({
         where: { workspaceId: payment.workspaceId },
-        create: {
-          workspaceId: payment.workspaceId,
+        include: { plan: true, scheduledPlan: true }
+      })
+
+      const dueScheduledPlan =
+        existing?.scheduledPlan && existing.scheduledAt && existing.scheduledAt <= now
+          ? existing.scheduledPlan
+          : null
+      const currentPlan = dueScheduledPlan ?? existing?.plan ?? null
+      const isActive =
+        existing?.status === SubscriptionStatus.ACTIVE &&
+        existing.currentPeriodEnd != null &&
+        existing.currentPeriodEnd > now
+
+      const materializedBase = dueScheduledPlan
+        ? {
+            planId: dueScheduledPlan.id,
+            billingPeriod: existing!.scheduledBillingPeriod || existing!.billingPeriod,
+            currentPeriodStart: existing!.scheduledAt,
+            scheduledPlanId: null,
+            scheduledBillingPeriod: null,
+            scheduledAt: null
+          }
+        : {}
+
+      const isDowngrade =
+        isActive && currentPlan != null && PLAN_RANK[plan.code] < PLAN_RANK[currentPlan.code]
+
+      if (!existing) {
+        const currentPeriodEnd = new Date(now.getTime() + periodMs)
+        await tx.subscription.create({
+          data: {
+            workspaceId: payment.workspaceId,
+            planId: plan.id,
+            status: SubscriptionStatus.ACTIVE,
+            billingPeriod,
+            currentPeriodStart: now,
+            currentPeriodEnd,
+            trialEndsAt: null,
+            cancelAtPeriodEnd: false,
+            provider: payment.provider
+          }
+        })
+        return { alreadyProcessed: false, scheduled: false, currentPeriodEnd }
+      }
+
+      if (isDowngrade) {
+        const switchAt = existing.currentPeriodEnd!
+        const currentPeriodEnd = new Date(switchAt.getTime() + periodMs)
+        await tx.subscription.update({
+          where: { workspaceId: payment.workspaceId },
+          data: {
+            ...materializedBase,
+            status: SubscriptionStatus.ACTIVE,
+            currentPeriodEnd,
+            scheduledPlanId: plan.id,
+            scheduledBillingPeriod: billingPeriod,
+            scheduledAt: switchAt,
+            trialEndsAt: null,
+            cancelAtPeriodEnd: false,
+            provider: payment.provider
+          }
+        })
+        return { alreadyProcessed: false, scheduled: true, currentPeriodEnd, switchAt }
+      }
+
+      const samePlan = isActive && currentPlan?.id === plan.id
+      const baseDate = samePlan ? existing.currentPeriodEnd! : now
+      const currentPeriodEnd = new Date(baseDate.getTime() + periodMs)
+      await tx.subscription.update({
+        where: { workspaceId: payment.workspaceId },
+        data: {
+          ...materializedBase,
           planId: plan.id,
           status: SubscriptionStatus.ACTIVE,
+          billingPeriod,
+          currentPeriodStart: samePlan ? existing.currentPeriodStart ?? now : now,
           currentPeriodEnd,
-          trialEndsAt: null,
-          cancelAtPeriodEnd: false,
-          provider: payment.provider
-        },
-        update: {
-          planId: plan.id,
-          status: SubscriptionStatus.ACTIVE,
-          currentPeriodEnd,
+          scheduledPlanId: null,
+          scheduledBillingPeriod: null,
+          scheduledAt: null,
           trialEndsAt: null,
           cancelAtPeriodEnd: false,
           provider: payment.provider
         }
       })
-    ])
+      return { alreadyProcessed: false, scheduled: false, currentPeriodEnd }
+    })
+
+    if (outcome.alreadyProcessed) return { ok: true, alreadyProcessed: true }
 
     this.logger.log(
-      `Subscription ${isCurrentlyActive ? 'extended' : 'activated'}: workspace=${payment.workspaceId} plan=${plan.code} periodEnd=${currentPeriodEnd.toISOString()}`
+      `Subscription ${outcome.scheduled ? 'downgrade scheduled' : 'activated'}: workspace=${payment.workspaceId} plan=${plan.code} periodEnd=${outcome.currentPeriodEnd?.toISOString()}`
     )
 
-    return { ok: true }
+    return { ok: true, scheduled: outcome.scheduled }
   }
 
   private async confirmAndCancel(payment: Awaited<ReturnType<typeof this.prisma.payment.findUnique>> & Record<string, any>) {
@@ -264,11 +413,12 @@ export class BillingService {
       return { ok: true, ignored: true }
     }
 
-    await this.prisma.payment.update({
-      where: { id: payment.id },
+    await this.prisma.payment.updateMany({
+      where: { id: payment.id, status: PaymentStatus.PENDING },
       data: {
         status: PaymentStatus.CANCELED,
         canceledAt: new Date(),
+        checkoutKey: null,
         rawPayload: remote as unknown as Prisma.InputJsonValue
       }
     })
@@ -281,8 +431,8 @@ export class BillingService {
   // Синхронизирует статус PENDING-платежей с ЮKassa.
   // Вызывается при открытии страницы биллинга — защита от потери платежа
   // при закрытии вкладки после оплаты (до получения webhook).
-  async syncPendingPayments(userId: string): Promise<{ synced: number }> {
-    const workspaceId = await this.entitlements.resolveWorkspaceId(userId)
+  async syncPendingPayments(userId: string, workspaceId: string): Promise<{ synced: number }> {
+    await this.assertBillingOwner(userId, workspaceId)
 
     const pending = await this.prisma.payment.findMany({
       where: {
@@ -310,11 +460,27 @@ export class BillingService {
           await this.confirmAndCancel(payment)
           synced++
         }
-      } catch {
-        // верификация недоступна/платёж ещё не готов — пропускаем, попробуем в следующий раз
+      } catch (error) {
+        this.logger.warn(
+          `Pending payment sync failed for payment=${payment.id}: ${error instanceof Error ? error.message : 'unknown error'}`
+        )
       }
     }
 
     return { synced }
+  }
+
+  async cancelAtPeriodEnd(userId: string, workspaceId: string) {
+    await this.assertBillingOwner(userId, workspaceId)
+
+    const subscription = await this.prisma.subscription.findUnique({ where: { workspaceId } })
+    if (!subscription) throw new NotFoundException('Subscription not found')
+
+    await this.prisma.subscription.update({
+      where: { workspaceId },
+      data: { cancelAtPeriodEnd: true }
+    })
+
+    return { ok: true, effectiveAt: subscription.currentPeriodEnd }
   }
 }
