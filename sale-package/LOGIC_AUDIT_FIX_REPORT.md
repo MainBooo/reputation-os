@@ -349,5 +349,5 @@ Secrets: no tracked production secret value was printed or added. Example files 
 
 - Commit before: `66cb0c3`
 - Implementation commit after: `2c82cf8 fix: harden billing sync analytics and tenant logic`.
-- Branch pushed to `origin/fix/logic-audit-hardening`; not merged into `main`.
+- Branch merged into `main` by fast-forward after successful production verification; no history rewrite.
 - Production verification: migration applied, five PM2 services online, frontend/landing HTTP 200, unauthenticated API/proxy HTTP 401, Playwright 12/12 PASS.
