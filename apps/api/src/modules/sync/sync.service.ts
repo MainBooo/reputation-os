@@ -2,11 +2,13 @@ import { ForbiddenException, Inject, Injectable, NotFoundException } from '@nest
 import { Queue } from 'bullmq'
 import { PrismaService } from '../../common/prisma/prisma.service'
 import { SYNC_JOB_OPTIONS } from '../../common/queues/job-options'
+import { EntitlementsService } from '../billing/entitlements.service'
 
 @Injectable()
 export class SyncService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly entitlements: EntitlementsService,
     @Inject('SYNC_QUEUE_SOURCE_DISCOVERY')
     private readonly sourceDiscoveryQueue: Queue,
     @Inject('SYNC_QUEUE_MENTIONS_SYNC')
@@ -139,8 +141,19 @@ export class SyncService {
   }
 
   async startWebSync(userId: string, companyId: string) {
-    await this.assertCompanyAccess(userId, companyId, 'write')
-    await this.ensureWebBootstrapTarget(companyId)
+    const company = await this.assertCompanyAccess(userId, companyId, 'write')
+
+    const ent = await this.entitlements.getForWorkspace(company.workspaceId)
+
+    if (!ent.workspaceActive) {
+      throw new ForbiddenException('Workspace is disabled')
+    }
+
+    if (!ent.limits.webMonitoringEnabled) {
+      throw new ForbiddenException({ code: 'PLAN_LIMIT', feature: 'webMonitoringEnabled' })
+    }
+
+    await this.ensureWebBootstrapTarget(companyId, ent.limits.maxSources)
 
     const requestedAt = new Date().toISOString()
 
@@ -340,7 +353,7 @@ export class SyncService {
       logs: [log]
     }
   }
-  private async ensureWebBootstrapTarget(companyId: string) {
+  private async ensureWebBootstrapTarget(companyId: string, maxSources: number) {
     const company = await this.prisma.company.findUnique({
       where: { id: companyId },
       select: {
@@ -394,6 +407,12 @@ export class SyncService {
     })
 
     if (existingTarget) return existingTarget
+
+    // WEB-таргет расходует maxSources наравне с карточками Яндекс/2ГИС — тот же
+    // общий счётчик, что и в CompaniesService (см. EntitlementsService.hasSourceSlotAvailable).
+    if (!(await this.entitlements.hasSourceSlotAvailable(company.workspaceId, maxSources))) {
+      throw new ForbiddenException({ code: 'PLAN_LIMIT', feature: 'maxSources', limit: Number(maxSources) })
+    }
 
     return this.prisma.companySourceTarget.create({
       data: {

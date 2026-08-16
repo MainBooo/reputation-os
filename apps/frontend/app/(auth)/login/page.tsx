@@ -13,7 +13,7 @@ import {
   Star,
   Zap
 } from 'lucide-react'
-import { login } from '@/lib/api/auth'
+import { login, me, logoutLocal } from '@/lib/api/auth'
 
 const features = [
   { icon: MessageSquareText, title: 'Inbox отзывов', text: 'Все отзывы и упоминания в одном месте' },
@@ -32,20 +32,37 @@ export default function LoginPage() {
   const [error, setError] = useState('')
 
   useEffect(() => {
-    try {
-      if (document.cookie.includes('accessToken=')) {
-        router.replace('/dashboard')
-        return
+    // Регрессия: раньше здесь проверялось только НАЛИЧИЕ cookie accessToken —
+    // просроченный/невалидный токен (или устаревший клиентский рендер /login
+    // из Router Cache / bfcache, характерно для мобильного Safari) приводил к
+    // мгновенному редиректу на /dashboard, где сессия всё равно не проходила.
+    // Итог: форма логина на долю секунды появлялась и тут же исчезала.
+    // Теперь редирект делаем только после реальной проверки сессии; невалидную
+    // cookie чистим и остаёмся на форме логина.
+    let cancelled = false
+    ;(async () => {
+      try {
+        if (!document.cookie.includes('accessToken=')) return
+        await me()
+        if (!cancelled) router.replace('/dashboard')
+      } catch {
+        if (!cancelled) logoutLocal()
       }
-    } catch {}
+    })()
 
     try {
-      const params = new URLSearchParams(window.location.search)
-      const yandexToken = params.get('accessToken')
-      const oauthError = params.get('error')
+      // accessToken travels in the URL fragment (#...), not a query param —
+      // it never leaves the browser in a request line, so it doesn't end up
+      // in server/proxy access logs or Referer headers. error=yandex_denied
+      // isn't sensitive, so it stays a regular query param.
+      const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''))
+      const yandexToken = hashParams.get('accessToken')
+      const oauthError = new URLSearchParams(window.location.search).get('error')
 
       if (yandexToken) {
         document.cookie = `accessToken=${encodeURIComponent(yandexToken)}; path=/; max-age=${60 * 60 * 24 * 7}; samesite=lax`
+        // Drop the token from the visible URL/history before navigating away.
+        window.history.replaceState(null, '', window.location.pathname)
         router.replace('/dashboard')
         router.refresh()
         return
@@ -55,6 +72,10 @@ export default function LoginPage() {
         setError('Не удалось войти через Яндекс ID. Попробуйте снова или используйте email и пароль.')
       }
     } catch {}
+
+    return () => {
+      cancelled = true
+    }
   }, [router])
 
   async function handleSubmit(e: React.FormEvent) {
@@ -196,9 +217,16 @@ export default function LoginPage() {
                     Запомнить меня
                   </button>
 
-                  <button type="button" className="text-sm font-medium text-blue-300 transition hover:text-fuchsia-100">
-                    Забыли пароль?
-                  </button>
+                  {/* Самостоятельный сброс пароля пока не реализован (нет email-инфраструктуры) —
+                      честная ссылка в поддержку вместо кнопки, которая ничего не делает. */}
+                  <a
+                    href={process.env.NEXT_PUBLIC_SUPPORT_TELEGRAM_URL || 'https://t.me/reputationos_support'}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm font-medium text-blue-300 transition hover:text-fuchsia-100"
+                  >
+                    Забыли пароль? Написать в поддержку
+                  </a>
                 </div>
 
                 {error ? (

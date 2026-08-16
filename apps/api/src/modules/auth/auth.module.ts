@@ -4,12 +4,13 @@ import { PassportModule } from '@nestjs/passport'
 import { AuthController } from './auth.controller'
 import { AuthService } from './auth.service'
 import { JwtStrategy } from './jwt.strategy'
+import { requireJwtSecret } from '../../common/config/require-jwt-secret'
 
 @Module({
   imports: [
     PassportModule,
     JwtModule.register({
-      secret: process.env.JWT_SECRET || 'supersecret',
+      secret: requireJwtSecret(),
       signOptions: { expiresIn: '7d' }
     })
   ],

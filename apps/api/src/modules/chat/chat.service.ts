@@ -465,7 +465,15 @@ export class ChatService {
       // Verify participant access
       await this.assertDirectParticipant(userId, message.threadId)
     } else {
-      const workspaceId = dto.workspaceId || message.workspaceId || message.thread.workspaceId!
+      // IDOR fix: the role check MUST use the message's own workspace, never a
+      // client-supplied one. dto.workspaceId used to take priority here — a
+      // user who is OWNER/ADMIN of ANY workspace (not necessarily the one this
+      // message belongs to) could pass their own workspaceId and satisfy
+      // `role !== MEMBER`, letting them edit any group-thread message across
+      // tenants. The message/thread's real workspaceId is the only thing this
+      // check may ever trust.
+      const workspaceId = message.workspaceId || message.thread.workspaceId
+      if (!workspaceId) throw new ForbiddenException('Нет доступа')
       const role = await this.getMemberRole(userId, workspaceId)
       if (!role) throw new ForbiddenException('Нет доступа')
       if (message.authorId !== userId && role === WorkspaceRole.MEMBER) {
@@ -497,7 +505,10 @@ export class ChatService {
       }
       await this.assertDirectParticipant(userId, message.threadId)
     } else {
-      const wid = workspaceId || message.workspaceId || message.thread.workspaceId!
+      // Same IDOR fix as editMessage — never trust the caller-supplied workspaceId
+      // for the authorization decision, only the message/thread's own.
+      const wid = message.workspaceId || message.thread.workspaceId
+      if (!wid) throw new ForbiddenException('Нет доступа')
       const role = await this.getMemberRole(userId, wid)
       if (!role) throw new ForbiddenException('Нет доступа')
       if (message.authorId !== userId && role === WorkspaceRole.MEMBER) {

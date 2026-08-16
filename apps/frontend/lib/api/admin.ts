@@ -113,6 +113,7 @@ export interface SystemHealth {
   worker: { status: string; reason?: string; lastHeartbeatAgo?: number }
   telegram: { status: string; reason?: string }
   push: { status: string; reason?: string }
+  ai: { status: string; reason?: string }
 }
 
 export interface AdminPlan {

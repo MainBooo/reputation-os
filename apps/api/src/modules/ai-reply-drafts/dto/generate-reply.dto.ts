@@ -1,12 +1,14 @@
-import { IsIn, IsOptional, IsString } from 'class-validator'
+import { IsIn, IsOptional, IsString, MaxLength } from 'class-validator'
 
 export class GenerateReplyDto {
   @IsOptional()
   @IsString()
+  @MaxLength(10)
   languageCode?: string
 
   @IsOptional()
   @IsString()
+  @MaxLength(60)
   tone?: string
 
   @IsOptional()

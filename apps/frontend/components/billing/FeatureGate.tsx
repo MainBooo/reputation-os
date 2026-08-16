@@ -3,18 +3,27 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { getMyEntitlements, type BillingEntitlements } from '@/lib/api/billing'
+import { useChatContext } from '@/lib/chat/ChatContext'
 
 export type FeatureKey =
   | 'telegramNotifications'
+  | 'telegramMonitoringEnabled'
   | 'advancedAnalytics'
   | 'maxCompanies'
   | 'maxAiRepliesPerMonth'
 
 const FEATURE_NAMES: Record<FeatureKey, string> = {
   telegramNotifications: 'Telegram-уведомления',
+  telegramMonitoringEnabled: 'Поиск упоминаний в Telegram',
   advancedAnalytics: 'Расширенная аналитика',
   maxCompanies: 'Управление несколькими компаниями',
   maxAiRepliesPerMonth: 'AI-ответы на отзывы',
+}
+
+// Точечные описания для апсейл-блока — используются вместо общей фразы,
+// когда у фичи есть понятный порог тарифа (см. DefaultUpsell).
+const FEATURE_DESCRIPTIONS: Partial<Record<FeatureKey, string>> = {
+  telegramMonitoringEnabled: 'Поиск упоминаний в Telegram доступен с тарифа «Бизнес».',
 }
 
 function hasFeature(ent: BillingEntitlements, feature: FeatureKey): boolean {
@@ -35,7 +44,7 @@ function DefaultUpsell({ feature }: { feature: FeatureKey }) {
             🔒 {FEATURE_NAMES[feature]}
           </div>
           <div className="mt-1 text-xs text-zinc-500">
-            Эта функция доступна на более высоком тарифе.
+            {FEATURE_DESCRIPTIONS[feature] ?? 'Эта функция доступна на более высоком тарифе.'}
           </div>
         </div>
         <button
@@ -67,16 +76,22 @@ export default function FeatureGate({
     entitlementsProp ?? null,
   )
   const [loading, setLoading] = useState(entitlementsProp === undefined)
+  // Регрессия (тот же класс бага, что чинили в SubscriptionContext.tsx):
+  // без явного workspaceId бэкенд резолвит "старейшее" membership пользователя,
+  // а не тот workspace, что реально открыт в UI — на мульти-workspace аккаунте
+  // это могло показать/скрыть платную фичу не для того тарифа.
+  const { workspaceId } = useChatContext()
 
   useEffect(() => {
     if (entitlementsProp !== undefined) {
       setEntitlements(entitlementsProp)
       return
     }
-    getMyEntitlements()
+    setLoading(true)
+    getMyEntitlements(workspaceId || undefined)
       .then(setEntitlements)
       .finally(() => setLoading(false))
-  }, [entitlementsProp])
+  }, [entitlementsProp, workspaceId])
 
   if (loading) {
     return <div className="h-16 animate-pulse rounded-[1.35rem] bg-white/[0.04]" />

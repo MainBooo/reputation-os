@@ -18,6 +18,12 @@ const mockPrisma = {
   workspaceMember: {
     create: jest.fn(),
   },
+  plan: {
+    findUnique: jest.fn(),
+  },
+  subscription: {
+    create: jest.fn(),
+  },
 }
 
 const mockJwt = {
@@ -82,7 +88,13 @@ describe('AuthService', () => {
 
     it('returns accessToken on valid credentials', async () => {
       const hash = await bcrypt.hash(dto.password, 10)
-      mockPrisma.user.findUnique.mockResolvedValue({ id: 'uid1', email: dto.email, passwordHash: hash })
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: 'uid1',
+        email: dto.email,
+        passwordHash: hash,
+        isActive: true,
+        deletedAt: null,
+      })
       mockPrisma.user.update.mockResolvedValue({})
 
       const result = await service.login(dto)

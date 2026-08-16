@@ -27,5 +27,16 @@ export const RATE_LIMITS = {
   billingCheckout: {
     limit: envNumber('RATE_LIMIT_BILLING_CHECKOUT_MAX', 10),
     ttl: envNumber('RATE_LIMIT_BILLING_CHECKOUT_TTL_MS', 15 * 60_000)
+  },
+  // Щедрый лимит — ЮKassa легитимно ретраит недоставленные события с одного и
+  // того же набора IP; цель — не пропустить event-flood/перебор providerPaymentId
+  // с произвольного адреса, а не блокировать реальные ретраи провайдера.
+  billingWebhook: {
+    limit: envNumber('RATE_LIMIT_BILLING_WEBHOOK_MAX', 60),
+    ttl: envNumber('RATE_LIMIT_BILLING_WEBHOOK_TTL_MS', 60_000)
+  },
+  internalJobs: {
+    limit: envNumber('RATE_LIMIT_INTERNAL_JOBS_MAX', 30),
+    ttl: envNumber('RATE_LIMIT_INTERNAL_JOBS_TTL_MS', 60_000)
   }
 }

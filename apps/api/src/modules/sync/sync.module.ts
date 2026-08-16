@@ -4,9 +4,11 @@ import { Queue } from 'bullmq'
 import { SyncController } from './sync.controller'
 import { SyncService } from './sync.service'
 import { DEFAULT_JOB_OPTIONS } from '../../common/queues/job-options'
+import { BillingModule } from '../billing/billing.module'
 
 @Global()
 @Module({
+  imports: [BillingModule],
   controllers: [SyncController],
   providers: [
     {

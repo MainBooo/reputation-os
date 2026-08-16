@@ -102,7 +102,12 @@ export class AuthController {
       const yandexAccessToken = await this.authService.exchangeYandexCode(code)
       const yandexUser = await this.authService.getYandexUserInfo(yandexAccessToken)
       const { accessToken } = await this.authService.findOrCreateFromYandex(yandexUser)
-      return res.redirect(`${frontendUrl}/login?accessToken=${encodeURIComponent(accessToken)}`)
+      // Fragment, not a query param: query strings land in browser history,
+      // Referer headers, and server/proxy access logs; a URL fragment never
+      // leaves the browser in the request line, so it isn't logged anywhere
+      // downstream (still visible in local browser history, which a plain
+      // redirect-based flow can't avoid without a token-exchange endpoint).
+      return res.redirect(`${frontendUrl}/login#accessToken=${encodeURIComponent(accessToken)}`)
     } catch (err) {
       this.logger.error(`Yandex OAuth callback failed: ${(err as Error).message}`)
       return res.redirect(`${frontendUrl}/login?error=yandex_denied`)

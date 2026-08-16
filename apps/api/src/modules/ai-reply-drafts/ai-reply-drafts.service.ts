@@ -1,4 +1,10 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common'
+import {
+  ForbiddenException,
+  Injectable,
+  Logger,
+  NotFoundException,
+  ServiceUnavailableException
+} from '@nestjs/common'
 import { PrismaService } from '../../common/prisma/prisma.service'
 import { EntitlementsService } from '../billing/entitlements.service'
 import { GenerateReplyDto } from './dto/generate-reply.dto'
@@ -13,6 +19,8 @@ type YandexGptResponse = {
 
 @Injectable()
 export class AiReplyDraftsService {
+  private readonly logger = new Logger(AiReplyDraftsService.name)
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly entitlements: EntitlementsService
@@ -104,39 +112,64 @@ export class AiReplyDraftsService {
     return data?.output?.[0]?.content?.[0]?.text?.trim() || ''
   }
 
+  // Все ошибки провайдера здесь превращаются в один и тот же generic
+  // ServiceUnavailableException наружу — HttpExceptionFilter отдаёт message
+  // клиенту как есть (в отличие от 500), поэтому детали провайдера (текст
+  // ответа, причина таймаута) идут только в лог, никогда в тело ответа API.
   private async generateWithYandexGpt(mention: any, dto: GenerateReplyDto, preset: 'FORMAL' | 'FRIENDLY' | 'CONCISE') {
     const apiKey = process.env.YANDEX_GPT_API_KEY
     const folderId = process.env.YANDEX_GPT_FOLDER_ID
     const model = process.env.YANDEX_GPT_MODEL || 'yandexgpt-lite'
 
     if (!apiKey || !folderId) {
-      throw new BadRequestException('YandexGPT is not configured')
+      this.logger.error(
+        'AI: misconfigured — YANDEX_GPT_API_KEY/YANDEX_GPT_FOLDER_ID missing, AI reply drafts are disabled'
+      )
+      throw new ServiceUnavailableException('AI reply generation is not configured. Contact support.')
     }
 
-    const response = await fetch('https://ai.api.cloud.yandex.net/v1/responses', {
-      method: 'POST',
-      headers: {
-        Authorization: `Api-Key ${apiKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: `gpt://${folderId}/${model}`,
-        input: this.buildPrompt(mention, dto, preset),
-        temperature: 0.75,
-        max_output_tokens: 700
+    let response: Response
+    try {
+      response = await fetch('https://ai.api.cloud.yandex.net/v1/responses', {
+        method: 'POST',
+        headers: {
+          Authorization: `Api-Key ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: `gpt://${folderId}/${model}`,
+          input: this.buildPrompt(mention, dto, preset),
+          temperature: 0.75,
+          max_output_tokens: 700
+        }),
+        signal: AbortSignal.timeout(20000)
       })
-    })
+    } catch (err) {
+      const reason = (err as Error)?.name === 'TimeoutError' ? 'timeout after 20s' : (err as Error)?.message
+      this.logger.error(`YandexGPT request failed: ${reason}`)
+      throw new ServiceUnavailableException('AI provider is temporarily unavailable. Please try again later.')
+    }
 
     if (!response.ok) {
       const errorText = await response.text().catch(() => '')
-      throw new BadRequestException(`YandexGPT request failed: ${response.status} ${errorText.slice(0, 300)}`)
+      // Провайдерский текст ошибки логируется целиком (для дебага), клиенту — только generic-сообщение.
+      this.logger.error(`YandexGPT request failed: HTTP ${response.status} ${errorText.slice(0, 300)}`)
+      throw new ServiceUnavailableException('AI provider returned an error. Please try again later.')
     }
 
-    const data = (await response.json()) as YandexGptResponse
+    let data: YandexGptResponse
+    try {
+      data = (await response.json()) as YandexGptResponse
+    } catch {
+      this.logger.error('YandexGPT returned a malformed (non-JSON) response')
+      throw new ServiceUnavailableException('AI provider returned an unexpected response.')
+    }
+
     const text = this.extractText(data)
 
     if (!text) {
-      throw new BadRequestException('YandexGPT returned empty reply')
+      this.logger.error('YandexGPT returned an empty reply')
+      throw new ServiceUnavailableException('AI provider returned an empty reply. Please try again.')
     }
 
     return text

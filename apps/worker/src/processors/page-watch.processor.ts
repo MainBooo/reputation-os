@@ -8,6 +8,7 @@ import { QUEUES } from '../queues/queue.names'
 import { PageWatchExtractor, ExtractedItem } from './page-watch-extractor'
 import { normalizeText } from '../common/utils/normalize.util'
 import { classifySentiment } from '../common/utils/sentiment.util'
+import { safeFetch } from '../common/security/safe-url'
 
 const DOMAIN_LOCK_PREFIX = 'pw:domain:'
 const DOMAIN_LOCK_TTL_SEC = 10
@@ -170,17 +171,19 @@ export class PageWatchProcessor implements OnModuleInit, OnModuleDestroy {
 
     try {
       // ── Build request headers (conditional HTTP) ──────────────────────────
+      // safeFetch: валидирует page.url (и каждый redirect на его пути) против
+      // SSRF — приватные/loopback/link-local/metadata-адреса отклоняются, авто-
+      // следование за редиректами выключено, каждый Location проверяется заново.
       const reqHeaders: Record<string, string> = {
-        'User-Agent': 'Mozilla/5.0 (compatible; ReputationOS/1.0; +https://reputationos.ru)',
         'Accept': 'text/html,application/xhtml+xml',
         'Accept-Language': 'ru,en;q=0.9'
       }
       if (pageData.etag) reqHeaders['If-None-Match'] = pageData.etag
       if (pageData.lastModifiedHeader) reqHeaders['If-Modified-Since'] = pageData.lastModifiedHeader
 
-      const response = await fetch(page.url, {
+      const response = await safeFetch(page.url, {
         headers: reqHeaders,
-        signal: AbortSignal.timeout(15000)
+        timeoutMs: 15000
       })
 
       // ── HTTP 304 Not Modified ─────────────────────────────────────────────

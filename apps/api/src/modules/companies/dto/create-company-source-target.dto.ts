@@ -1,4 +1,5 @@
 import { IsBoolean, IsIn, IsObject, IsOptional, IsString } from 'class-validator'
+import { IsSafeExternalUrl } from '../../../common/security/is-safe-external-url.validator'
 
 export class CreateCompanySourceTargetDto {
   @IsOptional()
@@ -15,6 +16,7 @@ export class CreateCompanySourceTargetDto {
 
   @IsOptional()
   @IsString()
+  @IsSafeExternalUrl()
   externalUrl?: string
 
   @IsOptional()

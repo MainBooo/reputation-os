@@ -121,12 +121,14 @@ echo
 echo
 
 echo "== INTERNAL JOBS TICK =="
-curl -s -X POST "$API/internal/jobs/tick"
+# Requires INTERNAL_JOBS_SECRET in this shell's env (see apps/api/.env.example) —
+# these routes are guarded now, no more anonymous access.
+curl -s -X POST "$API/internal/jobs/tick" -H "x-internal-secret: ${INTERNAL_JOBS_SECRET:-}"
 echo
 echo
 
 echo "== INTERNAL JOBS RECONCILE =="
-curl -s -X POST "$API/internal/jobs/reconcile"
+curl -s -X POST "$API/internal/jobs/reconcile" -H "x-internal-secret: ${INTERNAL_JOBS_SECRET:-}"
 echo
 echo
 

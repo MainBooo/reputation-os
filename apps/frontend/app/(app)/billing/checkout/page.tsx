@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useMetrica } from 'next-yandex-metrica'
-import { Sparkles, Check, Star } from 'lucide-react'
+import { Sparkles, Check, Star, Gift } from 'lucide-react'
 import Card from '@/components/ui/Card'
 import {
   getBillingPlans,
@@ -66,10 +66,19 @@ function buildFeatureGroups(plan: BillingPlan): FeatureGroup[] {
 
   // Мониторинг
   const monitoring: FeatureItem[] = [
+    ...(plan.code === 'AGENCY' ? [{ label: 'Всё из тарифа «Бизнес»', highlight: true }] : []),
     { label: pluralCompanies(plan.limits.maxCompanies) },
     { label: sourcesLabel(plan.limits.maxSources) },
-    ...plan.limits.platforms.map((p) => ({ label: PLATFORM_LABELS[p] ?? p })),
+    // WEB и TELEGRAM вынесены в отдельные явные пункты ниже — не дублируем их
+    // как "Веб-поиск"/сырое "TELEGRAM" из общего списка платформ.
+    ...plan.limits.platforms.filter((p) => p !== 'WEB' && p !== 'TELEGRAM').map((p) => ({ label: PLATFORM_LABELS[p] ?? p })),
   ]
+  if (plan.limits.webMonitoringEnabled) {
+    monitoring.push({ label: 'WEB-мониторинг', highlight: true })
+  }
+  if (plan.limits.telegramMonitoringEnabled) {
+    monitoring.push({ label: 'Telegram-мониторинг', highlight: true })
+  }
   groups.push({ label: 'Мониторинг', items: monitoring })
 
   // AI
@@ -108,9 +117,6 @@ function buildFeatureGroups(plan: BillingPlan): FeatureGroup[] {
       highlight: plan.limits.advancedAnalytics,
     },
   ]
-  if (plan.limits.webMonitoringEnabled) {
-    extra.push({ label: 'Мониторинг веб-упоминаний', highlight: true })
-  }
   extra.push({ label: 'История отзывов и упоминаний' })
   if (plan.code === 'AGENCY') {
     extra.push({ label: 'Для агентств и сетевых компаний', highlight: true })
@@ -122,17 +128,60 @@ function buildFeatureGroups(plan: BillingPlan): FeatureGroup[] {
 
 function buildSummaryFeatures(plan: BillingPlan): string[] {
   const f: string[] = []
+  if (plan.code === 'AGENCY') f.push('Всё из тарифа «Бизнес»')
   f.push(
     `${pluralCompanies(plan.limits.maxCompanies)}, ${sourcesLabel(plan.limits.maxSources)}`,
   )
-  f.push(plan.limits.platforms.map((p) => PLATFORM_LABELS[p] ?? p).join(', '))
+  f.push(plan.limits.platforms.filter((p) => p !== 'WEB' && p !== 'TELEGRAM').map((p) => PLATFORM_LABELS[p] ?? p).join(', '))
   f.push(aiLabel(plan.limits.maxAiRepliesPerMonth))
+  if (plan.limits.webMonitoringEnabled) f.push('WEB-мониторинг')
+  if (plan.limits.telegramMonitoringEnabled) f.push('Telegram-мониторинг')
   if (plan.limits.pushNotificationsEnabled) f.push('Push-уведомления')
-  if (plan.limits.telegramNotifications) f.push('Telegram-уведомления')
-  if (plan.limits.webMonitoringEnabled) f.push('Мониторинг веб-упоминаний')
+  if (plan.limits.telegramNotifications) f.push('Telegram-уведомления (алерты об отзывах)')
   if (plan.limits.advancedAnalytics) f.push('Расширенная аналитика')
   if (plan.code === 'AGENCY') f.push('Для агентств и сетевых компаний')
   return f
+}
+
+// ─── Free plan highlight ────────────────────────────────────────────────────
+// Реальные возможности FREE — те же данные (plan.limits), что и у платных
+// тарифов, просто отрисованы отдельным блоком, т.к. FREE не участвует в
+// выборе тарифа на этой странице (см. фильтр `priceMonthly > 0` в CheckoutInner).
+
+function FreePlanHighlight({ plan }: { plan: BillingPlan }) {
+  const groups = buildFeatureGroups(plan)
+
+  return (
+    <Card className="mb-5 border-emerald-300/15 p-5">
+      <div className="flex items-center gap-2">
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-emerald-300/25 bg-emerald-400/[0.08] text-emerald-300">
+          <Gift className="h-4 w-4" />
+        </div>
+        <div>
+          <div className="text-sm font-semibold text-white">Что входит в {plan.name}</div>
+          <div className="text-xs text-zinc-500">Бесплатно, без ограничения по времени</div>
+        </div>
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-4">
+        {groups.map((group) => (
+          <div key={group.label}>
+            <div className="mb-1 text-[9px] font-semibold uppercase tracking-widest text-zinc-600">
+              {group.label}
+            </div>
+            <ul className="space-y-1">
+              {group.items.map((f, i) => (
+                <li key={i} className="flex items-start gap-1.5 text-xs text-zinc-300">
+                  <Check className="mt-px h-3 w-3 shrink-0 text-emerald-400" />
+                  <span>{f.label}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </Card>
+  )
 }
 
 // ─── PlanCard ───────────────────────────────────────────────────────────────
@@ -264,7 +313,8 @@ function ComparisonTable({ plans }: { plans: BillingPlan[] }) {
         p.limits.maxAiRepliesPerMonth === -1 ? '∞' : String(p.limits.maxAiRepliesPerMonth),
     },
     { label: 'Push', getValue: (p) => (p.limits.pushNotificationsEnabled ? '✓' : '—') },
-    { label: 'Telegram', getValue: (p) => (p.limits.telegramNotifications ? '✓' : '—') },
+    { label: 'TG-уведомления', getValue: (p) => (p.limits.telegramNotifications ? '✓' : '—') },
+    { label: 'TG-поиск', getValue: (p) => (p.limits.telegramMonitoringEnabled ? '✓' : '—') },
     { label: 'Веб', getValue: (p) => (p.limits.webMonitoringEnabled ? '✓' : '—') },
     { label: 'Аналитика', getValue: (p) => (p.limits.advancedAnalytics ? '✓' : '—') },
     {
@@ -334,7 +384,7 @@ function CheckoutInner() {
   const { entitlements } = useSubscription()
   const { reachGoal } = useMetrica()
 
-  const [plans, setPlans] = useState<BillingPlan[]>([])
+  const [allPlans, setAllPlans] = useState<BillingPlan[]>([])
   const [selectedCode, setSelectedCode] = useState(initialPlan)
   const [period, setPeriod] = useState<'monthly' | 'yearly'>('monthly')
   const [step, setStep] = useState<'select' | 'success' | 'error'>('select')
@@ -346,13 +396,18 @@ function CheckoutInner() {
     syncPendingPayments().catch(() => {})
     getBillingPlans()
       .then((data) => {
-        const paid = (Array.isArray(data) ? data : []).filter((p) => p.priceMonthly > 0)
-        setPlans(paid)
+        const all = Array.isArray(data) ? data : []
+        setAllPlans(all)
+        const paid = all.filter((p) => p.priceMonthly > 0)
         if (!initialPlan && paid[0]) setSelectedCode(paid[0].code)
       })
       .finally(() => setLoading(false))
   }, [initialPlan])
 
+  // Выбор тарифа на этой странице — только платные; FREE не продаётся, но её
+  // реальные лимиты показываются отдельным блоком ниже (FreePlanHighlight).
+  const plans = allPlans.filter((p) => p.priceMonthly > 0)
+  const freePlan = allPlans.find((p) => p.code === 'FREE')
   const selected = plans.find((p) => p.code === selectedCode)
 
   async function handleCheckout() {
@@ -459,6 +514,8 @@ function CheckoutInner() {
       <div className="mb-5 text-xs text-zinc-500">
         Безопасная оплата через ЮKassa · 7 дней бесплатного доступа к тарифу Бизнес при регистрации
       </div>
+
+      {freePlan && <FreePlanHighlight plan={freePlan} />}
 
       {/* Trial banner */}
       {isTrialActive && (

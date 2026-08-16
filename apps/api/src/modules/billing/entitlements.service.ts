@@ -71,7 +71,7 @@ export interface WorkspaceEntitlements {
   limits: PlanLimits
   effective: PlanLimits
   overrides: Partial<Record<FeatureKey, unknown>>
-  usage: { companies: number; companiesCount: number; aiRepliesThisMonth: number }
+  usage: { companies: number; companiesCount: number; aiRepliesThisMonth: number; sourcesCount: number }
   workspaceActive: boolean
 }
 
@@ -104,12 +104,33 @@ export class EntitlementsService {
     if (!member) throw new ForbiddenException('No access to workspace')
   }
 
+  // Единственное место, считающее источники против maxSources — раньше эта
+  // ровно одна и та же выборка (TELEGRAM исключён: Scout гейтится отдельно
+  // через telegramMonitoringEnabled и не расходует maxSources) была
+  // продублирована в CompaniesService, SyncService и здесь же по отдельности,
+  // с риском разъехаться при следующем изменении тарифных правил.
+  async countBillableSources(workspaceId: string): Promise<number> {
+    return this.prisma.companySourceTarget.count({
+      where: {
+        company: { workspaceId },
+        isActive: true,
+        source: { platform: { not: 'TELEGRAM' } }
+      }
+    })
+  }
+
+  async hasSourceSlotAvailable(workspaceId: string, maxSources: number): Promise<boolean> {
+    const limit = Number(maxSources)
+    if (limit < 0) return true
+    return (await this.countBillableSources(workspaceId)) < limit
+  }
+
   async getForWorkspace(workspaceId: string): Promise<WorkspaceEntitlements> {
     const monthStart = new Date()
     monthStart.setUTCDate(1)
     monthStart.setUTCHours(0, 0, 0, 0)
 
-    const [subscription, overrides, companies, aiRepliesThisMonth, workspace] = await Promise.all([
+    const [subscription, overrides, companies, aiRepliesThisMonth, workspace, sourcesCount] = await Promise.all([
       this.prisma.subscription.findUnique({
         where: { workspaceId },
         include: { plan: true }
@@ -119,7 +140,8 @@ export class EntitlementsService {
       this.prisma.aIReplyDraft.count({
         where: { company: { workspaceId }, createdAt: { gte: monthStart } }
       }),
-      this.prisma.workspace.findUnique({ where: { id: workspaceId }, select: { isActive: true } })
+      this.prisma.workspace.findUnique({ where: { id: workspaceId }, select: { isActive: true } }),
+      this.countBillableSources(workspaceId)
     ])
 
     let planCode: PlanCode = PlanCode.FREE
@@ -168,7 +190,7 @@ export class EntitlementsService {
       limits,
       effective: limits,
       overrides: overrideMap,
-      usage: { companies, companiesCount: companies, aiRepliesThisMonth },
+      usage: { companies, companiesCount: companies, aiRepliesThisMonth, sourcesCount },
       workspaceActive: workspace?.isActive ?? true
     }
   }

@@ -106,6 +106,7 @@ export default function SystemTab() {
           </ServiceCard>
           <ServiceCard title="Telegram Bot" status={data.telegram.status} reason={data.telegram.reason} />
           <ServiceCard title="Push Notifications" status={data.push.status} reason={data.push.reason} />
+          <ServiceCard title="AI (YandexGPT)" status={data.ai.status} reason={data.ai.reason} />
         </div>
       </div>
 

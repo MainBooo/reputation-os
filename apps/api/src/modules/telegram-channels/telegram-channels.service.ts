@@ -180,7 +180,8 @@ export class TelegramChannelsService {
   }
 
   async checkNow(userId: string, companyId: string, channelId: string) {
-    await this.resolveCompany(userId, companyId, 'write')
+    const company = await this.resolveCompany(userId, companyId, 'write')
+    await this.assertTelegramMonitoringAllowed(company.workspaceId)
 
     const link = await this.prisma.companyTelegramChannel.findUnique({ where: { id: channelId } })
     if (!link || link.companyId !== companyId) throw new NotFoundException('Telegram channel not found')

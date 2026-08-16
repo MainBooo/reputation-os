@@ -129,6 +129,15 @@ export function getCompanySyncStatus(companyId: string) {
   })
 }
 
+export interface WebMonitoringStatus {
+  enabled: boolean
+  hasRootTarget: boolean
+  rootTargetIds: string[]
+  lastRunAt: string | null
+  totalMentionsFound: number
+  searchState: 'disabled' | 'never_run' | 'error' | 'ok'
+}
+
 export function getCompanyWebSourcesOverview(companyId: string) {
   return apiFetch(`/companies/${companyId}/web-sources`, undefined, {
     summary: {
@@ -137,6 +146,14 @@ export function getCompanyWebSourcesOverview(companyId: string) {
       discoveredCount: 0,
       latestSignalsCount: 0
     },
+    status: {
+      enabled: false,
+      hasRootTarget: false,
+      rootTargetIds: [],
+      lastRunAt: null,
+      totalMentionsFound: 0,
+      searchState: 'never_run'
+    } as WebMonitoringStatus,
     activeGroups: [],
     discovered: [],
     latestSignals: []

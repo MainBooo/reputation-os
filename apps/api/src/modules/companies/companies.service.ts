@@ -158,6 +158,21 @@ export class CompaniesService {
     return member
   }
 
+  // Централизованная проверка maxSources — вызывается перед КАЖДЫМ созданием
+  // CompanySourceTarget (ручное добавление, онбординг, редактирование компании).
+  // Счётчик и правило исключения TELEGRAM живут в EntitlementsService — единая
+  // точка, используемая также SyncService, чтобы не дублировать один и тот же
+  // Prisma-запрос в трёх местах (было — рассинхронизировалось при правках).
+  private async hasSourceSlotAvailable(workspaceId: string, maxSources: number): Promise<boolean> {
+    return this.entitlements.hasSourceSlotAvailable(workspaceId, maxSources)
+  }
+
+  private async assertSourceSlotAvailable(workspaceId: string, maxSources: number) {
+    if (!(await this.hasSourceSlotAvailable(workspaceId, maxSources))) {
+      throw new ForbiddenException({ code: 'PLAN_LIMIT', feature: 'maxSources', limit: Number(maxSources) })
+    }
+  }
+
   private async ensureTwoGisSource(workspaceId: string) {
     let twoGisSource = await this.prisma.source.findFirst({
       where: {
@@ -614,6 +629,8 @@ export class CompaniesService {
 
     if (normalizedYandexUrl && !allowedPlatforms.includes('YANDEX')) {
       this.logger.log(`[CompanyCreate] skip yandex init companyId=${company.id} reason=platform_not_allowed`)
+    } else if (normalizedYandexUrl && !(await this.hasSourceSlotAvailable(dto.workspaceId, limits.maxSources))) {
+      this.logger.log(`[CompanyCreate] skip yandex init companyId=${company.id} reason=source_limit_reached`)
     } else if (normalizedYandexUrl) {
       const yandexSource = await this.ensureYandexSource(dto.workspaceId)
 
@@ -643,6 +660,8 @@ export class CompaniesService {
 
     if (normalizedTwoGisUrl && !allowedPlatforms.includes('TWOGIS')) {
       this.logger.log(`[CompanyCreate] skip 2gis init companyId=${company.id} reason=platform_not_allowed`)
+    } else if (normalizedTwoGisUrl && !(await this.hasSourceSlotAvailable(dto.workspaceId, limits.maxSources))) {
+      this.logger.log(`[CompanyCreate] skip 2gis init companyId=${company.id} reason=source_limit_reached`)
     } else if (normalizedTwoGisUrl) {
       const twoGisSource = await this.ensureTwoGisSource(dto.workspaceId)
 
@@ -677,7 +696,9 @@ export class CompaniesService {
       const existingWebTarget = await this.prisma.companySourceTarget.findFirst({
         where: { companyId: company.id, sourceId: webSource.id, externalUrl: null }
       })
-      if (!existingWebTarget) {
+      if (!existingWebTarget && !(await this.hasSourceSlotAvailable(dto.workspaceId, limits.maxSources))) {
+        this.logger.log(`[CompanyCreate] skip web init companyId=${company.id} reason=source_limit_reached`)
+      } else if (!existingWebTarget) {
         await this.prisma.companySourceTarget.create({
           data: {
             companyId: company.id,
@@ -726,6 +747,12 @@ export class CompaniesService {
     }
 
     await this.assertWorkspaceAccess(userId, company.workspaceId, 'write')
+
+    // Нужны только когда меняются URL источников — иначе не тратим лишний запрос.
+    const ent =
+      dto.twoGisUrl !== undefined || dto.yandexUrl !== undefined
+        ? await this.entitlements.getForWorkspace(company.workspaceId)
+        : null
 
     const updatedCompany = await this.prisma.company.update({
       where: { id },
@@ -784,6 +811,8 @@ export class CompaniesService {
 
             this.logger.log(`[TwoGisInit] target updated companyId=${id} targetId=${existingTarget.id}`)
           } else {
+            await this.assertSourceSlotAvailable(company.workspaceId, ent!.limits.maxSources)
+
             const target = await this.prisma.companySourceTarget.create({
               data: {
                 companyId: id,
@@ -846,6 +875,8 @@ export class CompaniesService {
             `[YandexInit] target updated companyId=${id} targetId=${existingTarget.id} sourceId=${yandexSource.id} url="${normalizedYandexUrl}"`
           )
         } else {
+          await this.assertSourceSlotAvailable(company.workspaceId, ent!.limits.maxSources)
+
           const target = await this.prisma.companySourceTarget.create({
             data: {
               companyId: id,
@@ -954,9 +985,22 @@ export class CompaniesService {
 
     await this.assertWorkspaceAccess(userId, company.workspaceId, 'write')
 
-    return this.prisma.companyAlias.delete({
-      where: { id: aliasId }
+    // IDOR fix: `id` alone is globally unique, so a plain delete({where:{id}})
+    // would remove ANY alias by id regardless of which company it actually
+    // belongs to — a member of company A (workspace access check above only
+    // validates *that* company) could pass another workspace's alias id and
+    // delete it. deleteMany scopes the match to companyId too; affected===0
+    // means "not found or not yours", same NotFoundException either way so
+    // this doesn't leak whether the id exists elsewhere.
+    const { count } = await this.prisma.companyAlias.deleteMany({
+      where: { id: aliasId, companyId }
     })
+
+    if (count === 0) {
+      throw new NotFoundException('Alias not found')
+    }
+
+    return { id: aliasId }
   }
 
   async getSources(userId: string, companyId: string) {
@@ -1261,12 +1305,60 @@ export class CompaniesService {
       }
     })
 
+    // "Root" WEB target = the bootstrap CompanySourceTarget that the toggle
+    // operates on, created by either of two paths: companies.service.ts
+    // create() (no config at all, externalUrl null) or
+    // sync.service.ts ensureWebBootstrapTarget()/startWebSync (config.origin
+    // 'auto-bootstrap' + mode 'discovery', externalUrl = company.website —
+    // may be non-null). Discovered/promoted candidates use a different
+    // origin ('auto' / 'auto-bootstrap-backfill'), so checking config alone
+    // (not externalUrl) reliably tells root targets apart from those.
+    const rootTargets = webTargets.filter((target: any) => {
+      const config = target.config && typeof target.config === 'object' && !Array.isArray(target.config)
+        ? target.config as Record<string, any>
+        : {}
+      if (!config.origin) return true
+      return config.origin === 'auto-bootstrap' && config.mode === 'discovery'
+    })
+
+    const enabledOverall = rootTargets.some((t: any) => t.isActive !== false && t.syncMentionsEnabled !== false)
+
+    const watchedPages = await this.prisma.watchedPage.findMany({
+      where: { companyId },
+      select: { lastCheckedAt: true, consecutiveErrors: true, disabledReason: true }
+    })
+
+    const lastRunAt = watchedPages
+      .map((p) => p.lastCheckedAt)
+      .filter((d): d is Date => Boolean(d))
+      .sort((a, b) => b.getTime() - a.getTime())[0] || null
+
+    const hasErrors = watchedPages.some((p) => p.consecutiveErrors > 0 || Boolean(p.disabledReason))
+
+    const searchState = !enabledOverall
+      ? 'disabled'
+      : !lastRunAt
+        ? 'never_run'
+        : hasErrors
+          ? 'error'
+          : 'ok'
+
+    const totalMentionsFound = activeGroups.reduce((sum, g) => sum + Number(g.mentionsCount || 0), 0)
+
     return {
       summary: {
         activeGroupsCount: activeGroups.length,
         activeTargetsCount: activeTargets.length,
         discoveredCount: discovered.length,
         latestSignalsCount: latestSignals.length
+      },
+      status: {
+        enabled: enabledOverall,
+        hasRootTarget: rootTargets.length > 0,
+        rootTargetIds: rootTargets.map((t: any) => t.id),
+        lastRunAt,
+        totalMentionsFound,
+        searchState
       },
       activeGroups,
       discovered: discovered.slice(0, 50),
@@ -1302,16 +1394,7 @@ export class CompaniesService {
       }
     }
 
-    // maxSources enforcement
-    const maxSources = Number(ent.limits.maxSources)
-    if (maxSources >= 0) {
-      const currentSourcesCount = await this.prisma.companySourceTarget.count({
-        where: { company: { workspaceId: company.workspaceId }, isActive: true }
-      })
-      if (currentSourcesCount >= maxSources) {
-        throw new ForbiddenException({ code: 'PLAN_LIMIT', feature: 'maxSources', limit: maxSources })
-      }
-    }
+    await this.assertSourceSlotAvailable(company.workspaceId, ent.limits.maxSources)
 
     let sourceId: string | null = dto.sourceId || null
 

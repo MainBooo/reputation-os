@@ -1,1 +1,3 @@
-export default () => ({ secret: process.env.JWT_SECRET || 'supersecret' })
+import { requireJwtSecret } from '../common/config/require-jwt-secret'
+
+export default () => ({ secret: requireJwtSecret() })
