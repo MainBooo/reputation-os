@@ -158,21 +158,6 @@ export class CompaniesService {
     return member
   }
 
-  // Централизованная проверка maxSources — вызывается перед КАЖДЫМ созданием
-  // CompanySourceTarget (ручное добавление, онбординг, редактирование компании).
-  // Счётчик и правило исключения TELEGRAM живут в EntitlementsService — единая
-  // точка, используемая также SyncService, чтобы не дублировать один и тот же
-  // Prisma-запрос в трёх местах (было — рассинхронизировалось при правках).
-  private async hasSourceSlotAvailable(workspaceId: string, maxSources: number): Promise<boolean> {
-    return this.entitlements.hasSourceSlotAvailable(workspaceId, maxSources)
-  }
-
-  private async assertSourceSlotAvailable(workspaceId: string, maxSources: number) {
-    if (!(await this.hasSourceSlotAvailable(workspaceId, maxSources))) {
-      throw new ForbiddenException({ code: 'PLAN_LIMIT', feature: 'maxSources', limit: Number(maxSources) })
-    }
-  }
-
   private async ensureTwoGisSource(workspaceId: string) {
     let twoGisSource = await this.prisma.source.findFirst({
       where: {
@@ -587,38 +572,32 @@ export class CompaniesService {
   async create(userId: string, dto: CreateCompanyDto) {
     await this.assertWorkspaceAccess(userId, dto.workspaceId, 'write')
 
-    const companiesCount = await this.prisma.company.count({
-      where: { workspaceId: dto.workspaceId }
-    })
-
     const { limits, workspaceActive } = await this.entitlements.getForWorkspace(dto.workspaceId)
 
     if (!workspaceActive) {
       throw new ForbiddenException('Workspace is disabled')
     }
 
-    const maxCompanies = Number(limits.maxCompanies)
-
-    if (maxCompanies >= 0 && companiesCount >= maxCompanies) {
-      throw new ForbiddenException({ code: 'PLAN_LIMIT', feature: 'maxCompanies', limit: maxCompanies })
-    }
-
     this.logger.log(
       `[CompanyCreate] start workspaceId=${dto.workspaceId} name="${dto.name}" yandexUrl="${dto.yandexUrl?.trim() || ''}"`
     )
 
-    const company = await this.prisma.company.create({
-      data: {
-        workspaceId: dto.workspaceId,
-        name: dto.name,
-        normalizedName: this.normalize(dto.name) || '',
-        website: dto.website,
-        normalizedWebsite: this.normalize(dto.website),
-        city: dto.city,
-        normalizedCity: this.normalize(dto.city),
-        industry: dto.industry
-      }
-    })
+    const company = await this.entitlements.runWithCompanySlot(
+      dto.workspaceId,
+      limits.maxCompanies,
+      (tx) => tx.company.create({
+        data: {
+          workspaceId: dto.workspaceId,
+          name: dto.name,
+          normalizedName: this.normalize(dto.name) || '',
+          website: dto.website,
+          normalizedWebsite: this.normalize(dto.website),
+          city: dto.city,
+          normalizedCity: this.normalize(dto.city),
+          industry: dto.industry
+        }
+      })
+    )
 
     await this.syncCompanyKeywords(company.id, dto.keywords)
 
@@ -629,64 +608,80 @@ export class CompaniesService {
 
     if (normalizedYandexUrl && !allowedPlatforms.includes('YANDEX')) {
       this.logger.log(`[CompanyCreate] skip yandex init companyId=${company.id} reason=platform_not_allowed`)
-    } else if (normalizedYandexUrl && !(await this.hasSourceSlotAvailable(dto.workspaceId, limits.maxSources))) {
-      this.logger.log(`[CompanyCreate] skip yandex init companyId=${company.id} reason=source_limit_reached`)
     } else if (normalizedYandexUrl) {
       const yandexSource = await this.ensureYandexSource(dto.workspaceId)
 
-      const target = await this.prisma.companySourceTarget.create({
-        data: {
-          companyId: company.id,
-          sourceId: yandexSource.id,
-          externalUrl: normalizedYandexUrl,
-          syncReviewsEnabled: true,
-          syncRatingsEnabled: true,
-          syncMentionsEnabled: true
-        }
-      })
-
-      this.logger.log(
-        `[YandexInit] target created companyId=${company.id} targetId=${target.id} sourceId=${yandexSource.id} url="${normalizedYandexUrl}"`
+      const target = await this.entitlements.runWithSourceSlot(
+        dto.workspaceId,
+        limits.maxSources,
+        (tx) => tx.companySourceTarget.create({
+          data: {
+            companyId: company.id,
+            sourceId: yandexSource.id,
+            externalUrl: normalizedYandexUrl,
+            syncReviewsEnabled: true,
+            syncRatingsEnabled: true,
+            syncMentionsEnabled: true
+          }
+        }),
+        { skipIfFull: true }
       )
 
-      await this.enqueueAutoSyncJobs({
-        companyId: company.id,
-        userId,
-        requestedAt: new Date().toISOString()
-      })
+      if (!target) {
+        this.logger.log(`[CompanyCreate] skip yandex init companyId=${company.id} reason=source_limit_reached`)
+      } else {
+
+        this.logger.log(
+          `[YandexInit] target created companyId=${company.id} targetId=${target.id} sourceId=${yandexSource.id} url="${normalizedYandexUrl}"`
+        )
+
+        await this.enqueueAutoSyncJobs({
+          companyId: company.id,
+          userId,
+          requestedAt: new Date().toISOString()
+        })
+      }
     } else {
       this.logger.log(`[CompanyCreate] skip yandex init companyId=${company.id} reason=no_yandex_url`)
     }
 
     if (normalizedTwoGisUrl && !allowedPlatforms.includes('TWOGIS')) {
       this.logger.log(`[CompanyCreate] skip 2gis init companyId=${company.id} reason=platform_not_allowed`)
-    } else if (normalizedTwoGisUrl && !(await this.hasSourceSlotAvailable(dto.workspaceId, limits.maxSources))) {
-      this.logger.log(`[CompanyCreate] skip 2gis init companyId=${company.id} reason=source_limit_reached`)
     } else if (normalizedTwoGisUrl) {
       const twoGisSource = await this.ensureTwoGisSource(dto.workspaceId)
 
-      const target = await this.prisma.companySourceTarget.create({
-        data: {
-          companyId: company.id,
-          sourceId: twoGisSource.id,
-          externalUrl: normalizedTwoGisUrl,
-          syncReviewsEnabled: true,
-          syncRatingsEnabled: true,
-          syncMentionsEnabled: true
-        }
-      })
-
-      this.logger.log(
-        `[TwoGisInit] target created companyId=${company.id} targetId=${target.id} sourceId=${twoGisSource.id} url="${normalizedTwoGisUrl}"`
+      const target = await this.entitlements.runWithSourceSlot(
+        dto.workspaceId,
+        limits.maxSources,
+        (tx) => tx.companySourceTarget.create({
+          data: {
+            companyId: company.id,
+            sourceId: twoGisSource.id,
+            externalUrl: normalizedTwoGisUrl,
+            syncReviewsEnabled: true,
+            syncRatingsEnabled: true,
+            syncMentionsEnabled: true
+          }
+        }),
+        { skipIfFull: true }
       )
 
-      await this.enqueueAutoSyncJobs({
-        companyId: company.id,
-        userId,
-        requestedAt: new Date().toISOString()
-      })
+      if (!target) {
+        this.logger.log(`[CompanyCreate] skip 2gis init companyId=${company.id} reason=source_limit_reached`)
+      } else {
 
-      await this.ensureYandexReviewsRepeat(company.id)
+        this.logger.log(
+          `[TwoGisInit] target created companyId=${company.id} targetId=${target.id} sourceId=${twoGisSource.id} url="${normalizedTwoGisUrl}"`
+        )
+
+        await this.enqueueAutoSyncJobs({
+          companyId: company.id,
+          userId,
+          requestedAt: new Date().toISOString()
+        })
+
+        await this.ensureYandexReviewsRepeat(company.id)
+      }
     } else {
       this.logger.log(`[CompanyCreate] skip 2gis init companyId=${company.id} reason=no_two_gis_url`)
     }
@@ -696,18 +691,22 @@ export class CompaniesService {
       const existingWebTarget = await this.prisma.companySourceTarget.findFirst({
         where: { companyId: company.id, sourceId: webSource.id, externalUrl: null }
       })
-      if (!existingWebTarget && !(await this.hasSourceSlotAvailable(dto.workspaceId, limits.maxSources))) {
-        this.logger.log(`[CompanyCreate] skip web init companyId=${company.id} reason=source_limit_reached`)
-      } else if (!existingWebTarget) {
-        await this.prisma.companySourceTarget.create({
-          data: {
-            companyId: company.id,
-            sourceId: webSource.id,
-            syncMentionsEnabled: true,
-            isActive: true
-          }
-        })
-        this.logger.log(`[WebInit] root target created companyId=${company.id}`)
+      if (!existingWebTarget) {
+        const target = await this.entitlements.runWithSourceSlot(
+          dto.workspaceId,
+          limits.maxSources,
+          (tx) => tx.companySourceTarget.create({
+            data: {
+              companyId: company.id,
+              sourceId: webSource.id,
+              syncMentionsEnabled: true,
+              isActive: true
+            }
+          }),
+          { skipIfFull: true }
+        )
+        if (target) this.logger.log(`[WebInit] root target created companyId=${company.id}`)
+        else this.logger.log(`[CompanyCreate] skip web init companyId=${company.id} reason=source_limit_reached`)
       }
 
       await this.enqueueInitialWebScan({
@@ -798,31 +797,43 @@ export class CompaniesService {
 
         if (normalizedTwoGisUrl) {
           if (existingTarget) {
-            await this.prisma.companySourceTarget.update({
-              where: { id: existingTarget.id },
-              data: {
-                externalUrl: normalizedTwoGisUrl,
-                isActive: true,
-                syncReviewsEnabled: true,
-                syncRatingsEnabled: true,
-                syncMentionsEnabled: true
-              }
-            })
+            const update = (client: Prisma.TransactionClient | PrismaService) =>
+              client.companySourceTarget.update({
+                where: { id: existingTarget.id },
+                data: {
+                  externalUrl: normalizedTwoGisUrl,
+                  isActive: true,
+                  syncReviewsEnabled: true,
+                  syncRatingsEnabled: true,
+                  syncMentionsEnabled: true
+                }
+              })
+            if (existingTarget.isActive === false) {
+              await this.entitlements.runWithSourceSlot(
+                company.workspaceId,
+                ent!.limits.maxSources,
+                update
+              )
+            } else {
+              await update(this.prisma)
+            }
 
             this.logger.log(`[TwoGisInit] target updated companyId=${id} targetId=${existingTarget.id}`)
           } else {
-            await this.assertSourceSlotAvailable(company.workspaceId, ent!.limits.maxSources)
-
-            const target = await this.prisma.companySourceTarget.create({
-              data: {
-                companyId: id,
-                sourceId: twoGisSource.id,
-                externalUrl: normalizedTwoGisUrl,
-                syncReviewsEnabled: true,
-                syncRatingsEnabled: true,
-                syncMentionsEnabled: true
-              }
-            })
+            const target = await this.entitlements.runWithSourceSlot(
+              company.workspaceId,
+              ent!.limits.maxSources,
+              (tx) => tx.companySourceTarget.create({
+                data: {
+                  companyId: id,
+                  sourceId: twoGisSource.id,
+                  externalUrl: normalizedTwoGisUrl,
+                  syncReviewsEnabled: true,
+                  syncRatingsEnabled: true,
+                  syncMentionsEnabled: true
+                }
+              })
+            )
 
             this.logger.log(`[TwoGisInit] target created via update companyId=${id} targetId=${target.id}`)
           }
@@ -860,33 +871,45 @@ export class CompaniesService {
         })
 
         if (existingTarget) {
-          await this.prisma.companySourceTarget.update({
-            where: { id: existingTarget.id },
-            data: {
-              externalUrl: normalizedYandexUrl,
-              isActive: true,
-              syncReviewsEnabled: true,
-              syncRatingsEnabled: true,
-              syncMentionsEnabled: true
-            }
-          })
+          const update = (client: Prisma.TransactionClient | PrismaService) =>
+            client.companySourceTarget.update({
+              where: { id: existingTarget.id },
+              data: {
+                externalUrl: normalizedYandexUrl,
+                isActive: true,
+                syncReviewsEnabled: true,
+                syncRatingsEnabled: true,
+                syncMentionsEnabled: true
+              }
+            })
+          if (existingTarget.isActive === false) {
+            await this.entitlements.runWithSourceSlot(
+              company.workspaceId,
+              ent!.limits.maxSources,
+              update
+            )
+          } else {
+            await update(this.prisma)
+          }
 
           this.logger.log(
             `[YandexInit] target updated companyId=${id} targetId=${existingTarget.id} sourceId=${yandexSource.id} url="${normalizedYandexUrl}"`
           )
         } else {
-          await this.assertSourceSlotAvailable(company.workspaceId, ent!.limits.maxSources)
-
-          const target = await this.prisma.companySourceTarget.create({
-            data: {
-              companyId: id,
-              sourceId: yandexSource.id,
-              externalUrl: normalizedYandexUrl,
-              syncReviewsEnabled: true,
-              syncRatingsEnabled: true,
-              syncMentionsEnabled: true
-            }
-          })
+          const target = await this.entitlements.runWithSourceSlot(
+            company.workspaceId,
+            ent!.limits.maxSources,
+            (tx) => tx.companySourceTarget.create({
+              data: {
+                companyId: id,
+                sourceId: yandexSource.id,
+                externalUrl: normalizedYandexUrl,
+                syncReviewsEnabled: true,
+                syncRatingsEnabled: true,
+                syncMentionsEnabled: true
+              }
+            })
+          )
 
           this.logger.log(
             `[YandexInit] target created via update companyId=${id} targetId=${target.id} sourceId=${yandexSource.id} url="${normalizedYandexUrl}"`
@@ -1408,8 +1431,6 @@ export class CompaniesService {
       }
     }
 
-    await this.assertSourceSlotAvailable(company.workspaceId, ent.limits.maxSources)
-
     let sourceId: string | null = dto.sourceId || null
 
     if (!sourceId && dto.platform) {
@@ -1446,47 +1467,69 @@ export class CompaniesService {
       throw new NotFoundException('Source not found')
     }
 
-    const createdTarget = await this.prisma.companySourceTarget.create({
-      data: {
-        companyId,
-        sourceId,
-        externalPlaceId: dto.externalPlaceId,
-        externalUrl: dto.externalUrl,
-        displayName: dto.displayName,
-        syncReviewsEnabled: dto.syncReviewsEnabled ?? false,
-        syncRatingsEnabled: dto.syncRatingsEnabled ?? false,
-        syncMentionsEnabled: dto.syncMentionsEnabled ?? true,
-        ...(dto.config !== undefined ? { config: this.toInputJson(dto.config) } : {})
-      },
-      include: { source: true }
-    })
+    let webPageDomain: string | null = null
+    if (targetPlatform === 'WEB' && dto.externalUrl) {
+      try {
+        webPageDomain = new URL(dto.externalUrl).hostname.replace(/^www\./, '')
+      } catch {
+        webPageDomain = null
+      }
+    }
+
+    const createdTarget = await this.entitlements.runWithSourceSlot(
+      company.workspaceId,
+      ent.limits.maxSources,
+      async (tx) => {
+        const target = await tx.companySourceTarget.create({
+          data: {
+            companyId,
+            sourceId: sourceId!,
+            externalPlaceId: dto.externalPlaceId,
+            externalUrl: dto.externalUrl,
+            displayName: dto.displayName,
+            syncReviewsEnabled: dto.syncReviewsEnabled ?? false,
+            syncRatingsEnabled: dto.syncRatingsEnabled ?? false,
+            syncMentionsEnabled: dto.syncMentionsEnabled ?? true,
+            ...(dto.config !== undefined ? { config: this.toInputJson(dto.config) } : {})
+          },
+          include: { source: true }
+        })
+
+        if (targetPlatform === 'WEB' && dto.externalUrl && webPageDomain) {
+          await this.entitlements.runWithWebPageSlotInTransaction(
+            tx,
+            company.workspaceId,
+            ent.limits.maxWebPages,
+            async (pageTx) => {
+              const existing = await pageTx.watchedPage.findUnique({
+                where: { companyId_url: { companyId, url: dto.externalUrl! } }
+              })
+              return !existing?.enabled
+            },
+            (pageTx) => pageTx.watchedPage.upsert({
+              where: { companyId_url: { companyId, url: dto.externalUrl! } },
+              create: {
+                companyId,
+                sourceTargetId: target.id,
+                url: dto.externalUrl!,
+                domain: webPageDomain!,
+                pageType: 'UNKNOWN',
+                enabled: true,
+                checkIntervalMin: 1440
+              },
+              update: { sourceTargetId: target.id, enabled: true }
+            })
+          )
+        }
+
+        return target
+      }
+    )
+
+    if (!createdTarget) throw new ForbiddenException({ code: 'PLAN_LIMIT', feature: 'maxSources' })
 
     if (createdTarget.source?.platform === 'WEB') {
       await this.refreshWebMentionsRepeat(companyId)
-
-      if (createdTarget.externalUrl) {
-        try {
-          const domain = new URL(createdTarget.externalUrl).hostname.replace(/^www\./, '')
-          await this.prisma.watchedPage.upsert({
-            where: { companyId_url: { companyId, url: createdTarget.externalUrl } },
-            create: {
-              companyId,
-              sourceTargetId: createdTarget.id,
-              url: createdTarget.externalUrl,
-              domain,
-              pageType: 'UNKNOWN',
-              enabled: true,
-              checkIntervalMin: 1440
-            },
-            update: {
-              sourceTargetId: createdTarget.id,
-              enabled: true
-            }
-          })
-        } catch (e) {
-          // ignore invalid URL
-        }
-      }
     }
 
     return createdTarget
@@ -1523,10 +1566,6 @@ export class CompaniesService {
       throw new BadRequestException('Source is disabled')
     }
 
-    if (dto.isActive === true && target.isActive === false) {
-      await this.assertSourceSlotAvailable(company.workspaceId, updateEnt.limits.maxSources)
-    }
-
     if (dto.isActive === true) {
       const allowedPlatforms = Array.isArray(updateEnt.limits.platforms) ? updateEnt.limits.platforms : []
       if (!allowedPlatforms.includes(target.source.platform)) {
@@ -1546,29 +1585,104 @@ export class CompaniesService {
       throw new ForbiddenException({ code: 'PLAN_LIMIT', feature: 'telegramMonitoringEnabled' })
     }
 
-    const updatedTarget = await this.prisma.companySourceTarget.update({
-      where: { id: targetId },
-      data: {
-        ...(dto.externalPlaceId !== undefined ? { externalPlaceId: dto.externalPlaceId } : {}),
-        ...(dto.externalUrl !== undefined
-          ? {
-              externalUrl:
-                target.source?.platform === 'YANDEX'
-                  ? this.normalizeYandexUrl(dto.externalUrl)
-                  : target.source?.platform === 'TWOGIS'
-                    ? this.normalizeTwoGisUrl(dto.externalUrl)
-                    : dto.externalUrl
-            }
-          : {}),
-        ...(dto.displayName !== undefined ? { displayName: dto.displayName } : {}),
-        ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
-        ...(dto.syncReviewsEnabled !== undefined ? { syncReviewsEnabled: dto.syncReviewsEnabled } : {}),
-        ...(dto.syncRatingsEnabled !== undefined ? { syncRatingsEnabled: dto.syncRatingsEnabled } : {}),
-        ...(dto.syncMentionsEnabled !== undefined ? { syncMentionsEnabled: dto.syncMentionsEnabled } : {}),
-        ...(dto.config !== undefined ? { config: this.toInputJson(dto.config) } : {})
-      },
-      include: { source: true }
-    })
+    const normalizedExternalUrl =
+      dto.externalUrl === undefined
+        ? target.externalUrl
+        : target.source.platform === 'YANDEX'
+          ? this.normalizeYandexUrl(dto.externalUrl)
+          : target.source.platform === 'TWOGIS'
+            ? this.normalizeTwoGisUrl(dto.externalUrl)
+            : dto.externalUrl
+    const nextIsActive = dto.isActive ?? target.isActive
+    const nextSyncMentionsEnabled = dto.syncMentionsEnabled ?? target.syncMentionsEnabled
+    const shouldMonitorWebPage =
+      target.source.platform === 'WEB' && Boolean(normalizedExternalUrl) && nextIsActive && nextSyncMentionsEnabled
+    let webPageDomain: string | null = null
+    if (shouldMonitorWebPage && normalizedExternalUrl) {
+      try {
+        webPageDomain = new URL(normalizedExternalUrl).hostname.replace(/^www\./, '')
+      } catch {
+        webPageDomain = null
+      }
+    }
+
+    const updateTarget = async (client: Prisma.TransactionClient | PrismaService) => {
+      const tx = client as Prisma.TransactionClient
+      const urlsToDisable = [target.externalUrl, normalizedExternalUrl]
+        .filter((url): url is string => Boolean(url))
+        .filter((url, index, urls) => urls.indexOf(url) === index)
+
+      if (target.source.platform === 'WEB' && target.externalUrl && target.externalUrl !== normalizedExternalUrl) {
+        await client.watchedPage.updateMany({
+          where: { companyId, url: target.externalUrl },
+          data: { enabled: false }
+        })
+      }
+
+      const updated = await client.companySourceTarget.update({
+        where: { id: targetId },
+        data: {
+          ...(dto.externalPlaceId !== undefined ? { externalPlaceId: dto.externalPlaceId } : {}),
+          ...(dto.externalUrl !== undefined ? { externalUrl: normalizedExternalUrl } : {}),
+          ...(dto.displayName !== undefined ? { displayName: dto.displayName } : {}),
+          ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
+          ...(dto.syncReviewsEnabled !== undefined ? { syncReviewsEnabled: dto.syncReviewsEnabled } : {}),
+          ...(dto.syncRatingsEnabled !== undefined ? { syncRatingsEnabled: dto.syncRatingsEnabled } : {}),
+          ...(dto.syncMentionsEnabled !== undefined ? { syncMentionsEnabled: dto.syncMentionsEnabled } : {}),
+          ...(dto.config !== undefined ? { config: this.toInputJson(dto.config) } : {})
+        },
+        include: { source: true }
+      })
+
+      if (target.source.platform === 'WEB') {
+        if (shouldMonitorWebPage && normalizedExternalUrl && webPageDomain) {
+          await this.entitlements.runWithWebPageSlotInTransaction(
+            tx,
+            company.workspaceId,
+            updateEnt.limits.maxWebPages,
+            async (pageTx) => {
+              const existing = await pageTx.watchedPage.findUnique({
+                where: { companyId_url: { companyId, url: normalizedExternalUrl } }
+              })
+              return !existing?.enabled
+            },
+            (pageTx) => pageTx.watchedPage.upsert({
+              where: { companyId_url: { companyId, url: normalizedExternalUrl } },
+              create: {
+                companyId,
+                sourceTargetId: targetId,
+                url: normalizedExternalUrl,
+                domain: webPageDomain!,
+                pageType: 'UNKNOWN',
+                enabled: true,
+                checkIntervalMin: 1440
+              },
+              update: { sourceTargetId: targetId, enabled: true }
+            })
+          )
+        } else if (urlsToDisable.length) {
+          await client.watchedPage.updateMany({
+            where: { companyId, url: { in: urlsToDisable } },
+            data: { enabled: false }
+          })
+        }
+      }
+
+      return updated
+    }
+
+    const consumesSourceSlot = dto.isActive === true && target.isActive === false && target.source.platform !== 'TELEGRAM'
+    const updatedTarget =
+      target.source.platform === 'WEB' || consumesSourceSlot
+        ? await this.entitlements.runWithSourceSlot(
+            company.workspaceId,
+            updateEnt.limits.maxSources,
+            updateTarget,
+            { consumeSlot: consumesSourceSlot }
+          )
+        : await updateTarget(this.prisma)
+
+    if (!updatedTarget) throw new ForbiddenException({ code: 'PLAN_LIMIT', feature: 'maxSources' })
 
     if ((updatedTarget.source?.platform === 'YANDEX' || updatedTarget.source?.platform === 'TWOGIS') && dto.syncReviewsEnabled !== undefined) {
       await this.refreshReviewsRepeat(companyId)
@@ -1577,39 +1691,6 @@ export class CompaniesService {
 
     if (updatedTarget.source?.platform === 'WEB') {
       await this.refreshWebMentionsRepeat(companyId)
-
-      const url = updatedTarget.externalUrl
-      const isMonitored = updatedTarget.isActive && updatedTarget.syncMentionsEnabled
-      if (url) {
-        try {
-          const domain = new URL(url).hostname.replace(/^www\./, '')
-          if (isMonitored) {
-            await this.prisma.watchedPage.upsert({
-              where: { companyId_url: { companyId, url } },
-              create: {
-                companyId,
-                sourceTargetId: updatedTarget.id,
-                url,
-                domain,
-                pageType: 'UNKNOWN',
-                enabled: true,
-                checkIntervalMin: 1440
-              },
-              update: {
-                sourceTargetId: updatedTarget.id,
-                enabled: true
-              }
-            })
-          } else {
-            await this.prisma.watchedPage.updateMany({
-              where: { companyId, url },
-              data: { enabled: false }
-            })
-          }
-        } catch (e) {
-          // ignore invalid URL
-        }
-      }
     }
 
     return updatedTarget

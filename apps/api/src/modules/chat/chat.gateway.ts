@@ -16,6 +16,23 @@ const ORIGINS = (process.env.FRONTEND_URL || 'http://localhost:4011')
   .split(',')
   .map((o) => o.trim())
 
+function readCookie(cookieHeader: string | undefined, name: string) {
+  if (!cookieHeader) return ''
+
+  const entry = cookieHeader
+    .split(';')
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(`${name}=`))
+
+  if (!entry) return ''
+
+  try {
+    return decodeURIComponent(entry.slice(name.length + 1))
+  } catch {
+    return ''
+  }
+}
+
 @WebSocketGateway({
   path: '/api/socket.io',
   cors: { origin: ORIGINS, credentials: true }
@@ -31,6 +48,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   async handleConnection(client: Socket) {
     const token =
+      readCookie(client.handshake.headers?.cookie, 'accessToken') ||
       client.handshake.auth?.token ||
       (client.handshake.headers?.authorization as string | undefined)?.replace('Bearer ', '')
 
@@ -43,11 +61,17 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const payload = this.jwtService.verify<{ sub: string }>(token, {
         secret: requireJwtSecret()
       })
+
+      const memberships = await this.chatService.getActiveUserWorkspaceMemberships(payload.sub)
+      if (!memberships) {
+        client.disconnect()
+        return
+      }
+
       client.data.userId = payload.sub
       client.join(`user:${payload.sub}`)
 
-      // Join all workspace rooms the user is a member of
-      const memberships = await this.chatService.getUserWorkspaceMemberships(payload.sub)
+      // Join only active, non-deleted workspace rooms.
       for (const workspaceId of memberships) {
         client.join(`workspace:${workspaceId}`)
       }
@@ -92,6 +116,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const userId = client.data.userId as string | undefined
     if (!userId) return
 
+    if (!client.rooms.has(`chat-thread:${data.threadId}`)) return
+
     client.to(`chat-thread:${data.threadId}`).emit('chat:typing_started', {
       threadId: data.threadId,
       userId
@@ -105,6 +131,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   ) {
     const userId = client.data.userId as string | undefined
     if (!userId) return
+
+    if (!client.rooms.has(`chat-thread:${data.threadId}`)) return
 
     client.to(`chat-thread:${data.threadId}`).emit('chat:typing_stopped', {
       threadId: data.threadId,

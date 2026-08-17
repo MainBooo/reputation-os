@@ -2,7 +2,9 @@ import Link from 'next/link'
 import PageHeader from '@/components/ui/PageHeader'
 import Card from '@/components/ui/Card'
 import EmptyState from '@/components/ui/EmptyState'
-import { getCompanies } from '@/lib/api/companies'
+import { getCompanies, getWorkspaces } from '@/lib/api/companies'
+import { isApiError } from '@/lib/api/client'
+import { filterByWorkspace, pickWorkspaceId } from '@/lib/workspace-selection'
 import CompaniesCreateForm from '@/components/companies/CompaniesCreateForm'
 import DeleteCompanyButton from '@/components/companies/DeleteCompanyButton'
 import CompaniesOnboarding from '@/components/companies/CompaniesOnboarding'
@@ -213,18 +215,25 @@ function CompanyCard({ company, featured = false }: { company: any; featured?: b
     </Card>
   )
 }
-export default async function CompaniesPage() {
+export default async function CompaniesPage({ searchParams }: { searchParams?: { workspaceId?: string } }) {
   let companies: any[] = []
+  let workspaces: any[] = []
   let authRequired = false
 
   try {
-    companies = await getCompanies()
+    const [companiesResult, workspacesResult] = await Promise.all([
+      getCompanies(),
+      getWorkspaces()
+    ])
+    companies = Array.isArray(companiesResult) ? companiesResult : []
+    workspaces = Array.isArray(workspacesResult) ? workspacesResult : []
   } catch (error) {
-    console.error('[CompaniesPage] Failed to load companies', error)
-    companies = []
+    if (isApiError(error, 401)) authRequired = true
+    else throw error
   }
 
-  const sortedCompanies = sortCompanies(Array.isArray(companies) ? companies : [])
+  const selectedWorkspaceId = pickWorkspaceId(workspaces, searchParams?.workspaceId)
+  const sortedCompanies = sortCompanies(filterByWorkspace(companies, selectedWorkspaceId))
   const activeCompanies = sortedCompanies.filter((company) => getCompanyStatus(company) === 'active')
   const pendingCompanies = sortedCompanies.filter((company) => getCompanyStatus(company) === 'pending')
   const draftCompanies = sortedCompanies.filter((company) => getCompanyStatus(company) === 'draft')

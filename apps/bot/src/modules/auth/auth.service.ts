@@ -1,12 +1,44 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { PrismaService } from '../../common/prisma/prisma.service'
 import { Context } from 'telegraf'
+import { hasTelegramNotificationEntitlement } from '../../common/telegram-entitlement'
 
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name)
 
   constructor(private readonly prisma: PrismaService) {}
+
+  private async hasTelegramNotificationEntitlement(userId: string): Promise<boolean> {
+    const memberships = await (this.prisma as any).workspaceMember.findMany({
+      where: {
+        userId,
+        workspace: { isActive: true, deletedAt: null }
+      },
+      select: {
+        workspace: {
+          select: {
+            featureOverrides: {
+              where: { featureKey: 'telegramNotifications' },
+              select: { value: true }
+            },
+            subscription: {
+              select: {
+                status: true,
+                currentPeriodEnd: true,
+                trialEndsAt: true,
+                scheduledAt: true,
+                plan: { select: { limits: true } },
+                scheduledPlan: { select: { limits: true } }
+              }
+            }
+          }
+        }
+      }
+    })
+
+    return hasTelegramNotificationEntitlement(memberships)
+  }
 
   async linkAccount(chatId: number, token: string, ctx: Context): Promise<void> {
     // Найти токен
@@ -20,6 +52,11 @@ export class AuthService {
       return
     }
 
+    if (!linkToken.user.isActive || linkToken.user.deletedAt) {
+      await ctx.reply('❌ Аккаунт недоступен. Обратитесь к администратору.')
+      return
+    }
+
     // Проверить срок действия
     if (linkToken.expiresAt < new Date()) {
       await this.prisma.telegramLinkToken.delete({ where: { token } })
@@ -30,26 +67,13 @@ export class AuthService {
       return
     }
 
-    // Проверить entitlements workspace: telegramNotifications
-    const workspaceMember = await this.prisma.workspaceMember.findFirst({
-      where: { userId: linkToken.userId },
-      orderBy: { createdAt: 'asc' },
-      select: { workspaceId: true }
-    })
-    if (workspaceMember) {
-      const workspaceSub = await (this.prisma as any).subscription.findUnique({
-        where: { workspaceId: workspaceMember.workspaceId },
-        include: { plan: true }
-      })
-      const wLimits = (workspaceSub?.plan?.limits ?? {}) as Record<string, unknown>
-      if (!wLimits.telegramNotifications) {
-        await ctx.reply(
-          '❌ *Telegram-уведомления недоступны на вашем текущем тарифе.*\n\n' +
-          'Для подключения Telegram обновите тариф в личном кабинете.',
-          { parse_mode: 'Markdown' }
-        )
-        return
-      }
+    if (!(await this.hasTelegramNotificationEntitlement(linkToken.userId))) {
+      await ctx.reply(
+        '❌ *Telegram-уведомления недоступны на вашем текущем тарифе.*\n\n' +
+        'Для подключения Telegram обновите тариф в личном кабинете.',
+        { parse_mode: 'Markdown' }
+      )
+      return
     }
 
     // Проверить: уже привязан?
@@ -80,7 +104,7 @@ export class AuthService {
       this.prisma.telegramLinkToken.delete({ where: { token } }),
     ])
 
-    this.logger.log(`Привязан chatId=${chatId} к userId=${linkToken.userId}`)
+    this.logger.log(`Telegram привязан к userId=${linkToken.userId}`)
 
     await ctx.reply(
       '✅ *Telegram успешно подключён*\n\n' +

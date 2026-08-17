@@ -167,7 +167,9 @@ export class PushService {
         failed += 1
         const statusCode = Number(error?.statusCode || 0)
 
-        this.logger.warn(`Push test failed subscriptionId=${item.id} status=${statusCode || 'unknown'} body=${String(error?.body || '')} endpoint=${String(item.endpoint || '').slice(0, 90)}`)
+        this.logger.warn(
+          `Push test failed subscriptionId=${item.id} status=${statusCode || 'unknown'}`
+        )
 
         if (statusCode === 404 || statusCode === 410) {
           await this.prisma.webPushSubscription.update({

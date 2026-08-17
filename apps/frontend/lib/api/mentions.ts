@@ -26,11 +26,9 @@ export function getCompanyMentions(id: string, query = ''): Promise<CompanyMenti
 }
 
 export function generateReply(id: string, preset?: 'FORMAL' | 'FRIENDLY' | 'CONCISE', requestId?: string) {
-  return apiFetch(`/mentions/${id}/generate-reply`, {
+  return apiFetch<{ draftText: string }>(`/mentions/${id}/generate-reply`, {
     method: 'POST',
     body: JSON.stringify({ ...(preset ? { preset } : {}), ...(requestId ? { requestId } : {}) })
-  }, {
-    draftText: 'Спасибо за отзыв!'
   })
 }
 
@@ -49,9 +47,7 @@ export function resolveMentionReview(id: string, decision: 'RELEVANT' | 'IRRELEV
 }
 
 export function deleteMention(id: string) {
-  return apiFetch(`/mentions/${id}`, {
+  return apiFetch<{ ok: boolean }>(`/mentions/${id}`, {
     method: 'DELETE'
-  }, {
-    ok: true
   })
 }

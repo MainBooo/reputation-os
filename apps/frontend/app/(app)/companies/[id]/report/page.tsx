@@ -6,6 +6,7 @@ import { getCompany, getCompanySyncStatus } from '@/lib/api/companies'
 import { getCompanyMentions } from '@/lib/api/mentions'
 import { getAnalyticsOverview } from '@/lib/api/analytics'
 import ReportPrintButton from '@/components/companies/ReportPrintButton'
+import { isApiError } from '@/lib/api/client'
 
 function formatDate(value?: string | Date | null) {
   if (!value) return '—'
@@ -74,8 +75,9 @@ export default async function CompanyReportPage({ params }: { params: { id: stri
     overview = overviewData
     examplesResponse = examplesData
     syncStatus = syncData
-  } catch {
-    authRequired = true
+  } catch (error) {
+    if (isApiError(error, 401)) authRequired = true
+    else throw error
   }
 
   if (authRequired) {

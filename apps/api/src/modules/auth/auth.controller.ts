@@ -13,6 +13,7 @@ import { ipTracker, ipAndEmailTracker } from '../../common/rate-limit/rate-limit
 
 const YANDEX_STATE_COOKIE = 'yandex_oauth_state'
 const YANDEX_STATE_COOKIE_PATH = '/api/auth/yandex'
+const ACCESS_TOKEN_COOKIE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
 
 function parseCookie(header: string | undefined, name: string): string | undefined {
   if (!header) return undefined
@@ -102,12 +103,14 @@ export class AuthController {
       const yandexAccessToken = await this.authService.exchangeYandexCode(code)
       const yandexUser = await this.authService.getYandexUserInfo(yandexAccessToken)
       const { accessToken } = await this.authService.findOrCreateFromYandex(yandexUser)
-      // Fragment, not a query param: query strings land in browser history,
-      // Referer headers, and server/proxy access logs; a URL fragment never
-      // leaves the browser in the request line, so it isn't logged anywhere
-      // downstream (still visible in local browser history, which a plain
-      // redirect-based flow can't avoid without a token-exchange endpoint).
-      return res.redirect(`${frontendUrl}/login#accessToken=${encodeURIComponent(accessToken)}`)
+      res.cookie('accessToken', accessToken, {
+        httpOnly: true,
+        sameSite: 'lax',
+        secure: process.env.NODE_ENV === 'production' || req.protocol === 'https',
+        maxAge: ACCESS_TOKEN_COOKIE_MAX_AGE_MS,
+        path: '/'
+      })
+      return res.redirect(`${frontendUrl}/dashboard`)
     } catch (err) {
       this.logger.error(`Yandex OAuth callback failed: ${(err as Error).message}`)
       return res.redirect(`${frontendUrl}/login?error=yandex_denied`)

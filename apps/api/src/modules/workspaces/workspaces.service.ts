@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common'
-import { WorkspaceRole } from '@prisma/client'
+import { Prisma, WorkspaceRole } from '@prisma/client'
 import { randomBytes } from 'crypto'
 import { PrismaService } from '../../common/prisma/prisma.service'
 import { EntitlementsService } from '../billing/entitlements.service'
@@ -50,7 +50,11 @@ export class WorkspacesService {
 
   private async getCurrentMember(userId: string, workspaceId: string) {
     const member = await this.prisma.workspaceMember.findFirst({
-      where: { userId, workspaceId }
+      where: {
+        userId,
+        workspaceId,
+        workspace: { isActive: true, deletedAt: null }
+      }
     })
 
     if (!member) throw new ForbiddenException('No access to workspace')
@@ -85,18 +89,19 @@ export class WorkspacesService {
     }
   }
 
-  private async assertWorkspaceUserLimit(workspaceId: string) {
-    const { limits } = await this.entitlements.getForWorkspace(workspaceId)
-    const maxMembers = Number(limits.maxMembers)
-
-    // -1 = безлимит
+  private async assertWorkspaceUserLimitLocked(
+    tx: Prisma.TransactionClient,
+    workspaceId: string,
+    maxMembers: number,
+    excludeInviteId?: string
+  ) {
     if (maxMembers < 0) return
-
     const [membersCount, pendingInvitesCount] = await Promise.all([
-      this.prisma.workspaceMember.count({ where: { workspaceId } }),
-      this.prisma.workspaceInvite.count({
+      tx.workspaceMember.count({ where: { workspaceId } }),
+      tx.workspaceInvite.count({
         where: {
           workspaceId,
+          ...(excludeInviteId ? { id: { not: excludeInviteId } } : {}),
           acceptedAt: null,
           declinedAt: null,
           expiresAt: { gt: new Date() }
@@ -216,12 +221,15 @@ export class WorkspacesService {
 
 
   async findInvites(userId: string, workspaceId: string) {
-    await this.getCurrentMember(userId, workspaceId)
+    const currentMember = await this.getCurrentMember(userId, workspaceId)
+    this.assertCanManageMembers(currentMember.role)
 
     return this.prisma.workspaceInvite.findMany({
       where: {
         workspaceId,
-        acceptedAt: null
+        acceptedAt: null,
+        declinedAt: null,
+        expiresAt: { gt: new Date() }
       },
       include: {
         invitedBy: {
@@ -250,6 +258,10 @@ export class WorkspacesService {
 
     const email = dto.email.trim().toLowerCase()
 
+    const { limits, workspaceActive } = await this.entitlements.getForWorkspace(workspaceId)
+    if (!workspaceActive) throw new ForbiddenException('Workspace is disabled')
+    const maxMembers = Number(limits.maxMembers)
+
     const existingUser = await this.prisma.user.findUnique({
       where: { email }
     })
@@ -273,7 +285,9 @@ export class WorkspacesService {
       where: {
         workspaceId,
         email,
-        acceptedAt: null
+        acceptedAt: null,
+        declinedAt: null,
+        expiresAt: { gt: new Date() }
       }
     })
 
@@ -281,26 +295,49 @@ export class WorkspacesService {
       throw new BadRequestException('Invite already exists')
     }
 
-    await this.assertWorkspaceUserLimit(workspaceId)
-
     const token = randomBytes(32).toString('hex')
 
     const workspace = await this.prisma.workspace.findUnique({
-      where: { id: workspaceId },
+      where: { id: workspaceId, isActive: true, deletedAt: null },
       select: { id: true, name: true, slug: true }
     })
 
     if (!workspace) throw new NotFoundException('Workspace not found')
 
-    const invite = await this.prisma.workspaceInvite.create({
-      data: {
-        workspaceId,
-        email,
-        role: dto.role,
-        invitedById: userId,
-        token,
-        expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24)
+    const invite = await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`reputation-os:member-slot:${workspaceId}`}))`
+
+      const concurrentUser = await tx.user.findUnique({ where: { email } })
+      if (concurrentUser) {
+        const concurrentMember = await tx.workspaceMember.findUnique({
+          where: { workspaceId_userId: { workspaceId, userId: concurrentUser.id } }
+        })
+        if (concurrentMember) throw new BadRequestException('User already in workspace')
       }
+
+      const concurrentInvite = await tx.workspaceInvite.findFirst({
+        where: {
+          workspaceId,
+          email,
+          acceptedAt: null,
+          declinedAt: null,
+          expiresAt: { gt: new Date() }
+        }
+      })
+      if (concurrentInvite) throw new BadRequestException('Invite already exists')
+
+      await this.assertWorkspaceUserLimitLocked(tx, workspaceId, maxMembers)
+
+      return tx.workspaceInvite.create({
+        data: {
+          workspaceId,
+          email,
+          role: dto.role,
+          invitedById: userId,
+          token,
+          expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24)
+        }
+      })
     })
 
     const invitedUser = await this.prisma.user.findFirst({
@@ -333,71 +370,60 @@ export class WorkspacesService {
   }
 
   async acceptInvite(userId: string, token: string) {
-    const invite = await this.prisma.workspaceInvite.findUnique({
+    const initialInvite = await this.prisma.workspaceInvite.findUnique({
       where: { token }
     })
 
-    if (!invite) {
+    if (!initialInvite) {
       throw new NotFoundException('Invite not found')
     }
 
-    if (invite.acceptedAt) {
-      // Already accepted — just mark the notification as read and succeed silently
-      await this.prisma.notification.updateMany({
-        where: {
-          userId,
-          type: 'WORKSPACE_INVITE',
-          data: { path: ['inviteId'], equals: invite.id }
-        },
-        data: { readAt: new Date() }
+    const { limits, workspaceActive } = await this.entitlements.getForWorkspace(initialInvite.workspaceId)
+    if (!workspaceActive) throw new ForbiddenException('Workspace is disabled')
+    const maxMembers = Number(limits.maxMembers)
+
+    const inviteId = await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`reputation-os:member-slot:${initialInvite.workspaceId}`}))`
+
+      const invite = await tx.workspaceInvite.findUnique({
+        where: { token },
+        include: { workspace: { select: { isActive: true, deletedAt: true } } }
       })
-      return { ok: true }
-    }
-
-    if (invite.declinedAt) {
-      throw new BadRequestException('Invite already declined')
-    }
-
-    if (invite.expiresAt < new Date()) {
-      throw new BadRequestException('Invite expired')
-    }
-
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId }
-    })
-
-    if (!user) {
-      throw new NotFoundException('User not found')
-    }
-
-    if (user.email.toLowerCase() !== invite.email.toLowerCase()) {
-      throw new ForbiddenException('Invite email mismatch')
-    }
-
-    const existingMember = await this.prisma.workspaceMember.findUnique({
-      where: {
-        workspaceId_userId: {
-          workspaceId: invite.workspaceId,
-          userId
-        }
+      if (!invite) throw new NotFoundException('Invite not found')
+      if (!invite.workspace.isActive || invite.workspace.deletedAt) {
+        throw new ForbiddenException('Workspace is disabled')
       }
-    })
 
-    if (!existingMember) {
-      await this.assertWorkspaceUserLimit(invite.workspaceId)
-
-      await this.prisma.workspaceMember.create({
-        data: {
-          workspaceId: invite.workspaceId,
-          userId,
-          role: invite.role
-        }
+      const user = await tx.user.findFirst({
+        where: { id: userId, isActive: true, deletedAt: null }
       })
-    }
+      if (!user) throw new NotFoundException('User not found')
+      if (user.email.toLowerCase() !== invite.email.toLowerCase()) {
+        throw new ForbiddenException('Invite email mismatch')
+      }
 
-    await this.prisma.workspaceInvite.update({
-      where: { id: invite.id },
-      data: { acceptedAt: new Date() }
+      if (invite.acceptedAt) return invite.id
+      if (invite.declinedAt) throw new BadRequestException('Invite already declined')
+      if (invite.expiresAt < new Date()) throw new BadRequestException('Invite expired')
+
+      const existingMember = await tx.workspaceMember.findUnique({
+        where: { workspaceId_userId: { workspaceId: invite.workspaceId, userId } }
+      })
+
+      if (!existingMember) {
+        // The invite being accepted already reserved its seat. Excluding it
+        // converts one pending seat into one member without double-counting.
+        await this.assertWorkspaceUserLimitLocked(tx, invite.workspaceId, maxMembers, invite.id)
+        await tx.workspaceMember.create({
+          data: { workspaceId: invite.workspaceId, userId, role: invite.role }
+        })
+      }
+
+      await tx.workspaceInvite.update({
+        where: { id: invite.id },
+        data: { acceptedAt: new Date() }
+      })
+      return invite.id
     })
 
     // Mark the invite notification as read
@@ -405,7 +431,7 @@ export class WorkspacesService {
       where: {
         userId,
         type: 'WORKSPACE_INVITE',
-        data: { path: ['inviteId'], equals: invite.id }
+          data: { path: ['inviteId'], equals: inviteId }
       },
       data: { readAt: new Date() }
     })
@@ -432,7 +458,9 @@ export class WorkspacesService {
     if (invite.acceptedAt) throw new BadRequestException('Invite already accepted')
     if (invite.declinedAt) throw new BadRequestException('Invite already declined')
 
-    const user = await this.prisma.user.findUnique({ where: { id: userId } })
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, isActive: true, deletedAt: null }
+    })
     if (!user) throw new NotFoundException('User not found')
 
     if (user.email.toLowerCase() !== invite.email.toLowerCase()) {
@@ -460,7 +488,9 @@ export class WorkspacesService {
   }
 
   async findMyInvites(userId: string) {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } })
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, isActive: true, deletedAt: null }
+    })
     if (!user) throw new NotFoundException('User not found')
 
     return this.prisma.workspaceInvite.findMany({
@@ -468,7 +498,8 @@ export class WorkspacesService {
         email: user.email.toLowerCase(),
         acceptedAt: null,
         declinedAt: null,
-        expiresAt: { gt: new Date() }
+        expiresAt: { gt: new Date() },
+        workspace: { isActive: true, deletedAt: null }
       },
       include: {
         workspace: {

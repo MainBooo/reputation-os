@@ -38,7 +38,7 @@ export default function CompanyYandexCronToggle({
   }
 
   return (
-    <div className="flex items-center justify-between gap-4 rounded-2xl border border-line bg-[#050816]2/40 p-4">
+    <div className="flex items-center justify-between gap-4 rounded-2xl border border-line bg-[#050816]/40 p-4">
       <div className="min-w-0">
         <div className="text-sm font-semibold text-white">Автообновление Яндекс Карт</div>
         <div className="mt-1 text-xs text-zinc-300">

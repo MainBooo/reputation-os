@@ -42,10 +42,14 @@ export function deleteMyAccount() {
   return apiFetch<{ ok: boolean; archivedWorkspaces: { id: string; name: string }[] }>('/auth/me', { method: 'DELETE' })
 }
 
-export function logoutLocal() {
+export async function logoutLocal() {
   if (typeof window === 'undefined') return
   try {
     localStorage.removeItem('accessToken')
   } catch {}
-  document.cookie = 'accessToken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; samesite=lax'
+  await fetch('/api/auth/logout', {
+    method: 'POST',
+    credentials: 'include',
+    cache: 'no-store'
+  }).catch(() => null)
 }

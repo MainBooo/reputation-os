@@ -34,13 +34,6 @@ export function useChatContext() {
   return ctx
 }
 
-function readToken() {
-  if (typeof window === 'undefined') return ''
-  const cookie = document.cookie.split('; ').find((r) => r.startsWith('accessToken='))?.split('=')[1]
-  if (cookie) return decodeURIComponent(cookie)
-  try { return localStorage.getItem('accessToken') || '' } catch { return '' }
-}
-
 export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [isOpen, setIsOpen] = useState(false)
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null)
@@ -70,15 +63,12 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
   // Socket connection
   useEffect(() => {
-    const token = readToken()
-    if (!token) return
-
     const wsUrl = typeof window !== 'undefined' ? window.location.origin : ''
     if (!wsUrl) return
 
     const socket = io(wsUrl, {
       path: '/api/socket.io',
-      auth: { token },
+      withCredentials: true,
       transports: ['polling', 'websocket'],
       reconnectionDelay: 2000,
       reconnectionDelayMax: 10000

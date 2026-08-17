@@ -1,13 +1,15 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useMetrica } from 'next-yandex-metrica'
 import clsx from 'clsx'
 import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import { createCompany, getWorkspaces } from '@/lib/api/companies'
+import { useChatContext } from '@/lib/chat/ChatContext'
+import { pickWorkspaceId, WORKSPACE_QUERY_KEY } from '@/lib/workspace-selection'
 
 type Workspace = {
   id: string
@@ -57,6 +59,9 @@ function getReadinessScore(params: {
 
 export default function CompaniesCreateForm() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const requestedWorkspaceId = searchParams.get(WORKSPACE_QUERY_KEY)
+  const { workspaceId: activeWorkspaceId } = useChatContext()
   const { reachGoal } = useMetrica()
 
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
@@ -79,9 +84,6 @@ export default function CompaniesCreateForm() {
       .then((data: Workspace[]) => {
         if (!active) return
         setWorkspaces(Array.isArray(data) ? data : [])
-        if (Array.isArray(data) && data.length > 0) {
-          setWorkspaceId(data[0].id)
-        }
       })
       .catch((e: Error) => {
         if (!active) return
@@ -92,6 +94,10 @@ export default function CompaniesCreateForm() {
       active = false
     }
   }, [])
+
+  useEffect(() => {
+    setWorkspaceId(pickWorkspaceId(workspaces, requestedWorkspaceId || activeWorkspaceId))
+  }, [activeWorkspaceId, requestedWorkspaceId, workspaces])
 
   const suggestedKeywords = useMemo(() => {
     const result: string[] = []
@@ -307,7 +313,7 @@ export default function CompaniesCreateForm() {
             <select
               value={workspaceId}
               onChange={(e) => setWorkspaceId(e.target.value)}
-              className="h-12 w-full rounded-xl border border-line bg-[#050816]2 px-3 text-sm text-brand outline-none transition focus:border-cyan-400/50"
+              className="h-12 w-full rounded-xl border border-line bg-[#050816] px-3 text-sm text-brand outline-none transition focus:border-cyan-400/50"
             >
               {workspaces.map((workspace) => (
                 <option key={workspace.id} value={workspace.id}>

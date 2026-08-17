@@ -2,9 +2,13 @@ import { Test } from '@nestjs/testing'
 import { EntitlementsService } from './entitlements.service'
 import { PrismaService } from '../../common/prisma/prisma.service'
 
-const mockPrisma = {
-  companySourceTarget: { count: jest.fn() }
+const mockPrisma: any = {
+  $executeRaw: jest.fn().mockResolvedValue(1),
+  company: { count: jest.fn() },
+  companySourceTarget: { count: jest.fn() },
+  watchedPage: { count: jest.fn() }
 }
+mockPrisma.$transaction = jest.fn((action: (tx: any) => Promise<any>) => action(mockPrisma))
 
 describe('EntitlementsService — countBillableSources / hasSourceSlotAvailable', () => {
   let service: EntitlementsService
@@ -49,6 +53,60 @@ describe('EntitlementsService — countBillableSources / hasSourceSlotAvailable'
   it('hasSourceSlotAvailable returns true while under the limit', async () => {
     mockPrisma.companySourceTarget.count.mockResolvedValue(5)
     await expect(service.hasSourceSlotAvailable('ws-1', 6)).resolves.toBe(true)
+  })
+
+  it('holds a workspace advisory lock while counting and creating a billable source', async () => {
+    mockPrisma.companySourceTarget.count.mockResolvedValue(5)
+    const action = jest.fn().mockResolvedValue({ id: 'target-6' })
+
+    await expect(service.runWithSourceSlot('ws-1', 6, action)).resolves.toEqual({ id: 'target-6' })
+
+    expect(mockPrisma.$transaction).toHaveBeenCalledTimes(1)
+    expect(mockPrisma.$executeRaw).toHaveBeenCalledTimes(1)
+    expect(action).toHaveBeenCalledWith(mockPrisma)
+    expect(mockPrisma.$executeRaw.mock.invocationCallOrder[0]).toBeLessThan(
+      mockPrisma.companySourceTarget.count.mock.invocationCallOrder[0]
+    )
+    expect(mockPrisma.companySourceTarget.count.mock.invocationCallOrder[0]).toBeLessThan(
+      action.mock.invocationCallOrder[0]
+    )
+  })
+
+  it('does not execute the source mutation once the locked count reaches maxSources', async () => {
+    mockPrisma.companySourceTarget.count.mockResolvedValue(6)
+    const action = jest.fn()
+
+    await expect(service.runWithSourceSlot('ws-1', 6, action)).rejects.toMatchObject({
+      response: { code: 'PLAN_LIMIT', feature: 'maxSources', limit: 6 }
+    })
+    expect(action).not.toHaveBeenCalled()
+  })
+
+  it('serializes maxCompanies count and company creation in one transaction', async () => {
+    mockPrisma.company.count.mockResolvedValue(2)
+    const action = jest.fn().mockResolvedValue({ id: 'company-3' })
+
+    await expect(service.runWithCompanySlot('ws-1', 3, action)).resolves.toEqual({ id: 'company-3' })
+    expect(mockPrisma.$executeRaw).toHaveBeenCalledTimes(1)
+    expect(action).toHaveBeenCalledWith(mockPrisma)
+  })
+
+  it('blocks a new watched page after taking the shared web-page lock', async () => {
+    mockPrisma.watchedPage.count.mockResolvedValue(50)
+    const action = jest.fn()
+
+    await expect(
+      service.runWithWebPageSlotInTransaction(
+        mockPrisma,
+        'ws-1',
+        50,
+        jest.fn().mockResolvedValue(true),
+        action
+      )
+    ).rejects.toMatchObject({ response: { code: 'PLAN_LIMIT', feature: 'maxWebPages', limit: 50 } })
+
+    expect(mockPrisma.$executeRaw).toHaveBeenCalledTimes(1)
+    expect(action).not.toHaveBeenCalled()
   })
 })
 

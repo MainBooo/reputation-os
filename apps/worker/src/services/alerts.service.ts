@@ -153,7 +153,7 @@ export class AlertsService {
 
           const statusCode = Number(error?.statusCode || 0)
           this.logger.warn(
-            `Alert push failed subscriptionId=${subscription.id} mentionId=${mention.id} status=${statusCode || 'unknown'} body=${String(error?.body || '')}`
+            `Alert push failed subscriptionId=${subscription.id} mentionId=${mention.id} status=${statusCode || 'unknown'}`
           )
 
           if (statusCode === 404 || statusCode === 410) {

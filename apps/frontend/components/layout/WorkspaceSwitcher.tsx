@@ -1,15 +1,19 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { Building2, ChevronDown, Check } from 'lucide-react'
 import clsx from 'clsx'
 import { apiFetch } from '@/lib/api/client'
-import { WORKSPACE_STORAGE_KEY } from '@/lib/workspace-selection'
+import { WORKSPACE_QUERY_KEY, WORKSPACE_STORAGE_KEY } from '@/lib/workspace-selection'
 import { useChatContext } from '@/lib/chat/ChatContext'
 
 type Workspace = { id: string; name: string; slug: string }
 
 export default function WorkspaceSwitcher({ dropdownAlign = 'down' }: { dropdownAlign?: 'up' | 'down' }) {
+  const pathname = usePathname()
+  const router = useRouter()
+  const searchParams = useSearchParams()
   const { workspaceId, setWorkspaceId } = useChatContext()
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
   const [open, setOpen] = useState(false)
@@ -34,6 +38,10 @@ export default function WorkspaceSwitcher({ dropdownAlign = 'down' }: { dropdown
   function select(w: Workspace) {
     localStorage.setItem(WORKSPACE_STORAGE_KEY, w.id)
     setWorkspaceId(w.id)
+
+    const nextParams = new URLSearchParams(searchParams.toString())
+    nextParams.set(WORKSPACE_QUERY_KEY, w.id)
+    router.push(`${pathname}?${nextParams.toString()}`, { scroll: false })
     setOpen(false)
   }
 

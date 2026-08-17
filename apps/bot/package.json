@@ -5,7 +5,8 @@
   "scripts": {
     "build": "nest build",
     "start": "node dist/main",
-    "start:dev": "nest start --watch"
+    "start:dev": "nest start --watch",
+    "test": "jest --config jest.config.js"
   },
   "dependencies": {
     "@nestjs/common": "^10.0.0",
@@ -20,9 +21,12 @@
   },
   "devDependencies": {
     "@nestjs/cli": "^10.0.0",
+    "@types/jest": "^30.0.0",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^20.0.0",
+    "jest": "^30.4.2",
     "prisma": "*",
+    "ts-jest": "^29.4.11",
     "typescript": "^5.0.0"
   }
 }

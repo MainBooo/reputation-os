@@ -13,7 +13,7 @@ import {
   Star,
   Zap
 } from 'lucide-react'
-import { login, me, logoutLocal } from '@/lib/api/auth'
+import { login } from '@/lib/api/auth'
 
 const features = [
   { icon: MessageSquareText, title: 'Inbox отзывов', text: 'Все отзывы и упоминания в одном месте' },
@@ -32,50 +32,14 @@ export default function LoginPage() {
   const [error, setError] = useState('')
 
   useEffect(() => {
-    // Регрессия: раньше здесь проверялось только НАЛИЧИЕ cookie accessToken —
-    // просроченный/невалидный токен (или устаревший клиентский рендер /login
-    // из Router Cache / bfcache, характерно для мобильного Safari) приводил к
-    // мгновенному редиректу на /dashboard, где сессия всё равно не проходила.
-    // Итог: форма логина на долю секунды появлялась и тут же исчезала.
-    // Теперь редирект делаем только после реальной проверки сессии; невалидную
-    // cookie чистим и остаёмся на форме логина.
-    let cancelled = false
-    ;(async () => {
-      try {
-        if (!document.cookie.includes('accessToken=')) return
-        await me()
-        if (!cancelled) router.replace('/dashboard')
-      } catch {
-        if (!cancelled) logoutLocal()
-      }
-    })()
-
     try {
-      // accessToken travels in the URL fragment (#...), not a query param —
-      // it never leaves the browser in a request line, so it doesn't end up
-      // in server/proxy access logs or Referer headers. error=yandex_denied
-      // isn't sensitive, so it stays a regular query param.
-      const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''))
-      const yandexToken = hashParams.get('accessToken')
       const oauthError = new URLSearchParams(window.location.search).get('error')
-
-      if (yandexToken) {
-        document.cookie = `accessToken=${encodeURIComponent(yandexToken)}; path=/; max-age=${60 * 60 * 24 * 7}; samesite=lax`
-        // Drop the token from the visible URL/history before navigating away.
-        window.history.replaceState(null, '', window.location.pathname)
-        router.replace('/dashboard')
-        router.refresh()
-        return
-      }
 
       if (oauthError === 'yandex_denied') {
         setError('Не удалось войти через Яндекс ID. Попробуйте снова или используйте email и пароль.')
       }
     } catch {}
 
-    return () => {
-      cancelled = true
-    }
   }, [router])
 
   async function handleSubmit(e: React.FormEvent) {
@@ -84,11 +48,7 @@ export default function LoginPage() {
     setError('')
 
     try {
-      const result: any = await login({ email, password })
-
-      if (typeof window !== 'undefined' && result?.accessToken) {
-        document.cookie = `accessToken=${encodeURIComponent(result.accessToken)}; path=/; max-age=${60 * 60 * 24 * 7}; samesite=lax`
-      }
+      await login({ email, password })
 
       router.replace('/dashboard')
       router.refresh()

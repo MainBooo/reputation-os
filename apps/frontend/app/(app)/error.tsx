@@ -18,9 +18,10 @@ export default function AppError({
     console.error('(app) error boundary caught', error)
   }, [error])
 
-  function handleLogout() {
-    logoutLocal()
+  async function handleLogout() {
+    await logoutLocal()
     router.replace('/login')
+    router.refresh()
   }
 
   return (

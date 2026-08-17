@@ -40,7 +40,7 @@ export class AuthUpdate {
 
     if (!chatId) return
 
-    this.logger.log(`/start от chatId=${chatId}, payload="${payload}"`)
+    this.logger.log(`/start received payloadPresent=${Boolean(payload)}`)
 
     if (!payload) {
       await ctx.reply(

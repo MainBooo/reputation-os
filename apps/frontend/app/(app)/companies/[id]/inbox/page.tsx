@@ -3,6 +3,7 @@ import EmptyState from '@/components/ui/EmptyState'
 import InboxMentionsList from '@/components/inbox/InboxMentionsList'
 import { getCompanyMentions } from '@/lib/api/mentions'
 import { getCompany } from '@/lib/api/companies'
+import { isApiError } from '@/lib/api/client'
 
 export default async function CompanyInboxPage({
   params,
@@ -48,8 +49,9 @@ export default async function CompanyInboxPage({
 
     response = mentionsResponse
     company = companyResponse
-  } catch {
-    authRequired = true
+  } catch (error) {
+    if (isApiError(error, 401)) authRequired = true
+    else throw error
   }
 
   const mentions = Array.isArray(response?.data) ? response.data : []

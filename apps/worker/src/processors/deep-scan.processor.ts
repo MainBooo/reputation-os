@@ -77,26 +77,6 @@ export class DeepScanProcessor implements OnModuleInit, OnModuleDestroy {
         continue
       }
 
-      let headroom = limits.maxWebPages
-      if (headroom !== -1) {
-        const currentActive = await (this.prisma as any).watchedPage.count({
-          where: { enabled: true, company: { workspaceId } }
-        })
-        headroom = Math.max(0, limits.maxWebPages - currentActive)
-      }
-
-      let sourceHeadroom = limits.maxSources
-      if (sourceHeadroom !== -1) {
-        const currentSources = await (this.prisma as any).companySourceTarget.count({
-          where: {
-            isActive: true,
-            company: { workspaceId, isActive: true },
-            source: { isEnabled: true, platform: { not: 'TELEGRAM' } }
-          }
-        })
-        sourceHeadroom = Math.max(0, limits.maxSources - currentSources)
-      }
-
       for (const target of targets) {
         if (!await this.eligibility.canRunWebCompany(workspaceId, target.companyId)) {
           planLimited++
@@ -104,11 +84,6 @@ export class DeepScanProcessor implements OnModuleInit, OnModuleDestroy {
         }
         if (!this.isPromotable(target.config)) {
           skipped++
-          continue
-        }
-
-        if ((headroom !== -1 && headroom <= 0) || (sourceHeadroom !== -1 && sourceHeadroom <= 0)) {
-          planLimited++
           continue
         }
 
@@ -120,35 +95,18 @@ export class DeepScanProcessor implements OnModuleInit, OnModuleDestroy {
           continue
         }
 
-        // isActive=true выводит таргет из кандидатов DeepScan; syncMentionsEnabled
-        // НЕ включаем — иначе mentions-sync начинает гонять Yandex Search API
-        // по каждому промоутнутому URL (поисковые запросы строятся из имени
-        // компании, так что это чистые дубли).
-        await (this.prisma as any).companySourceTarget.update({
-          where: { id: target.id },
-          data: { isActive: true }
-        })
-
-        await (this.prisma as any).watchedPage.upsert({
-          where: { companyId_url: { companyId: target.companyId, url: target.externalUrl } },
-          create: {
-            companyId: target.companyId,
-            sourceTargetId: target.id,
-            url: target.externalUrl,
-            domain,
-            pageType: 'UNKNOWN',
-            enabled: true,
-            checkIntervalMin: DEEP_SCAN_CHECK_INTERVAL_MIN
-          },
-          update: {
-            sourceTargetId: target.id,
-            enabled: true
-          }
-        })
-
-        promoted++
-        if (headroom !== -1) headroom--
-        if (sourceHeadroom !== -1) sourceHeadroom--
+        // isActive=true removes the target from DeepScan candidates;
+        // syncMentionsEnabled deliberately stays false to avoid duplicate search jobs.
+        const didPromote = await this.eligibility.promoteWebTargetWithinLimits(
+          workspaceId,
+          target.companyId,
+          target.id,
+          target.externalUrl,
+          domain,
+          DEEP_SCAN_CHECK_INTERVAL_MIN
+        )
+        if (didPromote) promoted++
+        else planLimited++
       }
     }
 

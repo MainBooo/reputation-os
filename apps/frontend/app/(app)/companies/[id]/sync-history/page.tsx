@@ -3,6 +3,7 @@ import PageHeader from '@/components/ui/PageHeader'
 import Card from '@/components/ui/Card'
 import EmptyState from '@/components/ui/EmptyState'
 import { getCompany, getCompanySyncStatus } from '@/lib/api/companies'
+import { isApiError } from '@/lib/api/client'
 
 const QUEUE_FILTERS = [
   { value: '', label: 'Все' },
@@ -116,8 +117,9 @@ export default async function SyncHistoryPage({
 
     company = companyData
     syncStatus = syncStatusData
-  } catch {
-    authRequired = true
+  } catch (error) {
+    if (isApiError(error, 401)) authRequired = true
+    else throw error
   }
 
   if (authRequired) {

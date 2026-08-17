@@ -284,7 +284,8 @@ export class AuthService {
 
     const data = await response.json().catch(() => null)
     if (!response.ok || !data?.access_token) {
-      this.logger.error(`Yandex token exchange failed: ${response.status} ${JSON.stringify(data)}`)
+      const errorCode = typeof data?.error === 'string' ? data.error : 'unknown'
+      this.logger.error(`Yandex token exchange failed: status=${response.status} error=${errorCode}`)
       throw new BadRequestException('Не удалось получить токен Яндекс ID')
     }
 
@@ -298,7 +299,8 @@ export class AuthService {
 
     const data = await response.json().catch(() => null)
     if (!response.ok || !data?.id) {
-      this.logger.error(`Yandex userinfo failed: ${response.status} ${JSON.stringify(data)}`)
+      const errorCode = typeof data?.error === 'string' ? data.error : 'unknown'
+      this.logger.error(`Yandex userinfo failed: status=${response.status} error=${errorCode}`)
       throw new BadRequestException('Не удалось получить данные пользователя Яндекс ID')
     }
 

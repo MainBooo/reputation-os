@@ -56,8 +56,9 @@ export default function DeleteAccountSection() {
     setError('')
     try {
       await deleteMyAccount()
-      logoutLocal()
+      await logoutLocal()
       router.push('/login')
+      router.refresh()
     } catch (e: any) {
       setError(e?.message || 'Ошибка удаления аккаунта')
       setLoading(false)

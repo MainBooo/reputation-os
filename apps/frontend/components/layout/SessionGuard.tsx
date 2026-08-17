@@ -52,13 +52,16 @@ export default function SessionGuard({ children }: { children: React.ReactNode }
 
   useEffect(() => {
     if (state.status !== 'unauthenticated') return
-    logoutLocal()
-    router.replace('/login')
+    void logoutLocal().finally(() => {
+      router.replace('/login')
+      router.refresh()
+    })
   }, [state.status, router])
 
-  function handleLogout() {
-    logoutLocal()
+  async function handleLogout() {
+    await logoutLocal()
     router.replace('/login')
+    router.refresh()
   }
 
   if (state.status === 'checking' || state.status === 'unauthenticated') {
