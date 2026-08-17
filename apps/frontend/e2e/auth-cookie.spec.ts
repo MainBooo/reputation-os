@@ -2,6 +2,14 @@ import { test, expect } from '@playwright/test'
 import { POST as proxyPost, GET as proxyGet } from '../app/api/[...path]/route'
 import { POST as logoutPost } from '../app/api/auth/logout/route'
 
+test('Next.js does not bypass the API route handler with a direct backend rewrite', () => {
+  // The route handler is responsible for converting the backend JWT response
+  // into an HttpOnly cookie. A /api rewrite would bypass it in production.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const config = require('../next.config.js')
+  expect(config.rewrites).toBeUndefined()
+})
+
 test('login proxy stores JWT only in an HttpOnly cookie and strips it from JSON', async () => {
   const originalFetch = globalThis.fetch
   globalThis.fetch = (async () => new Response(
