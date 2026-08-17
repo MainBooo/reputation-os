@@ -8,14 +8,6 @@ const nextConfig = {
         hostname: 'avatars.mds.yandex.net'
       }
     ]
-  },
-  async rewrites() {
-    return [
-      {
-        source: '/api/:path*',
-        destination: 'http://localhost:4010/api/:path*'
-      }
-    ]
   }
 }
 
