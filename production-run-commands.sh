@@ -4,6 +4,7 @@ set -e
 docker compose up -d
 
 pnpm install
+pnpm playwright:install:worker-browser
 pnpm prisma:generate
 pnpm prisma:migrate
 pnpm prisma:seed

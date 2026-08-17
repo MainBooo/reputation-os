@@ -13,6 +13,7 @@
 git clone git@github.com:MainBooo/reputation-os.git /opt/reputation-os
 cd /opt/reputation-os
 pnpm install
+pnpm playwright:install:worker-browser  # required for Yandex/2GIS browser adapters
 cp .env.example .env   # заполнить по таблице ниже
 pnpm exec prisma migrate deploy   # схема БД одной командой (baseline 0_init)
 pnpm exec prisma db seed          # демо-данные (опционально)
@@ -68,6 +69,7 @@ pm2 save && pm2 startup
 cd /opt/reputation-os
 git pull
 pnpm install
+pnpm playwright:install:worker-browser
 pnpm exec prisma migrate deploy
 pnpm run build
 pm2 restart reputation-api reputation-frontend reputation-landing reputation-worker --update-env
