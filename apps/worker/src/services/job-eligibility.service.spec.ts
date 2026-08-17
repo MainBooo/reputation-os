@@ -16,15 +16,25 @@ function buildFixture(overrides: Record<string, any> = {}) {
       findMany: jest.fn().mockResolvedValue([{ id: 'company-1' }])
     },
     companySourceTarget: {
+      count: jest.fn().mockResolvedValue(0),
+      findFirst: jest.fn().mockResolvedValue({ id: 'target-web', isActive: false }),
+      update: jest.fn().mockResolvedValue({ id: 'target-web', isActive: true }),
       findMany: jest.fn().mockImplementation((args: any) => {
         if (args.where?.companyId) return Promise.resolve(targets)
         return Promise.resolve([{ id: 'target-yandex' }, { id: 'target-web' }])
       })
     },
-    watchedPage: { findUnique: jest.fn(), findMany: jest.fn() },
+    watchedPage: {
+      findUnique: jest.fn().mockResolvedValue(null),
+      findMany: jest.fn(),
+      count: jest.fn().mockResolvedValue(0),
+      upsert: jest.fn().mockResolvedValue({ id: 'page-1' })
+    },
     source: { findMany: jest.fn().mockResolvedValue([]) },
     companyTelegramChannel: { findMany: jest.fn().mockResolvedValue([]) }
   }
+  prisma.$executeRaw = jest.fn().mockResolvedValue(1)
+  prisma.$transaction = jest.fn((action: (tx: any) => Promise<any>) => action(prisma))
   return { prisma, service: new JobEligibilityService(prisma) }
 }
 
@@ -91,5 +101,87 @@ describe('JobEligibilityService — stale job server-side gate', () => {
       sourceTarget: { id: 'target-web', isActive: false, source: { platform: 'WEB', isEnabled: true } }
     })
     await expect(service.canProcessWatchedPage('page-1')).resolves.toBeNull()
+  })
+
+  it('does not create a discovered source target after the locked maxSources count is exhausted', async () => {
+    const { prisma, service } = buildFixture()
+    prisma.companySourceTarget.count.mockResolvedValue(2)
+    const create = jest.fn()
+
+    await expect(
+      service.runWithSourceSlot('workspace-1', 2, jest.fn().mockResolvedValue(null), create)
+    ).resolves.toBeNull()
+
+    expect(prisma.$executeRaw).toHaveBeenCalledTimes(1)
+    expect(create).not.toHaveBeenCalled()
+  })
+
+  it('creates a discovered source target only after taking the shared workspace lock', async () => {
+    const { prisma, service } = buildFixture()
+    prisma.companySourceTarget.count.mockResolvedValue(1)
+    const create = jest.fn().mockResolvedValue({ id: 'target-2' })
+
+    await expect(
+      service.runWithSourceSlot('workspace-1', 2, jest.fn().mockResolvedValue(null), create)
+    ).resolves.toEqual({ id: 'target-2' })
+
+    expect(prisma.$executeRaw.mock.invocationCallOrder[0]).toBeLessThan(
+      prisma.companySourceTarget.count.mock.invocationCallOrder[0]
+    )
+    expect(prisma.companySourceTarget.count.mock.invocationCallOrder[0]).toBeLessThan(
+      create.mock.invocationCallOrder[0]
+    )
+  })
+
+  it('atomically blocks DeepScan promotion when maxWebPages is exhausted', async () => {
+    const subscription = {
+      status: 'ACTIVE',
+      currentPeriodEnd: new Date(Date.now() + 60_000),
+      trialEndsAt: null,
+      scheduledAt: null,
+      scheduledPlan: null,
+      plan: {
+        code: 'PRO',
+        limits: { webMonitoringEnabled: true, maxCompanies: 10, maxSources: 40, maxWebPages: 1 }
+      }
+    }
+    const { prisma, service } = buildFixture({ subscription })
+    prisma.watchedPage.count.mockResolvedValue(1)
+
+    await expect(
+      service.promoteWebTargetWithinLimits(
+        'workspace-1', 'company-1', 'target-web', 'https://example.com/review', 'example.com', 1440
+      )
+    ).resolves.toBe(false)
+
+    expect(prisma.companySourceTarget.update).not.toHaveBeenCalled()
+    expect(prisma.watchedPage.upsert).not.toHaveBeenCalled()
+  })
+
+  it('promotes the target and watched page in one transaction when both slots are available', async () => {
+    const subscription = {
+      status: 'ACTIVE',
+      currentPeriodEnd: new Date(Date.now() + 60_000),
+      trialEndsAt: null,
+      scheduledAt: null,
+      scheduledPlan: null,
+      plan: {
+        code: 'PRO',
+        limits: { webMonitoringEnabled: true, maxCompanies: 10, maxSources: 40, maxWebPages: 50 }
+      }
+    }
+    const { prisma, service } = buildFixture({ subscription })
+
+    await expect(
+      service.promoteWebTargetWithinLimits(
+        'workspace-1', 'company-1', 'target-web', 'https://example.com/review', 'example.com', 1440
+      )
+    ).resolves.toBe(true)
+
+    expect(prisma.$executeRaw).toHaveBeenCalledTimes(2)
+    expect(prisma.companySourceTarget.update).toHaveBeenCalledWith({
+      where: { id: 'target-web' }, data: { isActive: true }
+    })
+    expect(prisma.watchedPage.upsert).toHaveBeenCalledTimes(1)
   })
 })

@@ -6,7 +6,8 @@ import DashboardCharts from '@/components/dashboard/DashboardCharts'
 import UpgradeBanner from '@/components/billing/UpgradeBanner'
 import WelcomeCard from '@/components/onboarding/WelcomeCard'
 import QuickStartChecklist from '@/components/onboarding/QuickStartChecklist'
-import { getCompanies } from '@/lib/api/companies'
+import { getCompanies, getWorkspaces } from '@/lib/api/companies'
+import { isApiError } from '@/lib/api/client'
 import { me, type AuthMe } from '@/lib/api/auth'
 import { getWebPushSubscriptions } from '@/lib/api/push'
 import { getCompanyMentions } from '@/lib/api/mentions'
@@ -422,13 +423,17 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
   let hasPush = false
 
   try {
-    const [meResult, companiesResult, pushResult] = await Promise.all([
+    const [meResult, companiesResult, workspacesResult, pushResult] = await Promise.all([
       me(),
       getCompanies(),
+      getWorkspaces(),
       getWebPushSubscriptions().catch(() => null),
     ])
     meData = meResult
-    companies = Array.isArray(companiesResult) ? companiesResult : []
+    const allCompanies = Array.isArray(companiesResult) ? companiesResult : []
+    const workspaces = Array.isArray(workspacesResult) ? workspacesResult : []
+    const selectedWorkspaceId = pickWorkspaceId(workspaces, searchParams?.workspaceId)
+    companies = filterByWorkspace(allCompanies, selectedWorkspaceId)
     hasPush = Array.isArray(pushResult?.data) && pushResult.data.length > 0
 
       companyMentionEntries = await Promise.all(
@@ -437,23 +442,15 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
             return { company, mentions: [], meta: { total: 0, averageRating: null, ratedCount: 0 } }
           }
 
-          try {
-            const mentionsResult = await getCompanyMentions(company.id, '?page=1&limit=250')
-            const mentions = Array.isArray(mentionsResult?.data)
-              ? mentionsResult.data.filter(isValidDashboardMention)
-              : []
+          const mentionsResult = await getCompanyMentions(company.id, '?page=1&limit=250')
+          const mentions = Array.isArray(mentionsResult?.data)
+            ? mentionsResult.data.filter(isValidDashboardMention)
+            : []
 
-            return {
-              company,
-              mentions,
-              meta: mentionsResult?.meta || buildMentionsMeta(mentions)
-            }
-          } catch {
-            return {
-              company,
-              mentions: [],
-              meta: { total: getMentionsCount(company), averageRating: null, ratedCount: 0 }
-            }
+          return {
+            company,
+            mentions,
+            meta: mentionsResult?.meta || buildMentionsMeta(mentions)
           }
         })
       )
@@ -468,11 +465,8 @@ export default async function DashboardPage({ searchParams }: { searchParams?: {
 
       dashboardMeta = buildMentionsMeta(dashboardMentions)
   } catch (error: any) {
-    if (error?.message === 'Unauthorized') {
-      authRequired = true
-    } else {
-      console.error('[DashboardPage]', error)
-    }
+    if (isApiError(error, 401)) authRequired = true
+    else throw error
   }
 
   if (authRequired) {

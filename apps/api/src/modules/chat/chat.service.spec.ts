@@ -4,7 +4,14 @@ import { ChatService } from './chat.service'
 import { PrismaService } from '../../common/prisma/prisma.service'
 
 const mockPrisma = {
-  chatMessage: { findUnique: jest.fn(), update: jest.fn() },
+  chatMessage: {
+    findUnique: jest.fn(),
+    findMany: jest.fn(),
+    findFirst: jest.fn(),
+    update: jest.fn()
+  },
+  chatThread: { findUnique: jest.fn(), update: jest.fn() },
+  chatReadState: { upsert: jest.fn() },
   workspaceMember: { findFirst: jest.fn() },
   chatParticipant: { findUnique: jest.fn() }
 }
@@ -82,5 +89,61 @@ describe('ChatService — cross-tenant IDOR regression (editMessage/deleteMessag
     await expect(
       service.editMessage('member-user', 'msg-1', { body: 'nope' } as any)
     ).rejects.toThrow(ForbiddenException)
+  })
+})
+
+describe('ChatService — cross-tenant thread IDOR regression', () => {
+  let service: ChatService
+
+  beforeEach(async () => {
+    jest.clearAllMocks()
+    mockPrisma.chatThread.findUnique.mockResolvedValue({
+      id: 'thread-real',
+      type: 'WORKSPACE',
+      workspaceId: 'ws-real',
+      company: null,
+      mention: null,
+      participants: []
+    })
+    mockPrisma.workspaceMember.findFirst.mockImplementation(({ where }: any) =>
+      where.workspaceId === 'ws-attacker' ? { role: 'OWNER', workspaceId: 'ws-attacker' } : null
+    )
+
+    const module = await Test.createTestingModule({
+      providers: [ChatService, { provide: PrismaService, useValue: mockPrisma }]
+    }).compile()
+    service = module.get(ChatService)
+  })
+
+  it('does not read a foreign thread using an attacker-controlled workspaceId', async () => {
+    await expect(
+      service.getThread('attacker-user', 'ws-attacker', 'thread-real')
+    ).rejects.toThrow(ForbiddenException)
+    expect(mockPrisma.workspaceMember.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ workspaceId: 'ws-real' }) })
+    )
+  })
+
+  it('does not list messages from a foreign thread using an attacker-controlled workspaceId', async () => {
+    await expect(
+      service.getMessages('attacker-user', 'ws-attacker', 'thread-real')
+    ).rejects.toThrow(ForbiddenException)
+    expect(mockPrisma.chatMessage.findMany).not.toHaveBeenCalled()
+  })
+
+  it('does not create a message in a foreign thread using dto.workspaceId', async () => {
+    await expect(
+      service.createMessage('attacker-user', 'thread-real', {
+        body: 'cross-tenant message',
+        workspaceId: 'ws-attacker'
+      })
+    ).rejects.toThrow(ForbiddenException)
+  })
+
+  it('does not mark a foreign thread read using an attacker-controlled workspaceId', async () => {
+    await expect(
+      service.markRead('attacker-user', 'ws-attacker', 'thread-real')
+    ).rejects.toThrow(ForbiddenException)
+    expect(mockPrisma.chatReadState.upsert).not.toHaveBeenCalled()
   })
 })

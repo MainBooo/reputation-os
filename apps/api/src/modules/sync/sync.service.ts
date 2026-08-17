@@ -333,35 +333,44 @@ export class SyncService {
   }
 
   async reconcile() {
-    const job = await this.reconcileQueue.add(
-      'reconcile.run',
-      {
-        requestedAt: new Date().toISOString()
+    const companies = await this.prisma.company.findMany({
+      where: {
+        isActive: true,
+        workspace: { isActive: true, deletedAt: null }
       },
-      SYNC_JOB_OPTIONS
-    )
-
-    const log = await this.prisma.jobLog.create({
-      data: {
-        queueName: 'reconcile',
-        jobName: 'reconcile.run',
-        jobStatus: 'PENDING',
-        result: {
-          bullJobId: String(job.id)
-        }
-      }
+      select: { id: true }
     })
 
-    return {
-      queued: true,
-      jobs: [
-        {
+    const jobs = []
+    const logs = []
+    const requestedAt = new Date().toISOString()
+    for (const company of companies) {
+      const job = await this.reconcileQueue.add(
+        'reconcile.run',
+        { companyId: company.id, requestedAt },
+        SYNC_JOB_OPTIONS
+      )
+      jobs.push({
+        queueName: 'reconcile',
+        jobName: 'reconcile.run',
+        companyId: company.id,
+        bullJobId: String(job.id)
+      })
+      logs.push(await this.prisma.jobLog.create({
+        data: {
+          companyId: company.id,
           queueName: 'reconcile',
           jobName: 'reconcile.run',
-          bullJobId: String(job.id)
+          jobStatus: 'PENDING',
+          result: { bullJobId: String(job.id) }
         }
-      ],
-      logs: [log]
+      }))
+    }
+
+    return {
+      queued: jobs.length > 0,
+      jobs,
+      logs
     }
   }
   private async ensureWebBootstrapTarget(companyId: string, maxSources: number) {
@@ -419,36 +428,43 @@ export class SyncService {
 
     if (existingTarget) return existingTarget
 
-    // WEB-таргет расходует maxSources наравне с карточками Яндекс/2ГИС — тот же
-    // общий счётчик, что и в CompaniesService (см. EntitlementsService.hasSourceSlotAvailable).
-    if (!(await this.entitlements.hasSourceSlotAvailable(company.workspaceId, maxSources))) {
-      throw new ForbiddenException({ code: 'PLAN_LIMIT', feature: 'maxSources', limit: Number(maxSources) })
-    }
-
-    return this.prisma.companySourceTarget.create({
-      data: {
-        companyId: company.id,
-        sourceId: webSource.id,
-        externalPlaceId,
-        externalUrl: company.website || null,
-        displayName: `${company.name} · WEB discovery`,
-        isActive: true,
-        syncReviewsEnabled: false,
-        syncRatingsEnabled: false,
-        syncMentionsEnabled: true,
-        config: {
-          origin: 'auto-bootstrap',
-          mode: 'discovery',
-          querySeeds: [
-            company.name,
-            company.city ? `${company.name} ${company.city}` : company.name,
-            company.normalizedName,
-            company.normalizedCity ? `${company.normalizedName} ${company.normalizedCity}` : company.normalizedName,
-          ].filter(Boolean),
-          scanIntervalHours: 24,
+    return this.entitlements.runWithSourceSlot(
+      company.workspaceId,
+      maxSources,
+      (tx) => tx.companySourceTarget.create({
+        data: {
+          companyId: company.id,
+          sourceId: webSource.id,
+          externalPlaceId,
+          externalUrl: company.website || null,
+          displayName: `${company.name} · WEB discovery`,
+          isActive: true,
+          syncReviewsEnabled: false,
+          syncRatingsEnabled: false,
+          syncMentionsEnabled: true,
+          config: {
+            origin: 'auto-bootstrap',
+            mode: 'discovery',
+            querySeeds: [
+              company.name,
+              company.city ? `${company.name} ${company.city}` : company.name,
+              company.normalizedName,
+              company.normalizedCity ? `${company.normalizedName} ${company.normalizedCity}` : company.normalizedName,
+            ].filter(Boolean),
+            scanIntervalHours: 24,
+          },
         },
-      },
-    })
+      }),
+      {
+        findExisting: (tx) => tx.companySourceTarget.findFirst({
+          where: {
+            companyId: company.id,
+            sourceId: webSource.id,
+            externalPlaceId,
+          },
+        })
+      }
+    )
   }
 
 

@@ -12,23 +12,6 @@ function getApiBase() {
   return SERVER_API_URL
 }
 
-function readTokenFromBrowser() {
-  if (typeof window === 'undefined') return ''
-
-  const cookieToken = document.cookie
-    .split('; ')
-    .find((row) => row.startsWith('accessToken='))
-    ?.split('=')[1]
-
-  if (cookieToken) return decodeURIComponent(cookieToken)
-
-  try {
-    return localStorage.getItem('accessToken') || ''
-  } catch {
-    return ''
-  }
-}
-
 async function readTokenFromServer() {
   try {
     const { cookies } = await import('next/headers')
@@ -39,9 +22,9 @@ async function readTokenFromServer() {
 }
 
 async function getToken() {
-  if (typeof window !== 'undefined') {
-    return readTokenFromBrowser()
-  }
+  // Browser requests authenticate through the HttpOnly cookie. The same-origin
+  // Next proxy converts it to the backend Bearer header without exposing JWT to JS.
+  if (typeof window !== 'undefined') return ''
   return readTokenFromServer()
 }
 
@@ -61,10 +44,6 @@ export async function apiFetch<T>(path: string, options?: RequestInit, fallback?
   })
 
   if (!response.ok) {
-    if ((response.status === 401 || response.status === 403) && fallback !== undefined) {
-      return fallback
-    }
-
     if (DEMO_MODE && fallback !== undefined) return fallback
 
     let message = `API error ${response.status}`
@@ -89,4 +68,8 @@ export async function apiFetch<T>(path: string, options?: RequestInit, fallback?
   }
 
   return response.json()
+}
+
+export function isApiError(error: unknown, status: number): boolean {
+  return error instanceof Error && (error as Error & { status?: number }).status === status
 }

@@ -1,14 +1,18 @@
 'use client'
 
 import { useEffect } from 'react'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { me } from '@/lib/api/auth'
 import { apiFetch } from '@/lib/api/client'
-import { WORKSPACE_STORAGE_KEY } from '@/lib/workspace-selection'
+import { pickWorkspaceId, WORKSPACE_QUERY_KEY, WORKSPACE_STORAGE_KEY } from '@/lib/workspace-selection'
 import { useChatContext } from '@/lib/chat/ChatContext'
 
 export default function WorkspaceBootstrap() {
   const pathname = usePathname()
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const search = searchParams.toString()
+  const requestedWorkspaceId = searchParams.get(WORKSPACE_QUERY_KEY)
   const { setWorkspaceId } = useChatContext()
 
   useEffect(() => {
@@ -18,14 +22,23 @@ export default function WorkspaceBootstrap() {
         await me()
 
         const stored = localStorage.getItem(WORKSPACE_STORAGE_KEY)
-        if (stored) setWorkspaceId(stored) // optimistic set from cache
         const workspaces = await apiFetch<{ id: string }[]>('/workspaces', undefined, [])
-        const validId = Array.isArray(workspaces) && workspaces.length
-          ? (workspaces.find((w) => w.id === stored)?.id ?? workspaces[0].id)
-          : stored ?? ''
+        const requestedId = requestedWorkspaceId || stored
+        const validId = pickWorkspaceId(workspaces, requestedId)
+
         if (validId) {
           if (validId !== stored) localStorage.setItem(WORKSPACE_STORAGE_KEY, validId)
-          if (mounted) setWorkspaceId(validId)
+          if (mounted) {
+            setWorkspaceId(validId)
+
+            if (requestedWorkspaceId !== validId) {
+              const nextParams = new URLSearchParams(search)
+              nextParams.set(WORKSPACE_QUERY_KEY, validId)
+              router.replace(`${pathname}?${nextParams.toString()}`, { scroll: false })
+            }
+          }
+        } else if (mounted) {
+          setWorkspaceId('')
         }
       } catch {
         // not authenticated or workspace fetch failed — nothing to bootstrap
@@ -34,7 +47,7 @@ export default function WorkspaceBootstrap() {
     return () => {
       mounted = false
     }
-  }, [pathname]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [pathname, requestedWorkspaceId, router, search, setWorkspaceId])
 
   return null
 }

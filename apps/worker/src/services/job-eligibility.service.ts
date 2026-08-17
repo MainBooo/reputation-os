@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common'
+import { Prisma } from '@prisma/client'
 import { PrismaService } from '../common/prisma/prisma.service'
 
 type SyncCapability = 'reviews' | 'mentions' | 'ratings'
@@ -296,11 +297,112 @@ export class JobEligibilityService {
     }
     return {
       company,
+      maxSources: limits.maxSources,
       sources: sources.filter((source: any) => {
         const platform = String(source.platform)
         return ['YANDEX', 'TWOGIS', 'WEB', 'CUSTOM'].includes(platform) && this.platformAllowed(limits, platform)
       })
     }
+  }
+
+  async runWithSourceSlot<T>(
+    workspaceId: string,
+    maxSources: number,
+    findExisting: (tx: Prisma.TransactionClient) => Promise<T | null>,
+    create: (tx: Prisma.TransactionClient) => Promise<T>
+  ): Promise<T | null> {
+    const limit = Number(maxSources)
+    const prisma = this.prisma as any
+
+    return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`reputation-os:source-slot:${workspaceId}`}))`
+
+      const existing = await findExisting(tx)
+      if (existing) return existing
+
+      if (limit >= 0) {
+        const count = await tx.companySourceTarget.count({
+          where: {
+            company: { workspaceId },
+            isActive: true,
+            source: { platform: { not: 'TELEGRAM' } }
+          }
+        })
+        if (count >= limit) return null
+      }
+
+      return create(tx)
+    })
+  }
+
+  async promoteWebTargetWithinLimits(
+    workspaceId: string,
+    companyId: string,
+    targetId: string,
+    url: string,
+    domain: string,
+    checkIntervalMin: number
+  ): Promise<boolean> {
+    const limits = await this.getEffectiveLimits(workspaceId)
+    if (!limits.webMonitoringEnabled || limits.maxWebPages === 0) return false
+    if (!await this.companyWithinLimit(workspaceId, companyId, limits.maxCompanies)) return false
+
+    const prisma = this.prisma as any
+    return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      // Every path taking both locks uses this order to avoid deadlocks.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`reputation-os:source-slot:${workspaceId}`}))`
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`reputation-os:web-page-slot:${workspaceId}`}))`
+
+      const target = await tx.companySourceTarget.findFirst({
+        where: {
+          id: targetId,
+          companyId,
+          company: { workspaceId, isActive: true, workspace: { isActive: true, deletedAt: null } },
+          source: { platform: 'WEB', isEnabled: true }
+        }
+      })
+      if (!target) return false
+
+      if (!target.isActive && limits.maxSources >= 0) {
+        const activeSources = await tx.companySourceTarget.count({
+          where: {
+            isActive: true,
+            company: { workspaceId },
+            source: { platform: { not: 'TELEGRAM' } }
+          }
+        })
+        if (activeSources >= limits.maxSources) return false
+      }
+
+      const existingPage = await tx.watchedPage.findUnique({
+        where: { companyId_url: { companyId, url } }
+      })
+      if ((!existingPage || !existingPage.enabled) && limits.maxWebPages >= 0) {
+        const activePages = await tx.watchedPage.count({
+          where: { enabled: true, company: { workspaceId } }
+        })
+        if (activePages >= limits.maxWebPages) return false
+      }
+
+      await tx.companySourceTarget.update({
+        where: { id: targetId },
+        data: { isActive: true }
+      })
+      await tx.watchedPage.upsert({
+        where: { companyId_url: { companyId, url } },
+        create: {
+          companyId,
+          sourceTargetId: targetId,
+          url,
+          domain,
+          pageType: 'UNKNOWN',
+          enabled: true,
+          checkIntervalMin
+        },
+        update: { sourceTargetId: targetId, enabled: true }
+      })
+      return true
+    })
   }
 
   async canProcessWatchedPage(watchedPageId: string) {

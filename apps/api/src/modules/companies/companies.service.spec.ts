@@ -5,7 +5,7 @@ import { PrismaService } from '../../common/prisma/prisma.service'
 import { EntitlementsService } from '../billing/entitlements.service'
 import { QUEUES } from '../../common/queues/queue.names'
 
-const mockQueue = { add: jest.fn() }
+const mockQueue = { add: jest.fn().mockResolvedValue({ id: 'job-1' }) }
 
 const mockPrisma = {
   user: { findUnique: jest.fn() },
@@ -21,6 +21,13 @@ const mockPrisma = {
     findFirst: jest.fn().mockResolvedValue(null),
     count: jest.fn().mockResolvedValue(0),
   },
+  watchedPage: {
+    findUnique: jest.fn().mockResolvedValue(null),
+    count: jest.fn().mockResolvedValue(0),
+    upsert: jest.fn(),
+    updateMany: jest.fn()
+  },
+  jobLog: { create: jest.fn().mockResolvedValue({ id: 'log-1' }) },
   companyAlias: { createMany: jest.fn(), findMany: jest.fn(), deleteMany: jest.fn() },
 }
 
@@ -37,6 +44,39 @@ const mockEntitlements = {
     if (limit < 0) return true
     const count = await mockPrisma.companySourceTarget.count()
     return count < limit
+  }),
+  runWithCompanySlot: jest.fn(async (workspaceId: string, maxCompanies: number, action: (tx: any) => Promise<any>) => {
+    const limit = Number(maxCompanies)
+    if (limit >= 0 && (await mockPrisma.company.count({ where: { workspaceId } })) >= limit) {
+      throw new ForbiddenException({ code: 'PLAN_LIMIT', feature: 'maxCompanies', limit })
+    }
+    return action(mockPrisma as any)
+  }),
+  runWithSourceSlot: jest.fn(async (
+    _workspaceId: string,
+    maxSources: number,
+    action: (tx: any) => Promise<any>,
+    options: { skipIfFull?: boolean; consumeSlot?: boolean } = {}
+  ) => {
+    const limit = Number(maxSources)
+    if (options.consumeSlot !== false && limit >= 0 && (await mockPrisma.companySourceTarget.count()) >= limit) {
+      if (options.skipIfFull) return null
+      throw new ForbiddenException({ code: 'PLAN_LIMIT', feature: 'maxSources', limit })
+    }
+    return action(mockPrisma as any)
+  }),
+  runWithWebPageSlotInTransaction: jest.fn(async (
+    tx: any,
+    _workspaceId: string,
+    maxWebPages: number,
+    consumesSlot: (tx: any) => Promise<boolean>,
+    action: (tx: any) => Promise<any>
+  ) => {
+    const limit = Number(maxWebPages)
+    if (limit >= 0 && await consumesSlot(tx) && (await tx.watchedPage.count()) >= limit) {
+      throw new ForbiddenException({ code: 'PLAN_LIMIT', feature: 'maxWebPages', limit })
+    }
+    return action(tx)
   }),
 }
 
@@ -265,7 +305,7 @@ describe('CompaniesService — maxSources enforcement', () => {
   // (see entitlements.service.spec.ts) — this only proves CompaniesService
   // actually consults it before creating a source, rather than a stale
   // duplicated copy of the same query.
-  it('delegates the maxSources check to EntitlementsService.hasSourceSlotAvailable', async () => {
+  it('delegates source creation to the atomic EntitlementsService slot reservation', async () => {
     mockEntitlements.getForWorkspace.mockResolvedValue({
       workspaceActive: true,
       limits: { maxCompanies: -1, maxSources: 6, platforms: ['YANDEX'], webMonitoringEnabled: false },
@@ -282,7 +322,12 @@ describe('CompaniesService — maxSources enforcement', () => {
       yandexUrl: 'https://yandex.ru/maps/org/acme/123',
     } as any)
 
-    expect(mockEntitlements.hasSourceSlotAvailable).toHaveBeenCalledWith('ws-1', 6)
+    expect(mockEntitlements.runWithSourceSlot).toHaveBeenCalledWith(
+      'ws-1',
+      6,
+      expect.any(Function),
+      { skipIfFull: true }
+    )
   })
 
   // Regression: update() (PATCH /companies/:id, e.g. attaching a Yandex/2GIS url to an

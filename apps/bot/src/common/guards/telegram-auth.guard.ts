@@ -16,16 +16,29 @@ export class TelegramAuthGuard implements CanActivate {
     const ctx = telegrafCtx.getContext<Context & { state: { user: any } }>()
 
     const chatId = ctx.from?.id
-    this.logger.log(`[DEBUG] canActivate chatId=${chatId} type=${(ctx as any).updateType}`)
     if (!chatId) return false
 
-    const user = await this.prisma.user.findUnique({
-      where: { telegramChatId: BigInt(chatId) },
+    const user = await this.prisma.user.findFirst({
+      where: {
+        telegramChatId: BigInt(chatId),
+        isActive: true,
+        deletedAt: null,
+      },
       include: {
         workspaceMembers: {
+          where: {
+            workspace: { isActive: true, deletedAt: null },
+          },
           include: {
             workspace: {
-              include: { subscription: { include: { plan: true } } },
+              include: {
+                featureOverrides: {
+                  where: { featureKey: 'telegramNotifications' },
+                },
+                subscription: {
+                  include: { plan: true, scheduledPlan: true },
+                },
+              },
             },
           },
         },
@@ -33,7 +46,7 @@ export class TelegramAuthGuard implements CanActivate {
     })
 
     if (!user) {
-      this.logger.warn(`Неизвестный chatId: ${chatId}`)
+      this.logger.warn('Telegram update rejected: account is not linked')
       await ctx.reply(
         `❌ Аккаунт не привязан.\n\nПерейдите в личный кабинет и подключите Telegram:\n${APP_URL}/settings/profile`,
       )
@@ -41,7 +54,6 @@ export class TelegramAuthGuard implements CanActivate {
     }
 
     ctx.state.user = user
-    this.logger.log(`[DEBUG] guard OK user=${user.email} updateType=${(ctx as any).updateType} text=${(ctx.message as any)?.text ?? ''}`)
     return true
   }
 }

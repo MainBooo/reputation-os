@@ -20,19 +20,39 @@ const AUTHOR_SELECT = {
 export class ChatService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getUserWorkspaceMemberships(userId: string): Promise<string[]> {
-    const memberships = await this.prisma.workspaceMember.findMany({
-      where: { userId },
-      select: { workspaceId: true }
+  async getActiveUserWorkspaceMemberships(userId: string): Promise<string[] | null> {
+    const user = await this.prisma.user.findFirst({
+      where: {
+        id: userId,
+        isActive: true,
+        deletedAt: null
+      },
+      select: {
+        workspaceMembers: {
+          where: {
+            workspace: {
+              isActive: true,
+              deletedAt: null
+            }
+          },
+          select: { workspaceId: true }
+        }
+      }
     })
-    return memberships.map((m) => m.workspaceId)
+
+    if (!user) return null
+    return user.workspaceMembers.map((membership) => membership.workspaceId)
   }
 
   // ─── Access helpers ───────────────────────────────────────────────────────
 
   private async assertMember(userId: string, workspaceId: string) {
     const member = await this.prisma.workspaceMember.findFirst({
-      where: { userId, workspaceId }
+      where: {
+        userId,
+        workspaceId,
+        workspace: { isActive: true, deletedAt: null }
+      }
     })
     if (!member) throw new ForbiddenException('Нет доступа к рабочему пространству')
     return member
@@ -40,7 +60,11 @@ export class ChatService {
 
   private async getMemberRole(userId: string, workspaceId: string): Promise<WorkspaceRole | null> {
     const member = await this.prisma.workspaceMember.findFirst({
-      where: { userId, workspaceId }
+      where: {
+        userId,
+        workspaceId,
+        workspace: { isActive: true, deletedAt: null }
+      }
     })
     return member?.role ?? null
   }
@@ -53,7 +77,7 @@ export class ChatService {
     return participant
   }
 
-  private async assertThreadAccess(userId: string, threadId: string, workspaceId?: string) {
+  private async assertThreadAccess(userId: string, threadId: string) {
     const thread = await this.prisma.chatThread.findUnique({
       where: { id: threadId }
     })
@@ -62,8 +86,8 @@ export class ChatService {
     if (thread.type === 'DIRECT') {
       await this.assertDirectParticipant(userId, threadId)
     } else {
-      const wid = workspaceId || thread.workspaceId!
-      await this.assertMember(userId, wid)
+      if (!thread.workspaceId) throw new ForbiddenException('Нет доступа')
+      await this.assertMember(userId, thread.workspaceId)
     }
 
     return thread
@@ -211,9 +235,8 @@ export class ChatService {
     if (thread.type === 'DIRECT') {
       await this.assertDirectParticipant(userId, threadId)
     } else {
-      const wid = workspaceId || thread.workspaceId!
-      if (!wid) throw new ForbiddenException('Нет доступа')
-      await this.assertMember(userId, wid)
+      if (!thread.workspaceId) throw new ForbiddenException('Нет доступа')
+      await this.assertMember(userId, thread.workspaceId)
     }
 
     const unreadCount = await this.getUnreadForThread(userId, threadId)
@@ -239,8 +262,8 @@ export class ChatService {
     if (thread.type === 'DIRECT') {
       await this.assertDirectParticipant(userId, threadId)
     } else {
-      const wid = workspaceId || thread.workspaceId!
-      await this.assertMember(userId, wid)
+      if (!thread.workspaceId) throw new ForbiddenException('Нет доступа')
+      await this.assertMember(userId, thread.workspaceId)
     }
 
     const take = Math.min(limit, 100)
@@ -361,7 +384,7 @@ export class ChatService {
     const targetEmail = email.trim().toLowerCase()
 
     const targetUser = await this.prisma.user.findFirst({
-      where: { email: targetEmail },
+      where: { email: targetEmail, isActive: true, deletedAt: null },
       select: { id: true, email: true, fullName: true }
     })
     if (!targetUser) {
@@ -423,8 +446,8 @@ export class ChatService {
     if (thread.type === 'DIRECT') {
       await this.assertDirectParticipant(userId, threadId)
     } else {
-      const wid = dto.workspaceId || thread.workspaceId!
-      await this.assertMember(userId, wid)
+      if (!thread.workspaceId) throw new ForbiddenException('Нет доступа')
+      await this.assertMember(userId, thread.workspaceId)
     }
 
     const body = dto.body.trim()
@@ -532,8 +555,8 @@ export class ChatService {
     if (thread.type === 'DIRECT') {
       await this.assertDirectParticipant(userId, threadId)
     } else {
-      const wid = workspaceId || thread.workspaceId!
-      await this.assertMember(userId, wid)
+      if (!thread.workspaceId) throw new ForbiddenException('Нет доступа')
+      await this.assertMember(userId, thread.workspaceId)
     }
 
     const lastMessage = await this.prisma.chatMessage.findFirst({

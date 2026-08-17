@@ -71,15 +71,16 @@ export class TelegramNotificationsService {
       )
 
       if (!res.ok) {
-        const body = await res.text()
-        this.logger.error(`Telegram API error: ${res.status} ${body}`)
+        this.logger.error(`Telegram API error: HTTP ${res.status}`)
         return false
       }
 
-      this.logger.log(`Уведомление отправлено chatId=${chatId}, reviewId=${review.id}`)
+      this.logger.log(`Telegram review notification sent reviewId=${review.id}`)
       return true
     } catch (err) {
-      this.logger.error(`Ошибка отправки уведомления в Telegram: ${err}`)
+      this.logger.error(
+        `Telegram review notification failed: ${err instanceof Error ? err.name : 'UnknownError'}`
+      )
       return false
     }
   }
@@ -110,15 +111,16 @@ export class TelegramNotificationsService {
       )
 
       if (!res.ok) {
-        const body = await res.text()
-        this.logger.error(`Telegram billing reminder API error: ${res.status} ${body}`)
+        this.logger.error(`Telegram billing reminder API error: HTTP ${res.status}`)
         return false
       }
 
-      this.logger.log(`Billing reminder sent via Telegram chatId=${chatId}`)
+      this.logger.log('Billing reminder sent via Telegram')
       return true
     } catch (err) {
-      this.logger.error(`Ошибка отправки billing reminder в Telegram: ${err}`)
+      this.logger.error(
+        `Telegram billing reminder failed: ${err instanceof Error ? err.name : 'UnknownError'}`
+      )
       return false
     }
   }

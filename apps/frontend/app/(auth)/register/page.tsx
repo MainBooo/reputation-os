@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useMetrica } from 'next-yandex-metrica'
 import { Sparkles } from 'lucide-react'
@@ -19,16 +19,6 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  useEffect(() => {
-    try {
-      const hasToken =
-        document.cookie.includes('accessToken=') || !!localStorage.getItem('accessToken')
-      if (hasToken) {
-        router.replace('/dashboard')
-      }
-    } catch {}
-  }, [router])
-
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!agreed) {
@@ -39,12 +29,7 @@ export default function RegisterPage() {
     setError('')
 
     try {
-      const result: any = await register({ fullName, email, password })
-
-      if (typeof window !== 'undefined' && result?.accessToken) {
-        localStorage.setItem('accessToken', result.accessToken)
-        document.cookie = `accessToken=${encodeURIComponent(result.accessToken)}; path=/; max-age=${60 * 60 * 24 * 7}; samesite=lax`
-      }
+      await register({ fullName, email, password })
 
       reachGoal('registration_success')
       router.replace('/companies?onboarding=1')

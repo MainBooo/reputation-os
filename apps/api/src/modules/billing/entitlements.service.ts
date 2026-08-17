@@ -1,5 +1,5 @@
 import { ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common'
-import { Platform, PlanCode, SubscriptionStatus } from '@prisma/client'
+import { Platform, PlanCode, Prisma, SubscriptionStatus } from '@prisma/client'
 import { PrismaService } from '../../common/prisma/prisma.service'
 import { FEATURE_KEYS, FREE_LIMITS, FeatureKey, PlanLimits } from './billing.constants'
 
@@ -113,8 +113,11 @@ export class EntitlementsService {
   // через telegramMonitoringEnabled и не расходует maxSources) была
   // продублирована в CompaniesService, SyncService и здесь же по отдельности,
   // с риском разъехаться при следующем изменении тарифных правил.
-  async countBillableSources(workspaceId: string): Promise<number> {
-    return this.prisma.companySourceTarget.count({
+  async countBillableSources(
+    workspaceId: string,
+    client: Prisma.TransactionClient | PrismaService = this.prisma
+  ): Promise<number> {
+    return client.companySourceTarget.count({
       where: {
         company: { workspaceId },
         isActive: true,
@@ -127,6 +130,102 @@ export class EntitlementsService {
     const limit = Number(maxSources)
     if (limit < 0) return true
     return (await this.countBillableSources(workspaceId)) < limit
+  }
+
+  /**
+   * Serializes every billable source-target reservation for a workspace. The
+   * count and mutation must share the same transaction; a standalone
+   * `hasSourceSlotAvailable()` check is advisory only and is unsafe for writes.
+   */
+  async runWithSourceSlot<T>(
+    workspaceId: string,
+    maxSources: number,
+    action: (tx: Prisma.TransactionClient) => Promise<T>,
+    options: {
+      skipIfFull: true
+      consumeSlot?: boolean
+      findExisting?: (tx: Prisma.TransactionClient) => Promise<T | null>
+    }
+  ): Promise<T | null>
+  async runWithSourceSlot<T>(
+    workspaceId: string,
+    maxSources: number,
+    action: (tx: Prisma.TransactionClient) => Promise<T>,
+    options?: {
+      skipIfFull?: false
+      consumeSlot?: boolean
+      findExisting?: (tx: Prisma.TransactionClient) => Promise<T | null>
+    }
+  ): Promise<T>
+  async runWithSourceSlot<T>(
+    workspaceId: string,
+    maxSources: number,
+    action: (tx: Prisma.TransactionClient) => Promise<T>,
+    options: {
+      skipIfFull?: boolean
+      consumeSlot?: boolean
+      findExisting?: (tx: Prisma.TransactionClient) => Promise<T | null>
+    } = {}
+  ): Promise<T | null> {
+    const limit = Number(maxSources)
+
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`reputation-os:source-slot:${workspaceId}`}))`
+
+      const existing = options.findExisting ? await options.findExisting(tx) : null
+      if (existing) return existing
+
+      if (options.consumeSlot !== false && limit >= 0 && (await this.countBillableSources(workspaceId, tx)) >= limit) {
+        if (options.skipIfFull) return null
+        throw new ForbiddenException({ code: 'PLAN_LIMIT', feature: 'maxSources', limit })
+      }
+
+      return action(tx)
+    })
+  }
+
+  async runWithWebPageSlotInTransaction<T>(
+    tx: Prisma.TransactionClient,
+    workspaceId: string,
+    maxWebPages: number,
+    consumesSlot: (tx: Prisma.TransactionClient) => Promise<boolean>,
+    action: (tx: Prisma.TransactionClient) => Promise<T>
+  ): Promise<T> {
+    const limit = Number(maxWebPages)
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`reputation-os:web-page-slot:${workspaceId}`}))`
+
+    if (limit >= 0 && await consumesSlot(tx)) {
+      const activePages = await tx.watchedPage.count({
+        where: { enabled: true, company: { workspaceId } }
+      })
+      if (activePages >= limit) {
+        throw new ForbiddenException({ code: 'PLAN_LIMIT', feature: 'maxWebPages', limit })
+      }
+    }
+
+    return action(tx)
+  }
+
+  /** Serializes company creation so concurrent requests cannot exceed maxCompanies. */
+  async runWithCompanySlot<T>(
+    workspaceId: string,
+    maxCompanies: number,
+    action: (tx: Prisma.TransactionClient) => Promise<T>
+  ): Promise<T> {
+    const limit = Number(maxCompanies)
+
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`reputation-os:company-slot:${workspaceId}`}))`
+
+      if (limit >= 0) {
+        const companiesCount = await tx.company.count({ where: { workspaceId } })
+        if (companiesCount >= limit) {
+          throw new ForbiddenException({ code: 'PLAN_LIMIT', feature: 'maxCompanies', limit })
+        }
+      }
+
+      return action(tx)
+    })
   }
 
   async getForWorkspace(workspaceId: string): Promise<WorkspaceEntitlements> {

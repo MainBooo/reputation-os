@@ -39,8 +39,8 @@ export default function AccountPanel({
     }
   }, [])
 
-  function handleLogout() {
-    logoutLocal()
+  async function handleLogout() {
+    await logoutLocal()
     setUser(null)
     onNavigate?.()
     router.push('/login')

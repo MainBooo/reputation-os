@@ -10,7 +10,10 @@ function mockPrisma(overrides: { coreLogs?: any[]; telegramLog?: any } = {}) {
   const telegramLog = overrides.telegramLog ?? null
 
   return {
-    company: { findUnique: jest.fn().mockResolvedValue({ id: 'c1', workspaceId: 'w1', isActive: true }) },
+    company: {
+      findUnique: jest.fn().mockResolvedValue({ id: 'c1', workspaceId: 'w1', isActive: true }),
+      findMany: jest.fn().mockResolvedValue([])
+    },
     user: { findUnique: jest.fn().mockResolvedValue({ systemRole: 'SUPER_ADMIN', isActive: true }) },
     workspaceMember: { findFirst: jest.fn().mockResolvedValue({ role: 'OWNER' }) },
     jobLog: {
@@ -107,6 +110,47 @@ describe('SyncService.getSyncStatus — telegram_search may only degrade to PART
   })
 })
 
+describe('SyncService.reconcile — active company fan-out', () => {
+  it('queues one scoped job and pending log per active company', async () => {
+    const prisma = mockPrisma()
+    prisma.company.findMany.mockResolvedValue([{ id: 'company-1' }, { id: 'company-2' }])
+    prisma.jobLog.create = jest.fn()
+      .mockResolvedValueOnce({ id: 'log-1' })
+      .mockResolvedValueOnce({ id: 'log-2' })
+    const reconcileQueue = makeQueue()
+    reconcileQueue.add
+      .mockResolvedValueOnce({ id: 'job-1' })
+      .mockResolvedValueOnce({ id: 'job-2' })
+    const service = new SyncService(
+      prisma,
+      mockEntitlements(),
+      makeQueue(),
+      makeQueue(),
+      makeQueue(),
+      makeQueue(),
+      reconcileQueue,
+      makeQueue()
+    )
+
+    const result = await service.reconcile()
+
+    expect(result.queued).toBe(true)
+    expect(reconcileQueue.add).toHaveBeenNthCalledWith(
+      1,
+      'reconcile.run',
+      expect.objectContaining({ companyId: 'company-1' }),
+      expect.any(Object)
+    )
+    expect(reconcileQueue.add).toHaveBeenNthCalledWith(
+      2,
+      'reconcile.run',
+      expect.objectContaining({ companyId: 'company-2' }),
+      expect.any(Object)
+    )
+    expect(prisma.jobLog.create).toHaveBeenCalledTimes(2)
+  })
+})
+
 describe('SyncService.startWebSync — billing gates', () => {
   function buildWebSyncFixture(overrides: { webMonitoringEnabled?: boolean; maxSources?: number; sourceCount?: number } = {}) {
     const prisma: any = mockPrisma()
@@ -136,6 +180,20 @@ describe('SyncService.startWebSync — billing gates', () => {
         if (limit < 0) return true
         const count = await prisma.companySourceTarget.count()
         return count < limit
+      }),
+      runWithSourceSlot: jest.fn(async (
+        _workspaceId: string,
+        maxSources: number,
+        action: (tx: any) => Promise<any>,
+        options: { findExisting?: (tx: any) => Promise<any> } = {}
+      ) => {
+        const existing = options.findExisting ? await options.findExisting(prisma) : null
+        if (existing) return existing
+        const limit = Number(maxSources)
+        if (limit >= 0 && (await prisma.companySourceTarget.count()) >= limit) {
+          throw new ForbiddenException({ code: 'PLAN_LIMIT', feature: 'maxSources', limit })
+        }
+        return action(prisma)
       })
     }
 

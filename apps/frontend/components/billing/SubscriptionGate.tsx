@@ -34,7 +34,7 @@ const FEATURE_DESCRIPTIONS: Record<GateFeatureKey, string> = {
   WEB_MONITORING: 'WEB-мониторинг доступен на тарифах Бизнес и Агентство.',
   AI_REPLIES: 'Подключите тариф, чтобы использовать AI-ответы на отзывы.',
   TELEGRAM_NOTIFICATIONS: 'Telegram-уведомления доступны на тарифах Бизнес и Агентство.',
-  PUSH_NOTIFICATIONS: 'Push-уведомления доступны на тарифе Старт и выше.',
+  PUSH_NOTIFICATIONS: 'Push-уведомления доступны, если они включены в выбранном тарифе.',
   ADVANCED_ANALYTICS: 'Расширенная аналитика доступна на тарифах Бизнес и Агентство.',
   EXPORTS: 'Экспорт данных доступен на платных тарифах.',
 }

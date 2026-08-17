@@ -10,6 +10,7 @@ import CompanyManualSyncButton from '@/components/companies/CompanyManualSyncBut
 import CompanyChatPanel from '@/components/chat/CompanyChatPanel'
 import { getCompany, getCompanySyncStatus } from '@/lib/api/companies'
 import { getCompanyMentions } from '@/lib/api/mentions'
+import { isApiError } from '@/lib/api/client'
 
 function formatShortDate(value?: string | Date | null) {
   if (!value) return '—'
@@ -87,8 +88,9 @@ export default async function CompanyPage({ params }: { params: { id: string } }
     negativeResponse = negativeData
     recentNegativeResponse = recentNegativeData
     syncStatus = syncStatusData
-  } catch {
-    authRequired = true
+  } catch (error) {
+    if (isApiError(error, 401)) authRequired = true
+    else throw error
   }
 
   if (authRequired) {

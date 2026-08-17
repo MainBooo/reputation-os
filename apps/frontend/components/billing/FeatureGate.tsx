@@ -85,12 +85,32 @@ export default function FeatureGate({
   useEffect(() => {
     if (entitlementsProp !== undefined) {
       setEntitlements(entitlementsProp)
+      setLoading(false)
       return
     }
+
+    setEntitlements(null)
+    if (!workspaceId) {
+      setLoading(false)
+      return
+    }
+
+    let cancelled = false
     setLoading(true)
-    getMyEntitlements(workspaceId || undefined)
-      .then(setEntitlements)
-      .finally(() => setLoading(false))
+    getMyEntitlements(workspaceId)
+      .then((data) => {
+        if (!cancelled) setEntitlements(data)
+      })
+      .catch(() => {
+        if (!cancelled) setEntitlements(null)
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
   }, [entitlementsProp, workspaceId])
 
   if (loading) {

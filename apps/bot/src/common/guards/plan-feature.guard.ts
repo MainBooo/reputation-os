@@ -1,6 +1,7 @@
 import { CanActivate, ExecutionContext, Injectable, Logger } from '@nestjs/common'
 import { TelegrafExecutionContext } from 'nestjs-telegraf'
 import { Context } from 'telegraf'
+import { hasTelegramNotificationEntitlement } from '../telegram-entitlement'
 
 const BILLING_URL = 'https://reputation.generationweb.ru/billing'
 
@@ -13,14 +14,10 @@ export class PlanFeatureGuard implements CanActivate {
     const ctx = telegrafCtx.getContext<Context & { state: { user: any } }>()
     const user = ctx.state?.user
 
-    // Проверяем хотя бы один workspace с планом, разрешающим telegramNotifications
-    const hasAccess = user?.workspaceMembers?.some((m: any) => {
-      const limits = m?.workspace?.subscription?.plan?.limits as Record<string, any> | null
-      return limits?.telegramNotifications === true
-    })
+    const hasAccess = hasTelegramNotificationEntitlement(user?.workspaceMembers)
 
     if (!hasAccess) {
-      this.logger.warn(`chatId ${ctx.from?.id}: нет доступа к Telegram-уведомлениям по тарифу`)
+      this.logger.warn('Telegram command rejected: feature is unavailable for active workspaces')
       await ctx.reply(
         '⛔ Telegram-уведомления недоступны на вашем тарифе.\n\n' +
         `Обновите подписку: ${BILLING_URL}`,

@@ -8,6 +8,6 @@ export function pickWorkspaceId(workspaces: any[], requested?: string | null) {
 }
 
 export function filterByWorkspace<T extends { workspaceId?: string | null }>(items: T[], workspaceId?: string | null) {
-  if (!workspaceId) return items
+  if (!workspaceId) return []
   return items.filter((item) => item.workspaceId === workspaceId)
 }
