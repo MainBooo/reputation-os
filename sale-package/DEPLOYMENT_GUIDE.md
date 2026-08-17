@@ -25,9 +25,10 @@
 git clone <адрес репозитория покупателя>
 cd reputation-os
 pnpm install
+pnpm playwright:install:worker-browser
 ```
 
-`pnpm install` подтягивает и Playwright-браузеры для адаптеров Яндекс Карт/2ГИС (через worker) — первая установка может занять заметное время и место на диске.
+`pnpm install` устанавливает пакет Playwright, но **не** загружает браузер Chromium. Команда `pnpm playwright:install:worker-browser` обязательна до первого запуска worker и после обновления Playwright: без неё адаптеры Яндекс Карт и 2ГИС не смогут запустить браузер. Первая загрузка занимает примерно 300 МБ диска.
 
 ## 3. ENV-переменные (только имена, без значений)
 
